@@ -1,123 +1,110 @@
 # rtfkit
 
-> A template repository for small, weird-but-useful Rust CLI tools.
+RTF parsing toolkit with a CLI-first workflow.
 
-[![CI](https://github.com/TorstenCScholz/rtfkit.git/actions/workflows/ci.yml/badge.svg)](https://github.com/TorstenCScholz/rtfkit.git/actions/workflows/ci.yml)
+Current status (Phase 1):
+- Parses RTF into a deterministic intermediate representation (IR)
+- Emits conversion reports (`text` or `json`)
+- Supports `--emit-ir` for snapshot/debug workflows
+- DOCX writing is planned; `-o/--output` is intentionally rejected for now
 
-## Problem
-
-_(Describe what problem this tool solves.)_
+[![CI](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml/badge.svg)](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml)
 
 ## Install
 
+From source:
+
 ```sh
-cargo install rtfkit
+cargo install --path crates/rtfkit-cli
 ```
 
-Or download a pre-built binary from [Releases](https://github.com/TorstenCScholz/rtfkit.git/releases).
+Or download a pre-built binary from [Releases](https://github.com/TorstenCScholz/rtfkit/releases).
 
 ## Usage
 
 ```sh
-# Human-readable output
-rtfkit file.txt
+# Human-readable report
+rtfkit convert fixtures/simple_paragraph.rtf
 
-# JSON output
-rtfkit --format json file.txt
+# JSON report
+rtfkit convert fixtures/simple_paragraph.rtf --format json
 
-# Multiple files
-rtfkit --format json *.txt
+# Emit IR JSON
+rtfkit convert fixtures/simple_paragraph.rtf --emit-ir out.json
 
-# Verbose logging
-rtfkit --verbose file.txt
+# Strict mode: fail when dropped content is reported
+rtfkit convert fixtures/complex.rtf --strict --format json
 ```
 
-### Example output (text)
+### Reserved flags
 
-```
---- file.txt ---
-  Lines:            42
-  Words:            300
-  Characters:       1800
-  Bytes:            1800
-  Most common word: the
-  Unique words:     150
-```
+`-o/--output` and `--to docx` are part of the long-term converter interface.
+In v0.1, `--output` returns an explicit error because the DOCX writer is not implemented yet.
 
-### Example output (JSON)
+## Output contract
+
+### Report JSON
 
 ```json
 {
-  "lines": 42,
-  "words": 300,
-  "chars": 1800,
-  "bytes": 1800,
-  "most_common_word": "the",
-  "unique_words": 150
+  "warnings": [],
+  "stats": {
+    "paragraph_count": 1,
+    "run_count": 1,
+    "bytes_processed": 29,
+    "duration_ms": 0
+  }
 }
 ```
 
-## Output Contract
+`warnings` can contain:
+- `unsupported_control_word`
+- `unknown_destination`
+- `dropped_content`
 
-JSON output fields (single file):
+### IR JSON (`--emit-ir`)
 
-| Field               | Type            | Description                        |
-|---------------------|-----------------|------------------------------------|
-| `lines`             | `integer`       | Number of lines                    |
-| `words`             | `integer`       | Number of whitespace-delimited words |
-| `chars`             | `integer`       | Number of Unicode characters       |
-| `bytes`             | `integer`       | Number of bytes                    |
-| `most_common_word`  | `string\|null`  | Most frequent word (lowercased), `null` if no words |
-| `unique_words`      | `integer`       | Number of distinct words (lowercased) |
-
-When multiple files are passed, the output is an object keyed by file path.
-
-## Using This Template
-
-1. Clone/copy this repo
-2. Run the rename script:
-   ```sh
-   ./scripts/rename_tool.sh my-tool "My awesome tool description" "https://github.com/user/my-tool"
-   ```
-3. Replace the `TextStats` logic in `crates/tool-core/src/lib.rs` with your own
-4. Update fixtures and golden files:
-   ```sh
-   UPDATE_GOLDEN=1 cargo test
-   ```
-
-### Optional: cargo-dist
-
-This template ships with a manual release workflow. To switch to [cargo-dist](https://opensource.axo.dev/cargo-dist/):
-
-```sh
-cargo install cargo-dist
-cargo dist init
+```json
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Hello World",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}
 ```
 
 ## Development
 
 ```sh
-# Run tests
+# Test workspace
 cargo test --all
 
-# Update golden files after changing output
-UPDATE_GOLDEN=1 cargo test
+# Update golden snapshots
+UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests
 
 # Lint
-cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 
 # Format
 cargo fmt --all
 ```
 
-## Limitations
+## Limitations (v0.1)
 
-_(List known limitations here.)_
-
-## Roadmap
-
-- [ ] Placeholder item
+- No DOCX output writer yet
+- Partial RTF coverage only (focused on common text/style cases)
+- No tables/lists/images as first-class IR blocks yet
 
 ## License
 
-Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT License](LICENSE-MIT) at your option.
+Licensed under either [Apache License, Version 2.0](LICENSE-APACHE) or [MIT License](LICENSE-MIT), at your option.

@@ -1,10 +1,10 @@
-# rtfkit Architecture Documentation
+# rtfkit Architecture
 
-This document provides a high-level overview of the `rtfkit` project architecture as of Phase 1 (v0.1).
+This document reflects the current implementation in `main` (v0.1, Phase 1).
 
 ## Overview
 
-`rtfkit` is an open-source CLI tool for converting RTF (Rich Text Format) documents to other formats. The architecture follows a **pipeline pattern** with a clear separation between parsing, intermediate representation, and output generation.
+`rtfkit` currently provides a parser/interpreter pipeline from RTF to an internal IR plus a conversion report.
 
 ```mermaid
 flowchart LR
@@ -12,399 +12,113 @@ flowchart LR
     Tokenizer --> Events[RTF Events]
     Events --> Interpreter[Interpreter]
     Interpreter --> IR[IR Document]
-    IR --> CLI[CLI Output]
-    IR --> |Phase 2| DOCX[DOCX Writer]
+    Interpreter --> Report[Report]
+    IR --> CLI[--emit-ir JSON]
+    Report --> CLIOut[stdout text/json]
 ```
 
-## Workspace Structure
+## Workspace
 
-The project is organized as a Cargo workspace with two crates:
-
-```
+```text
 rtfkit/
 ├── crates/
-│   ├── rtfkit-core/     # Core library
-│   └── rtfkit-cli/      # CLI application
-├── fixtures/            # RTF test fixtures
-├── golden/              # Golden IR JSON files
+│   ├── rtfkit-core/   # Parser, interpreter, IR, reporting
+│   └── rtfkit-cli/    # CLI entrypoint and IO/report rendering
+├── fixtures/          # RTF inputs for tests
+├── golden/            # Golden IR snapshots
 └── docs/
-    └── adr/             # Architecture Decision Records
+    ├── adr/
+    └── specs/
 ```
 
-### rtfkit-core
+## `rtfkit-core`
 
-The core library is responsible for:
+Responsibilities:
+- Tokenization and event conversion
+- Stateful interpretation with group stack/style stack
+- IR construction (`Document -> Block::Paragraph -> Run`)
+- Warning/stats reporting
+- Structural RTF validation (header + balanced groups)
 
-- **IR Types**: Defining the intermediate representation data structures
-- **Parser/Tokenizer**: RTF lexical analysis using `nom` parser combinators
-- **Interpreter**: Converting RTF events into the IR Document
-- **Reporting**: Collecting warnings and statistics during conversion
+Not in scope:
+- File IO
+- CLI argument handling
+- DOCX writing
 
-**Key principle**: No CLI logic, no file I/O. The core library is purely focused on RTF processing.
+### IR model
 
-### rtfkit-cli
+- `Document { blocks: Vec<Block> }`
+- `Block::Paragraph(Paragraph)`
+- `Paragraph { alignment, runs }`
+- `Run { text, bold, italic, underline, font_size?, color? }`
 
-The CLI application is responsible for:
+### Parser/interpreter notes
 
-- **Command-line interface**: Using `clap` for argument parsing
-- **File I/O**: Reading RTF files, writing output files
-- **Report rendering**: Formatting and displaying conversion reports
-- **Exit code management**: Mapping results to appropriate exit codes
-- **Strict mode enforcement**: Failing on dropped content warnings
+- Control words handled for MVP: `\b`, `\i`, `\ul`, `\ulnone`, `\par`, `\line`, `\ql`, `\qc`, `\qr`, `\qj`, `\uN`, `\ucN`
+- Destination groups are skipped at group start (e.g. `fonttbl`, `colortbl`, unknown `\*` destinations)
+- Escaped symbols (`\\`, `\{`, `\}`) are preserved as text
+- Unsupported destination content emits `DroppedContent` warnings
 
----
+## `rtfkit` CLI
 
-## Intermediate Representation (IR)
+Binary name: `rtfkit`
 
-The IR is the heart of the architecture. It provides a **format-agnostic, deterministic** representation of document content.
-
-### Design Principles
-
-1. **Format-agnostic**: The IR does not encode RTF-specific concepts. It represents semantic document structure.
-2. **Deterministic**: Serialization is stable and reproducible. Same input always produces same output.
-3. **Serializable**: All types implement `Serialize`/`Deserialize` for JSON output.
-4. **Extensible**: The `Block` enum allows future expansion (tables, lists, images).
-
-### Type Hierarchy
-
-```mermaid
-classDiagram
-    Document "1" --> "*" Block
-    Block --> Paragraph
-    Paragraph "1" --> "*" Run
-    Run --> Color
-    Paragraph --> Alignment
-    
-    class Document {
-        +blocks: Vec~Block~
-    }
-    class Block {
-        <<enum>>
-        Paragraph
-    }
-    class Paragraph {
-        +alignment: Alignment
-        +runs: Vec~Run~
-    }
-    class Run {
-        +text: String
-        +bold: bool
-        +italic: bool
-        +underline: bool
-        +font_size: Option~f32~
-        +color: Option~Color~
-    }
-    class Alignment {
-        <<enum>>
-        Left
-        Center
-        Right
-        Justify
-    }
-    class Color {
-        +r: u8
-        +g: u8
-        +b: u8
-    }
-```
-
-### Supported Features (v0.1)
-
-| Feature | RTF Control Words | IR Representation |
-|---------|-------------------|-------------------|
-| Plain text | text content | `Run.text` |
-| Bold | `\b`, `\b0` | `Run.bold` |
-| Italic | `\i`, `\i0` | `Run.italic` |
-| Underline | `\ul`, `\ulnone` | `Run.underline` |
-| Paragraph break | `\par`, `\line` | New `Block::Paragraph` |
-| Left align | `\ql` | `Alignment::Left` |
-| Center align | `\qc` | `Alignment::Center` |
-| Right align | `\qr` | `Alignment::Right` |
-| Justify | `\qj` | `Alignment::Justify` |
-| Unicode | `\uN` | Decoded in `Run.text` |
-| Hex escapes | `\'hh` | Decoded via Windows-1252 |
-
----
-
-## Parser/Interpreter Pipeline
-
-The conversion from RTF to IR follows a **stateful interpreter pattern** as described in [ADR-0001](../adr/0001-rtf-parser-selection.md).
-
-### Pipeline Stages
-
-```mermaid
-flowchart TB
-    subgraph Tokenizer
-        RTF[RTF String] --> Tokens[Vec~Token~]
-    end
-    
-    subgraph EventConversion
-        Tokens --> Events[Vec~RtfEvent~]
-    end
-    
-    subgraph Interpreter
-        Events --> |GroupStart| Push[Push Style State]
-        Events --> |GroupEnd| Pop[Pop Style State]
-        Events --> |ControlWord| Update[Update Style]
-        Events --> |Text| Aggregate[Aggregate Text]
-        Push --> Document
-        Pop --> Document
-        Update --> Document
-        Aggregate --> Document
-    end
-    
-    Document[IR Document]
-```
-
-### Tokenizer
-
-The tokenizer uses `nom` parser combinators to perform lexical analysis:
-
-- **Input**: RTF string
-- **Output**: `Vec<Token>`
-
-**Token Types**:
-
-| Token | RTF Syntax | Example |
-|-------|------------|---------|
-| `GroupStart` | `{` | `{` |
-| `GroupEnd` | `}` | `}` |
-| `ControlWord` | `\wordN` | `\b`, `\par`, `\u12345` |
-| `Text` | plain text | `Hello World` |
-| `ControlSymbol` | `\symbol` | `\'`, `\*` |
-
-### Interpreter
-
-The interpreter maintains state and builds the IR:
-
-**State Components**:
-
-| Component | Purpose |
-|-----------|---------|
-| `group_stack` | Stack of `StyleState` for RTF group scoping |
-| `current_style` | Active formatting state |
-| `current_text` | Text being aggregated for current run |
-| `current_paragraph` | Paragraph being built |
-| `report_builder` | Collecting warnings and stats |
-
-**Group Stack Behavior**:
-
-```mermaid
-sequenceDiagram
-    participant RTF as RTF Input
-    participant I as Interpreter
-    participant Stack as Group Stack
-    
-    RTF->>I: GroupStart
-    I->>Stack: Push current_style snapshot
-    
-    RTF->>I: ControlWord: \b
-    I->>I: current_style.bold = true
-    
-    RTF->>I: Text: Bold text
-    I->>I: Aggregate with bold style
-    
-    RTF->>I: GroupEnd
-    Stack->>I: Pop previous style
-    I->>I: Restore previous style
-```
-
-This pattern correctly handles RTF's scoping rules where formatting changes within a group are local to that group.
-
----
-
-## Reporting Layer
-
-The reporting layer provides visibility into the conversion process.
-
-### Warning Types
-
-| Warning | Severity | When Raised |
-|---------|----------|-------------|
-| `UnsupportedControlWord` | Warning | Unknown control word encountered |
-| `UnknownDestination` | Info | RTF destination not recognized |
-| `DroppedContent` | Warning | Content could not be represented |
-
-### Statistics Collected
-
-| Statistic | Description |
-|-----------|-------------|
-| `paragraph_count` | Number of paragraphs processed |
-| `run_count` | Number of text runs processed |
-| `bytes_processed` | Total bytes read from input |
-| `duration_ms` | Processing duration in milliseconds |
-
-### Strict Mode
-
-When `--strict` flag is enabled:
-
-1. Check for `DroppedContent` warnings
-2. If any exist, exit with code 4
-3. Print details of dropped content to stderr
-
-This enables CI pipelines to detect when conversion quality may be compromised.
-
----
-
-## CLI Interface
-
-### Command Structure
+Command:
 
 ```bash
 rtfkit convert [OPTIONS] <INPUT>
 ```
 
-### Options
+Options:
+- `--format <text|json>`: report output format (default `text`)
+- `--emit-ir <FILE>`: write IR as pretty JSON
+- `--strict`: exit non-zero if `DroppedContent` warnings exist
+- `--to <docx>`: reserved target selector (currently only `docx` accepted)
+- `-o, --output <FILE>`: reserved for future DOCX writer; rejected in v0.1
+- `--verbose`: debug logging
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--to` | `docx` | Output format (Phase 2) |
-| `--format` | `text` | Report format: `text` or `json` |
-| `--emit-ir <FILE>` | - | Serialize IR to JSON file |
-| `--strict` | false | Fail on dropped content |
-| `--verbose` | false | Enable debug logging |
+Exit codes:
+- `0`: success
+- `2`: parse/validation error (invalid RTF)
+- `3`: conversion/IO contract error (including unsupported `--output`)
+- `4`: strict-mode violation
 
-### Exit Codes
+## Reporting
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 2 | Parse error / invalid RTF |
-| 3 | Conversion error (writer/IO) |
-| 4 | Strict mode violated |
+Warnings:
+- `UnsupportedControlWord`
+- `UnknownDestination`
+- `DroppedContent`
 
-### Output Behavior
+Stats:
+- `paragraph_count`
+- `run_count`
+- `bytes_processed`
+- `duration_ms`
 
-- **stdout**: Conversion report only (no binary data)
-- **stderr**: Errors, warnings, debug logs
-- **files**: IR JSON (when `--emit-ir` used)
+Strict mode checks `DroppedContent` warnings.
 
----
+## Testing
 
-## Testing Strategy
+Test layers:
+- Core unit tests for tokenizer/interpreter/report behavior
+- Golden IR snapshot tests over all fixtures
+- CLI contract tests for exit codes/strict mode/invalid input
 
-### Golden Tests
-
-The project uses **golden testing** to ensure parsing consistency:
-
-```mermaid
-flowchart LR
-    Fixture[RTF Fixture] --> Parse[Interpreter.parse]
-    Parse --> IR[IR Document]
-    IR --> JSON[JSON String]
-    JSON --> |Compare| Golden[Golden File]
-    
-    style Golden fill:#f9f,stroke:#333
-```
-
-**Process**:
-
-1. Parse all RTF fixtures in `fixtures/`
-2. Serialize resulting IR to JSON
-3. Compare against golden files in `golden/`
-4. Fail on any mismatch
-
-**Updating Golden Files**:
+Golden update command:
 
 ```bash
-UPDATE_GOLDEN=1 cargo test -p rtfkit-cli
+UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests
 ```
 
-### Fixture Organization
+## Known gaps
 
-| Fixture | Purpose |
-|---------|---------|
-| `simple_paragraph.rtf` | Basic text content |
-| `bold_italic.rtf` | Bold and italic formatting |
-| `underline.rtf` | Underline formatting |
-| `alignment.rtf` | Paragraph alignment |
-| `unicode.rtf` | Unicode character handling |
-| `multiple_paragraphs.rtf` | Multiple paragraph breaks |
-| `nested_styles.rtf` | Nested group formatting |
-| `mixed_formatting.rtf` | Combined formatting |
-| `empty.rtf` | Empty document handling |
-| `complex.rtf` | Comprehensive feature test |
-
-### Test Categories
-
-1. **Golden tests**: IR snapshot comparison
-2. **Feature tests**: Specific RTF feature validation
-3. **Unit tests**: Internal component testing (in source files)
-
----
-
-## Data Flow Summary
-
-```mermaid
-flowchart TB
-    subgraph Input
-        File[RTF File]
-    end
-    
-    subgraph CLI
-        Args[CLI Args]
-        Reader[File Reader]
-    end
-    
-    subgraph Core
-        Tokenizer[Tokenizer]
-        Interpreter[Interpreter]
-        IR[IR Types]
-        Report[Report Types]
-    end
-    
-    subgraph Output
-        Stdout[stdout: Report]
-        Stderr[stderr: Logs]
-        IRFile[IR JSON File]
-    end
-    
-    File --> Reader
-    Args --> Reader
-    Reader --> Tokenizer
-    Tokenizer --> Interpreter
-    Interpreter --> IR
-    Interpreter --> Report
-    IR --> IRFile
-    Report --> Stdout
-    Report --> Stderr
-```
-
----
-
-## Future Expansion
-
-The architecture is designed for future growth:
-
-### Phase 2: DOCX Writer
-
-- New crate or module: `rtfkit-docx`
-- Consumes IR, produces `.docx`
-- No changes to core parsing logic
-
-### Phase 3: Additional Targets
-
-- HTML writer: Same IR, HTML output
-- PDF writer: Same IR, PDF output via rendering backend
-
-### IR Extensions
-
-The `Block` enum can be extended:
-
-```rust
-enum Block {
-    Paragraph(Paragraph),
-    // Future additions:
-    // Table(Table),
-    // List(List),
-    // Image(Image),
-}
-```
-
----
+- No DOCX writer yet (Phase 2)
+- Limited RTF feature coverage (no tables/lists/images as IR blocks)
+- No full RTF spec compliance target for v0.1
 
 ## References
 
 - [ADR-0001: RTF Parser Selection](../adr/0001-rtf-parser-selection.md)
-- [Phase 1 Specification](../PHASE1.md)
-- [RTF Specification v1.9.1](https://www.microsoft.com/en-us/download/details.aspx?id=10725)
+- [Phase 1 Specification](../specs/PHASE1.md)
+- [Initial Description](../specs/INITIAL_DESCRIPTION.md)

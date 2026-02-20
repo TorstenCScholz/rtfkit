@@ -24,9 +24,9 @@ use crate::{Alignment, Block, Document, Paragraph, Report, Run};
 use nom::{
     IResult,
     branch::alt,
-    bytes::complete::take_while1,
-    character::complete::{char, digit0},
-    combinator::{map, opt, recognize},
+    bytes::complete::{take, take_while1},
+    character::complete::{anychar, char, digit1},
+    combinator::{map, opt, recognize, verify},
     sequence::{preceded, tuple},
 };
 
@@ -68,6 +68,8 @@ pub enum RtfEvent {
         word: String,
         parameter: Option<i32>,
     },
+    /// A single-char control symbol
+    ControlSymbol(char),
     /// Text content
     Text(String),
     /// Binary data (rarely used in basic RTF)
@@ -107,6 +109,12 @@ impl StyleState {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DestinationBehavior {
+    Metadata,
+    Dropped(&'static str),
+}
+
 // =============================================================================
 // Interpreter
 // =============================================================================
@@ -140,6 +148,12 @@ pub struct Interpreter {
     unicode_skip_count: usize,
     /// How many characters to skip next (set after processing \u)
     skip_next_chars: usize,
+    /// Tracks whether we just read a destination marker control symbol (\*)
+    destination_marker: bool,
+    /// Number of nested groups currently being skipped as a destination
+    skip_destination_depth: usize,
+    /// Whether each open group still allows destination detection at its start
+    group_can_start_destination: Vec<bool>,
 }
 
 impl Interpreter {
@@ -156,6 +170,9 @@ impl Interpreter {
             report_builder: ReportBuilder::new(),
             unicode_skip_count: 1, // Default: 1 fallback character
             skip_next_chars: 0,
+            destination_marker: false,
+            skip_destination_depth: 0,
+            group_can_start_destination: Vec::new(),
         }
     }
 
@@ -172,6 +189,7 @@ impl Interpreter {
     pub fn parse(input: &str) -> Result<(Document, Report), String> {
         let mut interpreter = Self::new();
         let tokens = tokenize(input).map_err(|e| format!("Tokenization error: {:?}", e))?;
+        validate_tokens(&tokens)?;
 
         // Track bytes processed
         interpreter.report_builder.set_bytes_processed(input.len());
@@ -192,32 +210,170 @@ impl Interpreter {
 
     /// Process a single RTF event.
     fn process_event(&mut self, event: RtfEvent) -> Result<(), String> {
+        if self.skip_destination_depth > 0 {
+            self.process_skipped_destination_event(event);
+            return Ok(());
+        }
+
         match event {
             RtfEvent::GroupStart => {
                 // Push current style onto stack
                 self.group_stack.push(self.current_style.snapshot());
+                self.group_can_start_destination.push(true);
             }
             RtfEvent::GroupEnd => {
                 // Pop style from stack
                 if let Some(previous_style) = self.group_stack.pop() {
                     self.current_style = previous_style;
                 }
+                self.group_can_start_destination.pop();
+                self.destination_marker = false;
             }
             RtfEvent::ControlWord { word, parameter } => {
                 self.handle_control_word(&word, parameter);
             }
+            RtfEvent::ControlSymbol(symbol) => {
+                self.handle_control_symbol(symbol);
+            }
             RtfEvent::Text(text) => {
+                self.mark_current_group_non_destination();
                 self.handle_text(text);
             }
-            RtfEvent::BinaryData(_data) => {
-                // Ignore binary data for MVP
+            RtfEvent::BinaryData(data) => {
+                self.report_builder
+                    .dropped_content("Dropped unsupported binary RTF data", Some(data.len()));
             }
         }
         Ok(())
     }
 
+    fn process_skipped_destination_event(&mut self, event: RtfEvent) {
+        match event {
+            RtfEvent::GroupStart => {
+                self.group_stack.push(self.current_style.snapshot());
+                self.group_can_start_destination.push(false);
+                self.skip_destination_depth += 1;
+            }
+            RtfEvent::GroupEnd => {
+                if let Some(previous_style) = self.group_stack.pop() {
+                    self.current_style = previous_style;
+                }
+                self.group_can_start_destination.pop();
+                self.skip_destination_depth = self.skip_destination_depth.saturating_sub(1);
+                if self.skip_destination_depth == 0 {
+                    self.destination_marker = false;
+                }
+            }
+            RtfEvent::ControlWord { .. }
+            | RtfEvent::ControlSymbol(_)
+            | RtfEvent::Text(_)
+            | RtfEvent::BinaryData(_) => {}
+        }
+    }
+
+    fn handle_control_symbol(&mut self, symbol: char) {
+        match symbol {
+            // Destination marker at the start of a group: {\*\destination ...}
+            '*' if self.can_start_destination() => {
+                self.destination_marker = true;
+            }
+            '\\' => {
+                self.mark_current_group_non_destination();
+                self.handle_text("\\".to_string());
+            }
+            '{' => {
+                self.mark_current_group_non_destination();
+                self.handle_text("{".to_string());
+            }
+            '}' => {
+                self.mark_current_group_non_destination();
+                self.handle_text("}".to_string());
+            }
+            '~' => {
+                self.mark_current_group_non_destination();
+                self.handle_text("\u{00A0}".to_string());
+            }
+            '_' => {
+                self.mark_current_group_non_destination();
+                self.handle_text("\u{2011}".to_string());
+            }
+            '-' | '\n' | '\r' => {
+                // Optional hyphen / source formatting characters are ignored.
+                self.mark_current_group_non_destination();
+            }
+            _ => {
+                self.mark_current_group_non_destination();
+            }
+        }
+    }
+
+    fn can_start_destination(&self) -> bool {
+        self.group_can_start_destination
+            .last()
+            .copied()
+            .unwrap_or(false)
+    }
+
+    fn mark_current_group_non_destination(&mut self) {
+        if let Some(can_start) = self.group_can_start_destination.last_mut() {
+            *can_start = false;
+        }
+    }
+
+    fn destination_behavior(word: &str) -> Option<DestinationBehavior> {
+        match word {
+            // Metadata destinations that are intentionally excluded from body content.
+            "fonttbl" | "colortbl" | "stylesheet" | "info" | "title" | "author" | "operator"
+            | "keywords" | "comment" | "version" | "vern" | "creatim" | "revtim" | "printim"
+            | "buptim" | "edmins" | "nofpages" | "nofwords" | "nofchars" | "nofcharsws" | "id"
+            | "listtable" | "listoverridetable" => Some(DestinationBehavior::Metadata),
+            // Destinations that represent currently unsupported visible content.
+            "pict" | "obj" | "objclass" | "objdata" | "shppict" | "nonshppict" | "picprop"
+            | "field" | "fldinst" | "fldrslt" | "datafield" | "header" | "headerl" | "headerr"
+            | "footer" | "footerl" | "footerr" | "footnote" | "annotation" | "pn" | "pntext"
+            | "pntxtb" | "pntxta" | "pnseclvl" => Some(DestinationBehavior::Dropped(
+                "Dropped unsupported RTF destination content",
+            )),
+            _ => None,
+        }
+    }
+
+    fn maybe_start_destination(&mut self, word: &str) -> bool {
+        if !self.can_start_destination() {
+            self.destination_marker = false;
+            return false;
+        }
+
+        if let Some(behavior) = Self::destination_behavior(word) {
+            if let DestinationBehavior::Dropped(reason) = behavior {
+                self.report_builder.dropped_content(reason, None);
+            }
+            self.skip_destination_depth = 1;
+            self.destination_marker = false;
+            self.mark_current_group_non_destination();
+            return true;
+        }
+
+        if self.destination_marker {
+            self.report_builder.unknown_destination(word);
+            let reason = format!("Dropped unknown destination group \\{word}");
+            self.report_builder.dropped_content(&reason, None);
+            self.skip_destination_depth = 1;
+            self.destination_marker = false;
+            self.mark_current_group_non_destination();
+            return true;
+        }
+
+        false
+    }
+
     /// Handle a control word.
     fn handle_control_word(&mut self, word: &str, parameter: Option<i32>) {
+        if self.maybe_start_destination(word) {
+            return;
+        }
+        self.mark_current_group_non_destination();
+
         match word {
             // Bold: \b or \bN (N=0 turns off, N>0 turns on)
             "b" => {
@@ -281,21 +437,16 @@ impl Interpreter {
             }
             // Unicode skip count: \ucN (number of fallback characters after \u)
             "uc" => {
-                self.unicode_skip_count = parameter.map(|p| p as usize).unwrap_or(1);
+                self.unicode_skip_count =
+                    parameter.and_then(|p| usize::try_from(p).ok()).unwrap_or(1);
             }
             // RTF header control words - silently ignored (not user-facing)
             "rtf" | "ansi" | "ansicpg" | "deff" | "deflang" | "deflangfe" | "adeflang"
-            | "fonttbl" | "colortbl" | "stylesheet" | "listtable" | "listoverridetable"
-            | "info" | "title" | "author" | "operator" | "keywords" | "comment" | "version"
-            | "vern" | "creatim" | "revtim" | "printim" | "buptim" | "edmins" | "nofpages"
-            | "nofwords" | "nofchars" | "nofcharsws" | "id" | "pn" | "pntext" | "pntxtb"
-            | "pntxta" | "pnseclvl" | "picprop" | "shppict" | "nonshppict" | "pict" | "obj"
-            | "objclass" | "objdata" | "result" | "field" | "fldinst" | "fldrslt" | "datafield"
-            | "hwid" | "emdash" | "endash" | "emspace" | "enspace" | "qmspace" | "bullet"
-            | "lquote" | "rquote" | "ldblquote" | "rdblquote" | "tab" | "plain" | "f" | "fs"
-            | "cf" | "cb" | "highlight" | "strike" | "striked" | "sub" | "super" | "nosupersub"
-            | "caps" | "scaps" | "outl" | "shad" | "expnd" | "expndtw" | "kerning"
-            | "charscalex" | "lang" | "langfe" | "langnp" | "langfenp" => {
+            | "result" | "hwid" | "emdash" | "endash" | "emspace" | "enspace" | "qmspace"
+            | "bullet" | "lquote" | "rquote" | "ldblquote" | "rdblquote" | "tab" | "plain"
+            | "f" | "fs" | "cf" | "cb" | "highlight" | "strike" | "striked" | "sub" | "super"
+            | "nosupersub" | "caps" | "scaps" | "outl" | "shad" | "expnd" | "expndtw"
+            | "kerning" | "charscalex" | "lang" | "langfe" | "langnp" | "langfenp" => {
                 // Silently ignore these structural/formatting control words
             }
             // Unknown control words - report as unsupported
@@ -373,9 +524,9 @@ impl Interpreter {
         if !self.current_text.is_empty() {
             let run = Run {
                 text: self.current_text.clone(),
-                bold: self.current_style.bold,
-                italic: self.current_style.italic,
-                underline: self.current_style.underline,
+                bold: self.current_run_style.bold,
+                italic: self.current_run_style.italic,
+                underline: self.current_run_style.underline,
                 font_size: None,
                 color: None,
             };
@@ -420,8 +571,8 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, nom::Err<nom::error::Error<&s
     let mut remaining = input;
 
     while !remaining.is_empty() {
-        // Skip leading whitespace before attempting to parse
-        remaining = skip_whitespace(remaining);
+        // Skip source formatting whitespace. Spaces are meaningful and preserved.
+        remaining = skip_ignorable_whitespace(remaining);
 
         // If only whitespace remained, we're done
         if remaining.is_empty() {
@@ -438,6 +589,38 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, nom::Err<nom::error::Error<&s
     }
 
     Ok(tokens)
+}
+
+fn validate_tokens(tokens: &[Token]) -> Result<(), String> {
+    if tokens.is_empty() {
+        return Err("Invalid RTF: empty input".to_string());
+    }
+
+    let mut depth = 0usize;
+    for token in tokens {
+        match token {
+            Token::GroupStart => depth += 1,
+            Token::GroupEnd => {
+                if depth == 0 {
+                    return Err("Invalid RTF: unmatched group end ('}')".to_string());
+                }
+                depth -= 1;
+            }
+            Token::ControlWord { .. } | Token::Text(_) | Token::ControlSymbol(_) => {}
+        }
+    }
+    if depth != 0 {
+        return Err("Invalid RTF: unbalanced groups".to_string());
+    }
+
+    // Basic format guard: RTF should begin with {\rtf...}
+    let mut iter = tokens
+        .iter()
+        .filter(|t| !matches!(t, Token::Text(text) if text.trim().is_empty()));
+    match (iter.next(), iter.next()) {
+        (Some(Token::GroupStart), Some(Token::ControlWord { word, .. })) if word == "rtf" => Ok(()),
+        _ => Err("Invalid RTF: missing \\rtf header".to_string()),
+    }
 }
 
 /// Decode a Windows-1252 codepoint to a Unicode character.
@@ -491,11 +674,14 @@ fn parse_token(input: &str) -> IResult<&str, Token> {
             alt((
                 // Hex escape: \'hh (exactly two hex digits)
                 map(
-                    preceded(char('\''), take_while1(|c: char| c.is_ascii_hexdigit())),
+                    preceded(
+                        char('\''),
+                        verify(take(2usize), |hex: &&str| {
+                            hex.chars().all(|c| c.is_ascii_hexdigit())
+                        }),
+                    ),
                     |hex: &str| {
-                        // Take exactly the first two hex digits
-                        let hex_str = &hex[..hex.len().min(2)];
-                        if let Ok(byte) = u8::from_str_radix(hex_str, 16) {
+                        if let Ok(byte) = u8::from_str_radix(hex, 16) {
                             Token::Text(decode_windows1252(byte).to_string())
                         } else {
                             Token::Text(String::new())
@@ -504,10 +690,8 @@ fn parse_token(input: &str) -> IResult<&str, Token> {
                 ),
                 // Control symbol (single non-letter character)
                 map(
-                    take_while1(|c: char| {
-                        !c.is_alphanumeric() && c != ' ' && c != '\n' && c != '\r'
-                    }),
-                    |sym: &str| Token::ControlSymbol(sym.chars().next().unwrap()),
+                    verify(anychar, |c| !c.is_ascii_alphabetic()),
+                    Token::ControlSymbol,
                 ),
                 // Control word with optional parameter
                 map(
@@ -515,9 +699,11 @@ fn parse_token(input: &str) -> IResult<&str, Token> {
                         // Word: letters only
                         take_while1(|c: char| c.is_ascii_alphabetic()),
                         // Optional parameter: digits, possibly negative
-                        opt(recognize(tuple((opt(char('-')), digit0)))),
+                        opt(recognize(tuple((opt(char('-')), digit1)))),
+                        // An optional single space delimiter is consumed by the RTF grammar.
+                        opt(char(' ')),
                     )),
-                    |(word, param): (&str, Option<&str>)| {
+                    |(word, param, _): (&str, Option<&str>, Option<char>)| {
                         let parameter = param.and_then(|p| {
                             if p.is_empty() || p == "-" {
                                 None
@@ -560,11 +746,11 @@ fn decode_text(text: &str) -> String {
     result
 }
 
-/// Skip whitespace characters.
-fn skip_whitespace(input: &str) -> &str {
+/// Skip ignorable source formatting whitespace.
+fn skip_ignorable_whitespace(input: &str) -> &str {
     let mut remaining = input;
     while let Some(c) = remaining.chars().next() {
-        if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
+        if c == '\n' || c == '\r' || c == '\t' {
             remaining = &remaining[c.len_utf8()..];
         } else {
             break;
@@ -580,20 +766,7 @@ fn token_to_event(token: Token) -> RtfEvent {
         Token::GroupEnd => RtfEvent::GroupEnd,
         Token::ControlWord { word, parameter } => RtfEvent::ControlWord { word, parameter },
         Token::Text(text) => RtfEvent::Text(text),
-        Token::ControlSymbol(symbol) => {
-            // Handle special control symbols
-            match symbol {
-                '\'' => {
-                    // Hex escape - for MVP, we'll skip this
-                    RtfEvent::Text(String::new())
-                }
-                '*' => {
-                    // Destination - for MVP, we'll skip this
-                    RtfEvent::Text(String::new())
-                }
-                _ => RtfEvent::Text(String::new()),
-            }
-        }
+        Token::ControlSymbol(symbol) => RtfEvent::ControlSymbol(symbol),
     }
 }
 
@@ -717,9 +890,83 @@ mod tests {
 
     #[test]
     fn test_report_no_warnings_for_known_words() {
-        let input = r#"{\rtf1\ansi\fonttbl Hello}"#;
+        let input = r#"{\rtf1\ansi{\fonttbl\f0 Arial;}Hello}"#;
         let (_doc, report) = Interpreter::parse(input).unwrap();
 
+        assert!(report.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_parse_rejects_non_rtf_input() {
+        let input = "not rtf at all";
+        let err = Interpreter::parse(input).unwrap_err();
+        assert!(err.contains("missing \\rtf header"));
+    }
+
+    #[test]
+    fn test_parse_rejects_unbalanced_groups() {
+        let input = r#"{\rtf1\ansi missing_end"#;
+        let err = Interpreter::parse(input).unwrap_err();
+        assert!(err.contains("unbalanced groups"));
+    }
+
+    #[test]
+    fn test_paragraph_finalization_uses_run_style() {
+        let input = r#"{\rtf1\ansi \b Bold\b0\par}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+        let Block::Paragraph(para) = &doc.blocks[0];
+        assert_eq!(para.runs.len(), 1);
+        assert!(para.runs[0].bold);
+    }
+
+    #[test]
+    fn test_space_after_group_is_preserved() {
+        let input = r#"{\rtf1\ansi {\b Bold} text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+        let Block::Paragraph(para) = &doc.blocks[0];
+        let rendered = para
+            .runs
+            .iter()
+            .map(|run| run.text.as_str())
+            .collect::<String>();
+        assert_eq!(rendered, "Bold text");
+    }
+
+    #[test]
+    fn test_escaped_symbols_are_preserved() {
+        let input = r#"{\rtf1\ansi \{braced\} and \\ slash}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+        let Block::Paragraph(para) = &doc.blocks[0];
+        assert_eq!(para.runs.len(), 1);
+        assert_eq!(para.runs[0].text, "{braced} and \\ slash");
+    }
+
+    #[test]
+    fn test_unknown_destination_is_skipped_and_reported() {
+        let input = r#"{\rtf1\ansi {\*\foo hidden} shown}"#;
+        let (doc, report) = Interpreter::parse(input).unwrap();
+        let Block::Paragraph(para) = &doc.blocks[0];
+        assert_eq!(para.runs[0].text, " shown");
+        assert!(
+            report.warnings.iter().any(|warning| matches!(
+                warning,
+                crate::report::Warning::UnknownDestination { .. }
+            ))
+        );
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|warning| matches!(warning, crate::report::Warning::DroppedContent { .. }))
+        );
+    }
+
+    #[test]
+    fn test_metadata_destination_is_skipped_without_warning() {
+        let input = r#"{\rtf1\ansi {\fonttbl\f0 Arial;} Hello}"#;
+        let (doc, report) = Interpreter::parse(input).unwrap();
+        let Block::Paragraph(para) = &doc.blocks[0];
+        assert_eq!(para.runs[0].text, " Hello");
         assert!(report.warnings.is_empty());
     }
 }

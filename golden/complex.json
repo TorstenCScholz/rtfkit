@@ -2,17 +2,11 @@
   "blocks": [
     {
       "type": "paragraph",
-      "alignment": "left",
+      "alignment": "center",
       "runs": [
         {
-          "text": "Arial;;;;",
-          "bold": false,
-          "italic": false,
-          "underline": false
-        },
-        {
           "text": "Complex Document Title",
-          "bold": false,
+          "bold": true,
           "italic": false,
           "underline": false
         }
@@ -25,7 +19,7 @@
         {
           "text": "Introduction",
           "bold": false,
-          "italic": false,
+          "italic": true,
           "underline": false
         }
       ]
@@ -47,9 +41,21 @@
           "underline": false
         },
         {
+          "text": " ",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        },
+        {
           "text": "formatting",
           "bold": false,
           "italic": true,
+          "underline": false
+        },
+        {
+          "text": " ",
+          "bold": false,
+          "italic": false,
           "underline": false
         },
         {
@@ -59,7 +65,7 @@
           "underline": true
         },
         {
-          "text": "in a single file.",
+          "text": " in a single file.",
           "bold": false,
           "italic": false,
           "underline": false
@@ -72,7 +78,7 @@
       "runs": [
         {
           "text": "Section 1: Alignment",
-          "bold": false,
+          "bold": true,
           "italic": false,
           "underline": false
         }
@@ -120,7 +126,7 @@
       "runs": [
         {
           "text": "Section 2: Nested Styles",
-          "bold": false,
+          "bold": true,
           "italic": false,
           "underline": false
         }
@@ -155,7 +161,7 @@
           "underline": true
         },
         {
-          "text": "back to normal.",
+          "text": " back to normal.",
           "bold": false,
           "italic": false,
           "underline": false
@@ -168,7 +174,7 @@
       "runs": [
         {
           "text": "Section 3: Unicode Characters",
-          "bold": false,
+          "bold": true,
           "italic": false,
           "underline": false
         }
@@ -179,7 +185,7 @@
       "alignment": "right",
       "runs": [
         {
-          "text": "éèêë(accented e characters)",
+          "text": "é è ê ë (accented e characters)",
           "bold": false,
           "italic": false,
           "underline": false
@@ -204,8 +210,8 @@
       "runs": [
         {
           "text": "The End",
-          "bold": false,
-          "italic": false,
+          "bold": true,
+          "italic": true,
           "underline": false
         }
       ]

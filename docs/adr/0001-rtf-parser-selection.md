@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -19,9 +19,9 @@ The project's goal is "90% real documents correctly, robustly, and reproducibly 
 
 The project currently has:
 - A workspace structure with `rtfkit-core` and `rtfkit-cli` crates
-- A placeholder text analysis implementation in [`rtfkit-core/src/lib.rs`](../../crates/rtfkit-core/src/lib.rs)
-- CLI skeleton using `clap` in [`rtfkit-cli/src/main.rs`](../../crates/rtfkit-cli/src/main.rs)
-- No RTF-specific parsing code yet
+- A custom `nom`-based tokenizer/interpreter in [`rtfkit-core/src/interpreter.rs`](../../crates/rtfkit-core/src/interpreter.rs)
+- Report/warning model in [`rtfkit-core/src/report.rs`](../../crates/rtfkit-core/src/report.rs)
+- CLI entrypoint in [`rtfkit-cli/src/main.rs`](../../crates/rtfkit-cli/src/main.rs)
 
 ### Evaluation Criteria
 
@@ -38,7 +38,7 @@ The project currently has:
 
 **Recommendation: Build a custom parser using `nom` parser combinators.**
 
-We will implement a custom RTF parser rather than using an existing crate. This decision is based on the evaluation below and aligns with the project's "stateful interpreter" architecture described in [`docs/PHASE1.md`](../PHASE1.md).
+We will implement a custom RTF parser rather than using an existing crate. This decision is based on the evaluation below and aligns with the project's "stateful interpreter" architecture described in [`docs/specs/PHASE1.md`](../specs/PHASE1.md).
 
 ## Alternatives Considered
 

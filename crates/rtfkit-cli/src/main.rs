@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use rtfkit_core::{Document, Interpreter, Report, Warning};
 use tracing::debug;
@@ -27,12 +27,12 @@ enum Commands {
         #[arg(required = true)]
         input: PathBuf,
 
-        /// Output file path
+        /// Output file path (reserved for future DOCX writer)
         #[arg(short, long)]
         output: Option<PathBuf>,
 
-        /// Output format (docx planned for Phase 2)
-        #[arg(long, default_value = "docx")]
+        /// Output target (currently only docx is accepted)
+        #[arg(long, default_value = "docx", value_parser = ["docx"])]
         to: String,
 
         /// Output format for conversion report
@@ -69,22 +69,36 @@ fn run() -> Result<ExitCode> {
     match cli.command {
         Commands::Convert {
             input,
-            output: _,
+            output,
             to,
             format,
             emit_ir,
             strict,
-        } => handle_convert(input, &to, &format, emit_ir.as_ref(), strict),
+        } => handle_convert(
+            input,
+            output.as_ref(),
+            &to,
+            &format,
+            emit_ir.as_ref(),
+            strict,
+        ),
     }
 }
 
 fn handle_convert(
     input: PathBuf,
+    output: Option<&PathBuf>,
     to: &str,
     format: &str,
     emit_ir: Option<&PathBuf>,
     strict: bool,
 ) -> Result<ExitCode> {
+    if output.is_some() {
+        bail!("--output is not supported yet in v0.1 (DOCX writer is planned for a later phase)");
+    }
+
+    debug!("Target format requested: {to}");
+
     // Read input file
     let content = fs::read_to_string(&input)
         .with_context(|| format!("Failed to read file: {}", input.display()))?;
@@ -133,11 +147,6 @@ fn handle_convert(
         "json" => print_report_json(&report)?,
         "text" => print_report_text(&report),
         _ => unreachable!("clap validates format"),
-    }
-
-    // Note: DOCX output is Phase 2, for now just acknowledge the --to flag
-    if to != "docx" {
-        eprintln!("Warning: Only 'docx' output is planned for Phase 2");
     }
 
     Ok(ExitCode::from(EXIT_SUCCESS))
