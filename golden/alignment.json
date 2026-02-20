@@ -1,0 +1,40 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Left Aligned Text",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "center",
+      "runs": [
+        {
+          "text": "Centered Text",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "right",
+      "runs": [
+        {
+          "text": "Right Aligned Text",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}

@@ -5,7 +5,7 @@
       "alignment": "left",
       "runs": [
         {
-          "text": "Unicode Test:",
+          "text": "First paragraph with some text.",
           "bold": false,
           "italic": false,
           "underline": false
@@ -17,7 +17,7 @@
       "alignment": "left",
       "runs": [
         {
-          "text": "é(e-acute via hex)",
+          "text": "Second paragraph with more content.",
           "bold": false,
           "italic": false,
           "underline": false
@@ -29,7 +29,7 @@
       "alignment": "left",
       "runs": [
         {
-          "text": "é (e with accent via unicode escape)",
+          "text": "Third paragraph to test multiple breaks.",
           "bold": false,
           "italic": false,
           "underline": false
@@ -41,31 +41,7 @@
       "alignment": "left",
       "runs": [
         {
-          "text": "€ (Euro symbol)",
-          "bold": false,
-          "italic": false,
-          "underline": false
-        }
-      ]
-    },
-    {
-      "type": "paragraph",
-      "alignment": "left",
-      "runs": [
-        {
-          "text": "© (copyright)",
-          "bold": false,
-          "italic": false,
-          "underline": false
-        }
-      ]
-    },
-    {
-      "type": "paragraph",
-      "alignment": "left",
-      "runs": [
-        {
-          "text": "— (em dash)",
+          "text": "Fourth and final paragraph.",
           "bold": false,
           "italic": false,
           "underline": false

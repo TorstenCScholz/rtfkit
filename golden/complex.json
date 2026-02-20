@@ -1,0 +1,214 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Arial;;;;",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "text": "Complex Document Title",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Introduction",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "This document tests ",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "text": "multiple",
+          "bold": true,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "text": "formatting",
+          "bold": false,
+          "italic": true,
+          "underline": false
+        },
+        {
+          "text": "features",
+          "bold": false,
+          "italic": false,
+          "underline": true
+        },
+        {
+          "text": "in a single file.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "center",
+      "runs": [
+        {
+          "text": "Section 1: Alignment",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Left aligned text with € Euro symbol.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "center",
+      "runs": [
+        {
+          "text": "Centered text with © copyright.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "right",
+      "runs": [
+        {
+          "text": "Right aligned text.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "right",
+      "runs": [
+        {
+          "text": "Section 2: Nested Styles",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "right",
+      "runs": [
+        {
+          "text": "Normal text ",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "text": "bold ",
+          "bold": true,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "text": "bold-italic ",
+          "bold": true,
+          "italic": true,
+          "underline": false
+        },
+        {
+          "text": "bold-italic-underlined",
+          "bold": true,
+          "italic": true,
+          "underline": true
+        },
+        {
+          "text": "back to normal.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "right",
+      "runs": [
+        {
+          "text": "Section 3: Unicode Characters",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "right",
+      "runs": [
+        {
+          "text": "éèêë(accented e characters)",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "right",
+      "runs": [
+        {
+          "text": "— (em dash) – (en dash)",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "center",
+      "runs": [
+        {
+          "text": "The End",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}
