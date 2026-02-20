@@ -27,7 +27,9 @@
 use crate::error::{ConversionError, ParseError};
 use crate::limits::ParserLimits;
 use crate::report::ReportBuilder;
-use crate::{Alignment, Block, Document, Paragraph, Report, Run};
+use crate::{
+    Alignment, Block, Document, ListBlock, ListId, ListItem, ListKind, Paragraph, Report, Run,
+};
 use nom::{
     IResult,
     branch::alt,
@@ -36,6 +38,7 @@ use nom::{
     combinator::{map, opt, recognize, verify},
     sequence::{preceded, tuple},
 };
+use std::collections::HashMap;
 
 // =============================================================================
 // Token Types
@@ -116,10 +119,107 @@ impl StyleState {
     }
 }
 
+// =============================================================================
+// List Parsing Types
+// =============================================================================
+
+/// Parsed list level from \listtable.
+///
+/// Represents a single level within a list definition.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParsedListLevel {
+    /// The level number (0-8)
+    pub level: u8,
+    /// The kind of numbering for this level
+    pub kind: ListKind,
+}
+
+/// Parsed list definition from \listtable.
+///
+/// Represents a complete list definition with all its levels.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParsedListDefinition {
+    /// The list ID from RTF (\listidN)
+    pub list_id: i32,
+    /// The levels defined for this list
+    pub levels: Vec<ParsedListLevel>,
+}
+
+impl ParsedListDefinition {
+    /// Creates a new empty list definition with the given ID.
+    pub fn new(list_id: i32) -> Self {
+        Self {
+            list_id,
+            levels: Vec::new(),
+        }
+    }
+
+    /// Gets the kind for a specific level, defaulting to Bullet.
+    pub fn kind_for_level(&self, level: u8) -> ListKind {
+        self.levels
+            .iter()
+            .find(|l| l.level == level)
+            .map(|l| l.kind)
+            .unwrap_or_default()
+    }
+}
+
+/// Parsed list override from \listoverridetable.
+///
+/// List overrides map an ls_id to a list definition and can optionally
+/// override the starting number.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParsedListOverride {
+    /// The ls_id used in \lsN control words
+    pub ls_id: i32,
+    /// The list_id this override references
+    pub list_id: i32,
+    /// Optional start number override
+    pub start_override: Option<i32>,
+}
+
+impl ParsedListOverride {
+    /// Creates a new list override.
+    pub fn new(ls_id: i32, list_id: i32) -> Self {
+        Self {
+            ls_id,
+            list_id,
+            start_override: None,
+        }
+    }
+}
+
+/// Resolved list reference for the current paragraph.
+///
+/// This is populated when \lsN and \ilvlN are encountered,
+/// and used during paragraph finalization to create list blocks.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParagraphListRef {
+    /// The resolved list ID
+    pub list_id: ListId,
+    /// The nesting level (0-8)
+    pub level: u8,
+    /// The kind of list
+    pub kind: ListKind,
+}
+
+impl ParagraphListRef {
+    /// Creates a new paragraph list reference.
+    pub fn new(list_id: ListId, level: u8, kind: ListKind) -> Self {
+        Self {
+            list_id,
+            level: level.min(8), // Clamp to DOCX max
+            kind,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DestinationBehavior {
     Metadata,
     Dropped(&'static str),
+    ListTable,
+    ListOverrideTable,
 }
 
 // =============================================================================
@@ -135,6 +235,7 @@ enum DestinationBehavior {
 /// - The document being built
 /// - A report builder for collecting warnings and stats
 /// - Parser limits for resource protection
+/// - List parsing state for Phase 3
 pub struct Interpreter {
     /// Stack of style states for group handling
     group_stack: Vec<StyleState>,
@@ -166,6 +267,32 @@ pub struct Interpreter {
     limits: ParserLimits,
     /// Current group depth (for limit enforcement)
     current_depth: usize,
+    // =============================================================================
+    // List Parsing State (Phase 3)
+    // =============================================================================
+    /// Parsed list definitions from \listtable
+    list_table: HashMap<i32, ParsedListDefinition>,
+    /// Parsed list overrides from \listoverridetable
+    list_overrides: HashMap<i32, ParsedListOverride>,
+    /// Current paragraph list reference (from \lsN and \ilvlN)
+    current_list_ref: Option<ParagraphListRef>,
+    /// Current ls_id (from \lsN, used to resolve list reference)
+    pending_ls_id: Option<i32>,
+    /// Current level (from \ilvlN)
+    pending_level: u8,
+    // =============================================================================
+    // List Table Parsing State
+    // =============================================================================
+    /// Whether we're currently parsing a list table destination
+    parsing_list_table: bool,
+    /// Whether we're currently parsing a list override table destination
+    parsing_list_override_table: bool,
+    /// Current list definition being parsed (for listtable)
+    current_list_def: Option<ParsedListDefinition>,
+    /// Current list level being parsed (for listtable)
+    current_list_level: Option<ParsedListLevel>,
+    /// Current list override being parsed (for listoverridetable)
+    current_list_override: Option<ParsedListOverride>,
 }
 
 impl Interpreter {
@@ -192,6 +319,18 @@ impl Interpreter {
             group_can_start_destination: Vec::new(),
             limits,
             current_depth: 0,
+            // List parsing state
+            list_table: HashMap::new(),
+            list_overrides: HashMap::new(),
+            current_list_ref: None,
+            pending_ls_id: None,
+            pending_level: 0,
+            // List table parsing state
+            parsing_list_table: false,
+            parsing_list_override_table: false,
+            current_list_def: None,
+            current_list_level: None,
+            current_list_override: None,
         }
     }
 
@@ -330,24 +469,160 @@ impl Interpreter {
                 self.group_stack.push(self.current_style.snapshot());
                 self.group_can_start_destination.push(false);
                 self.skip_destination_depth += 1;
+
+                // Handle nested groups in list table parsing
+                if self.parsing_list_table && self.skip_destination_depth == 2 {
+                    // Starting a new \list or \listlevel group
+                    // The depth check helps us know we're inside the listtable destination
+                }
+                if self.parsing_list_override_table && self.skip_destination_depth == 2 {
+                    // Starting a new \listoverride group
+                }
             }
             RtfEvent::GroupEnd => {
+                // Finalize list definition when closing a \list group
+                if self.parsing_list_table && self.skip_destination_depth == 2 {
+                    if let Some(list_def) = self.current_list_def.take() {
+                        self.list_table.insert(list_def.list_id, list_def);
+                    }
+                }
+
+                // Finalize list override when closing a \listoverride group
+                if self.parsing_list_override_table && self.skip_destination_depth == 2 {
+                    if let Some(list_override) = self.current_list_override.take() {
+                        self.list_overrides
+                            .insert(list_override.ls_id, list_override);
+                    }
+                }
+
+                // Finalize list level when closing a \listlevel group
+                if self.parsing_list_table && self.skip_destination_depth == 3 {
+                    if let Some(level) = self.current_list_level.take() {
+                        if let Some(ref mut list_def) = self.current_list_def {
+                            list_def.levels.push(level);
+                        }
+                    }
+                }
+
                 if let Some(previous_style) = self.group_stack.pop() {
                     self.current_style = previous_style;
                 }
                 self.current_depth = self.current_depth.saturating_sub(1);
                 self.group_can_start_destination.pop();
                 self.skip_destination_depth = self.skip_destination_depth.saturating_sub(1);
+
                 if self.skip_destination_depth == 0 {
                     self.destination_marker = false;
+                    self.parsing_list_table = false;
+                    self.parsing_list_override_table = false;
                 }
             }
-            RtfEvent::ControlWord { .. }
-            | RtfEvent::ControlSymbol(_)
-            | RtfEvent::Text(_)
-            | RtfEvent::BinaryData(_) => {}
+            RtfEvent::ControlWord { word, parameter } => {
+                self.handle_list_table_control_word(&word, parameter);
+            }
+            RtfEvent::ControlSymbol(_) | RtfEvent::Text(_) | RtfEvent::BinaryData(_) => {}
         }
         Ok(())
+    }
+
+    /// Handle control words within list table/override table destinations.
+    fn handle_list_table_control_word(&mut self, word: &str, parameter: Option<i32>) {
+        // Only process if we're in list table parsing mode
+        if !self.parsing_list_table && !self.parsing_list_override_table {
+            return;
+        }
+
+        match word {
+            // List table control words
+            "list" => {
+                // Start of a new list definition
+                // We'll set the list_id when we encounter \listidN
+                self.current_list_def = Some(ParsedListDefinition::new(0));
+            }
+            "listlevel" => {
+                // Start of a new level definition
+                // \listlevel has no numeric parameter; infer level by declaration order.
+                let level = self
+                    .current_list_def
+                    .as_ref()
+                    .map(|def| def.levels.len() as u8)
+                    .unwrap_or(0)
+                    .min(8);
+                self.current_list_level = Some(ParsedListLevel {
+                    level,
+                    kind: ListKind::Bullet, // Default, will be updated by \levelnfcN
+                });
+            }
+            "levelnfc" => {
+                // Number format code determines the list kind
+                // 0 = decimal, 23 = bullet, etc.
+                if let Some(nfc) = parameter {
+                    let kind = match nfc {
+                        0 => ListKind::OrderedDecimal, // Decimal (1, 2, 3)
+                        1 => ListKind::OrderedDecimal, // Upper Roman (I, II, III)
+                        2 => ListKind::OrderedDecimal, // Lower Roman (i, ii, iii)
+                        3 => ListKind::OrderedDecimal, // Upper Alpha (A, B, C)
+                        4 => ListKind::OrderedDecimal, // Lower Alpha (a, b, c)
+                        23 => ListKind::Bullet,        // Bullet
+                        _ => ListKind::Bullet,         // Default to bullet for unknown
+                    };
+                    if let Some(ref mut level) = self.current_list_level {
+                        level.kind = kind;
+                    }
+                }
+            }
+
+            // List override table control words
+            "listoverride" => {
+                // Start of a new list override
+                // We'll set the values when we encounter \listidN and \lsN
+                self.current_list_override = Some(ParsedListOverride::new(0, 0));
+            }
+            "ls" => {
+                // In override table, this sets the ls_id
+                if let Some(id) = parameter {
+                    if self.parsing_list_override_table {
+                        if let Some(ref mut list_override) = self.current_list_override {
+                            list_override.ls_id = id;
+                        }
+                    }
+                }
+            }
+            "listoverridepad" => {
+                // Padding/hack for Word compatibility - ignore
+            }
+
+            // listid is used in both listtable and listoverridetable
+            "listid" => {
+                if let Some(id) = parameter {
+                    if self.parsing_list_table {
+                        // In listtable, this sets the list definition's ID
+                        if let Some(ref mut list_def) = self.current_list_def {
+                            list_def.list_id = id;
+                        }
+                    } else if self.parsing_list_override_table {
+                        // In listoverridetable, this sets the referenced list_id
+                        if let Some(ref mut list_override) = self.current_list_override {
+                            list_override.list_id = id;
+                        }
+                    }
+                }
+            }
+
+            // Other list-related control words we recognize but don't fully process
+            "listtemplateid" | "listsimple" | "listhybrid" | "listname" | "liststyleid"
+            | "levels" | "levelstartat" | "levelindent" | "levelspace" | "levelfollow"
+            | "levellegal" | "levelnorestart" | "leveljcn" | "levelnfcn" | "levelnfcN"
+            | "listoverridestart" => {
+                // These are recognized but not fully processed - no warning needed
+            }
+
+            _ => {
+                // Unknown control word in list table context
+                // Report as unsupported list control
+                self.report_builder.unsupported_list_control(word);
+            }
+        }
     }
 
     fn handle_control_symbol(&mut self, symbol: char) {
@@ -401,11 +676,15 @@ impl Interpreter {
 
     fn destination_behavior(word: &str) -> Option<DestinationBehavior> {
         match word {
+            // List table destinations - need special parsing
+            "listtable" => Some(DestinationBehavior::ListTable),
+            "listoverridetable" => Some(DestinationBehavior::ListOverrideTable),
             // Metadata destinations that are intentionally excluded from body content.
             "fonttbl" | "colortbl" | "stylesheet" | "info" | "title" | "author" | "operator"
             | "keywords" | "comment" | "version" | "vern" | "creatim" | "revtim" | "printim"
-            | "buptim" | "edmins" | "nofpages" | "nofwords" | "nofchars" | "nofcharsws" | "id"
-            | "listtable" | "listoverridetable" => Some(DestinationBehavior::Metadata),
+            | "buptim" | "edmins" | "nofpages" | "nofwords" | "nofchars" | "nofcharsws" | "id" => {
+                Some(DestinationBehavior::Metadata)
+            }
             // Destinations that represent currently unsupported visible content.
             "pict" | "obj" | "objclass" | "objdata" | "shppict" | "nonshppict" | "picprop"
             | "field" | "fldinst" | "fldrslt" | "datafield" | "header" | "headerl" | "headerr"
@@ -424,10 +703,23 @@ impl Interpreter {
         }
 
         if let Some(behavior) = Self::destination_behavior(word) {
-            if let DestinationBehavior::Dropped(reason) = behavior {
-                self.report_builder.dropped_content(reason, None);
+            match behavior {
+                DestinationBehavior::Dropped(reason) => {
+                    self.report_builder.dropped_content(reason, None);
+                    self.skip_destination_depth = 1;
+                }
+                DestinationBehavior::Metadata => {
+                    self.skip_destination_depth = 1;
+                }
+                DestinationBehavior::ListTable => {
+                    self.parsing_list_table = true;
+                    self.skip_destination_depth = 1;
+                }
+                DestinationBehavior::ListOverrideTable => {
+                    self.parsing_list_override_table = true;
+                    self.skip_destination_depth = 1;
+                }
             }
-            self.skip_destination_depth = 1;
             self.destination_marker = false;
             self.mark_current_group_non_destination();
             return true;
@@ -475,6 +767,10 @@ impl Interpreter {
                 // \pard resets paragraph properties
                 if word == "pard" {
                     self.current_style.alignment = Alignment::default();
+                    // Also reset list state on \pard
+                    self.current_list_ref = None;
+                    self.pending_ls_id = None;
+                    self.pending_level = 0;
                 } else {
                     self.finalize_paragraph();
                 }
@@ -518,6 +814,31 @@ impl Interpreter {
             "uc" => {
                 self.unicode_skip_count =
                     parameter.and_then(|p| usize::try_from(p).ok()).unwrap_or(1);
+            }
+            // =============================================================================
+            // List Control Words (Phase 3)
+            // =============================================================================
+            // \lsN - List identifier reference (from listoverridetable)
+            "ls" => {
+                self.pending_ls_id = parameter;
+            }
+            // \ilvlN - List level (0-indexed)
+            "ilvl" => {
+                let level = parameter.and_then(|p| u8::try_from(p).ok()).unwrap_or(0);
+
+                // Emit warning if level exceeds max
+                if level > 8 {
+                    self.report_builder.unsupported_nesting_level(level, 8);
+                }
+
+                self.pending_level = level.min(8); // Clamp to DOCX max
+            }
+            // Legacy paragraph numbering controls are intentionally unsupported.
+            "pnlvl" | "pnlvlblt" | "pnlvlbody" | "pnlvlcont" | "pnstart" | "pnindent"
+            | "pntxta" | "pntxtb" => {
+                self.report_builder.unsupported_list_control(word);
+                self.report_builder
+                    .dropped_content("Dropped legacy paragraph numbering content", None);
             }
             // RTF header control words - silently ignored (not user-facing)
             "rtf" | "ansi" | "ansicpg" | "deff" | "deflang" | "deflangfe" | "adeflang"
@@ -609,9 +930,25 @@ impl Interpreter {
         // Add paragraph to document if it has content
         if !self.current_paragraph.runs.is_empty() {
             self.current_paragraph.alignment = self.paragraph_alignment;
-            self.document
-                .blocks
-                .push(Block::Paragraph(self.current_paragraph.clone()));
+
+            // Resolve list reference if we have pending list state
+            self.resolve_list_reference();
+
+            // Check if this paragraph belongs to a list
+            if let Some(list_ref) = &self.current_list_ref {
+                // Add as list item to existing or new list block
+                self.add_list_item(
+                    list_ref.list_id,
+                    list_ref.level,
+                    list_ref.kind,
+                    self.current_paragraph.clone(),
+                );
+            } else {
+                // Regular paragraph
+                self.document
+                    .blocks
+                    .push(Block::Paragraph(self.current_paragraph.clone()));
+            }
 
             // Track stats
             self.report_builder.increment_paragraph_count();
@@ -624,6 +961,58 @@ impl Interpreter {
         self.current_run_style = self.current_style.snapshot();
         // Reset paragraph alignment for the next paragraph
         self.paragraph_alignment = self.current_style.alignment;
+
+        // Clear list state for next paragraph
+        self.current_list_ref = None;
+        self.pending_ls_id = None;
+        self.pending_level = 0;
+    }
+
+    /// Resolve list reference from pending state.
+    fn resolve_list_reference(&mut self) {
+        // First, try to resolve from \lsN (modern list mechanism)
+        if let Some(ls_id) = self.pending_ls_id {
+            if let Some(override_def) = self.list_overrides.get(&ls_id) {
+                let list_id = override_def.list_id as ListId;
+                let level = self.pending_level;
+
+                // Emit warning if level exceeds max
+                if level > 8 {
+                    self.report_builder.unsupported_nesting_level(level, 8);
+                }
+
+                let kind = self
+                    .list_table
+                    .get(&override_def.list_id)
+                    .map(|def| def.kind_for_level(level))
+                    .unwrap_or_default();
+                self.current_list_ref = Some(ParagraphListRef::new(list_id, level, kind));
+                return;
+            }
+
+            // If we have ls_id but no override, emit warnings and keep paragraph output.
+            self.report_builder.unresolved_list_override(ls_id);
+
+            // Emit DroppedContent for strict mode compatibility
+            self.report_builder
+                .dropped_content(&format!("Unresolved list override ls_id={}", ls_id), None);
+        }
+    }
+
+    /// Add a list item to the document, creating or appending to a list block.
+    fn add_list_item(&mut self, list_id: ListId, level: u8, kind: ListKind, paragraph: Paragraph) {
+        // Check if we can append to the last block if it's a list with the same ID
+        if let Some(Block::ListBlock(last_list)) = self.document.blocks.last_mut() {
+            if last_list.list_id == list_id && last_list.kind == kind {
+                last_list.add_item(ListItem::from_paragraph(level, paragraph));
+                return;
+            }
+        }
+
+        // Create a new list block
+        let mut list_block = ListBlock::new(list_id, kind);
+        list_block.add_item(ListItem::from_paragraph(level, paragraph));
+        self.document.blocks.push(Block::ListBlock(list_block));
     }
 }
 
@@ -907,8 +1296,11 @@ mod tests {
         let (doc, _report) = Interpreter::parse(input).unwrap();
 
         // Should have runs with different bold states
-        let Block::Paragraph(para) = &doc.blocks[0];
-        assert!(para.runs.iter().any(|r| r.bold));
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert!(para.runs.iter().any(|r| r.bold));
+        } else {
+            panic!("Expected Paragraph block");
+        }
     }
 
     #[test]
@@ -924,8 +1316,11 @@ mod tests {
         let input = r#"{\rtf1\ansi \qc Centered}"#;
         let (doc, _report) = Interpreter::parse(input).unwrap();
 
-        let Block::Paragraph(para) = &doc.blocks[0];
-        assert_eq!(para.alignment, Alignment::Center);
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.alignment, Alignment::Center);
+        } else {
+            panic!("Expected Paragraph block");
+        }
     }
 
     #[test]
@@ -1145,59 +1540,420 @@ This is a \b bold\b0  test.\par
     fn test_paragraph_finalization_uses_run_style() {
         let input = r#"{\rtf1\ansi \b Bold\b0\par}"#;
         let (doc, _report) = Interpreter::parse(input).unwrap();
-        let Block::Paragraph(para) = &doc.blocks[0];
-        assert_eq!(para.runs.len(), 1);
-        assert!(para.runs[0].bold);
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.runs.len(), 1);
+            assert!(para.runs[0].bold);
+        } else {
+            panic!("Expected Paragraph block");
+        }
     }
 
     #[test]
     fn test_space_after_group_is_preserved() {
         let input = r#"{\rtf1\ansi {\b Bold} text}"#;
         let (doc, _report) = Interpreter::parse(input).unwrap();
-        let Block::Paragraph(para) = &doc.blocks[0];
-        let rendered = para
-            .runs
-            .iter()
-            .map(|run| run.text.as_str())
-            .collect::<String>();
-        assert_eq!(rendered, "Bold text");
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            let rendered = para
+                .runs
+                .iter()
+                .map(|run| run.text.as_str())
+                .collect::<String>();
+            assert_eq!(rendered, "Bold text");
+        } else {
+            panic!("Expected Paragraph block");
+        }
     }
 
     #[test]
     fn test_escaped_symbols_are_preserved() {
         let input = r#"{\rtf1\ansi \{braced\} and \\ slash}"#;
         let (doc, _report) = Interpreter::parse(input).unwrap();
-        let Block::Paragraph(para) = &doc.blocks[0];
-        assert_eq!(para.runs.len(), 1);
-        assert_eq!(para.runs[0].text, "{braced} and \\ slash");
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.runs.len(), 1);
+            assert_eq!(para.runs[0].text, "{braced} and \\ slash");
+        } else {
+            panic!("Expected Paragraph block");
+        }
     }
 
     #[test]
     fn test_unknown_destination_is_skipped_and_reported() {
         let input = r#"{\rtf1\ansi {\*\foo hidden} shown}"#;
         let (doc, report) = Interpreter::parse(input).unwrap();
-        let Block::Paragraph(para) = &doc.blocks[0];
-        assert_eq!(para.runs[0].text, " shown");
-        assert!(
-            report.warnings.iter().any(|warning| matches!(
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.runs[0].text, " shown");
+            assert!(report.warnings.iter().any(|warning| matches!(
                 warning,
                 crate::report::Warning::UnknownDestination { .. }
-            ))
-        );
-        assert!(
-            report
-                .warnings
-                .iter()
-                .any(|warning| matches!(warning, crate::report::Warning::DroppedContent { .. }))
-        );
+            )));
+            assert!(
+                report.warnings.iter().any(|warning| matches!(
+                    warning,
+                    crate::report::Warning::DroppedContent { .. }
+                ))
+            );
+        } else {
+            panic!("Expected Paragraph block");
+        }
     }
 
     #[test]
     fn test_metadata_destination_is_skipped_without_warning() {
         let input = r#"{\rtf1\ansi {\fonttbl\f0 Arial;} Hello}"#;
         let (doc, report) = Interpreter::parse(input).unwrap();
-        let Block::Paragraph(para) = &doc.blocks[0];
-        assert_eq!(para.runs[0].text, " Hello");
-        assert!(report.warnings.is_empty());
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.runs[0].text, " Hello");
+            assert!(report.warnings.is_empty());
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    // ==========================================================================
+    // List Parsing Tests (Phase 3)
+    // ==========================================================================
+
+    #[test]
+    fn test_parsed_list_definition_new() {
+        let def = ParsedListDefinition::new(42);
+        assert_eq!(def.list_id, 42);
+        assert!(def.levels.is_empty());
+    }
+
+    #[test]
+    fn test_parsed_list_definition_kind_for_level() {
+        let mut def = ParsedListDefinition::new(1);
+        def.levels.push(ParsedListLevel {
+            level: 0,
+            kind: ListKind::Bullet,
+        });
+        def.levels.push(ParsedListLevel {
+            level: 1,
+            kind: ListKind::OrderedDecimal,
+        });
+
+        assert_eq!(def.kind_for_level(0), ListKind::Bullet);
+        assert_eq!(def.kind_for_level(1), ListKind::OrderedDecimal);
+        // Default for undefined level
+        assert_eq!(def.kind_for_level(2), ListKind::Bullet);
+    }
+
+    #[test]
+    fn test_parsed_list_override_new() {
+        let override_def = ParsedListOverride::new(1, 100);
+        assert_eq!(override_def.ls_id, 1);
+        assert_eq!(override_def.list_id, 100);
+        assert!(override_def.start_override.is_none());
+    }
+
+    #[test]
+    fn test_paragraph_list_ref_new() {
+        let list_ref = ParagraphListRef::new(42, 3, ListKind::OrderedDecimal);
+        assert_eq!(list_ref.list_id, 42);
+        assert_eq!(list_ref.level, 3);
+        assert_eq!(list_ref.kind, ListKind::OrderedDecimal);
+    }
+
+    #[test]
+    fn test_paragraph_list_ref_level_clamped() {
+        // Level should be clamped to 8
+        let list_ref = ParagraphListRef::new(1, 15, ListKind::Bullet);
+        assert_eq!(list_ref.level, 8);
+    }
+
+    #[test]
+    fn test_unresolved_ls_keeps_paragraph_output() {
+        let input = r#"{\rtf1\ansi \ls1 Item text}"#;
+        let (doc, report) = Interpreter::parse(input).unwrap();
+
+        // Without a matching override we keep paragraph output and emit warnings.
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.runs[0].text, "Item text");
+        } else {
+            panic!("Expected Paragraph, got {:?}", doc.blocks[0]);
+        }
+        assert!(report.warnings.iter().any(|w| matches!(
+            w,
+            crate::report::Warning::UnresolvedListOverride { ls_id: 1, .. }
+        )));
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::report::Warning::DroppedContent { .. }))
+        );
+    }
+
+    #[test]
+    fn test_ilvl_control_word_sets_level() {
+        let input = r#"{\rtf1\ansi {\listtable{\list\listid1{\listlevel\levelnfc0}\listid1}}{\listoverridetable{\listoverride\listid1\ls1}}\ls1\ilvl2 Item text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::ListBlock(list) = &doc.blocks[0] {
+            assert_eq!(list.items[0].level, 2);
+        } else {
+            panic!("Expected ListBlock");
+        }
+    }
+
+    #[test]
+    fn test_legacy_pn_controls_are_dropped_with_warnings() {
+        let input = r#"{\rtf1\ansi \pnlvlbody Legacy item}"#;
+        let (doc, report) = Interpreter::parse(input).unwrap();
+
+        assert!(matches!(&doc.blocks[0], Block::Paragraph(_)));
+        assert!(report.warnings.iter().any(|w| matches!(
+            w,
+            crate::report::Warning::UnsupportedListControl { control_word, .. } if control_word == "pnlvlbody"
+        )));
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::report::Warning::DroppedContent { .. }))
+        );
+    }
+
+    #[test]
+    fn test_multiple_list_items_same_list() {
+        let input = r#"{\rtf1\ansi {\listtable{\list\listid1{\listlevel\levelnfc0}\listid1}}{\listoverridetable{\listoverride\listid1\ls1}}\ls1 First\par \ls1 Second\par \ls1 Third}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        // Should create a single ListBlock with 3 items
+        assert_eq!(doc.blocks.len(), 1);
+        if let Block::ListBlock(list) = &doc.blocks[0] {
+            assert_eq!(list.items.len(), 3);
+            assert_eq!(list.list_id, 1);
+        } else {
+            panic!("Expected ListBlock");
+        }
+    }
+
+    #[test]
+    fn test_list_and_paragraph_mixed() {
+        let input = r#"{\rtf1\ansi {\listtable{\list\listid1{\listlevel\levelnfc0}\listid1}}{\listoverridetable{\listoverride\listid1\ls1}}Regular paragraph\par \ls1 List item\par Another paragraph}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        assert_eq!(doc.blocks.len(), 3);
+        // First block should be a paragraph
+        assert!(matches!(&doc.blocks[0], Block::Paragraph(_)));
+        // Second block should be a list
+        assert!(matches!(&doc.blocks[1], Block::ListBlock(_)));
+        // Third block should be a paragraph
+        assert!(matches!(&doc.blocks[2], Block::Paragraph(_)));
+    }
+
+    #[test]
+    fn test_listtable_destination_parsed() {
+        // listtable should be parsed to extract list definitions
+        let input = r#"{\rtf1\ansi {\listtable{\list\listid1{\listlevel\levelnfc0}\listid1}}{\listoverridetable{\listoverride\listid1\ls1}}\ls1 Item}"#;
+        let (doc, report) = Interpreter::parse(input).unwrap();
+
+        // Should not have warnings about listtable destination itself
+        // (may have warnings for unknown control words inside, which is expected)
+        assert!(
+            !report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::report::Warning::UnknownDestination { .. }))
+        );
+        // Should still create a list block
+        assert!(matches!(&doc.blocks[0], Block::ListBlock(_)));
+    }
+
+    #[test]
+    fn test_listoverridetable_destination_parsed() {
+        // listoverridetable should be parsed to extract list overrides
+        let input = r#"{\rtf1\ansi {\listoverridetable{\listoverride\listid1\ls1}}\ls1 Item}"#;
+        let (doc, report) = Interpreter::parse(input).unwrap();
+
+        // Should not have warnings about listoverridetable destination itself
+        assert!(
+            !report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::report::Warning::UnknownDestination { .. }))
+        );
+        // Should still create a list block
+        assert!(matches!(&doc.blocks[0], Block::ListBlock(_)));
+    }
+
+    #[test]
+    fn test_pntext_destination_dropped() {
+        // pntext content should be dropped
+        let input = r#"{\rtf1\ansi {\pntext Marker}Item text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        // Should have content without the pntext
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            let text: String = para.runs.iter().map(|r| r.text.as_str()).collect();
+            assert!(text.contains("Item text"));
+            // pntext content should not appear
+            assert!(!text.contains("bullet"));
+        }
+    }
+
+    #[test]
+    fn test_pard_resets_list_state() {
+        // \pard resets paragraph properties including list state
+        // Use resolved list metadata so list output does not rely on unresolved fallback behavior.
+        let input = r#"{\rtf1\ansi {\listtable{\list\listid1{\listlevel\levelnfc23}}}{\listoverridetable{\listoverride\listid1\ls1}}\ls1 List item\par\pard Regular text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        // First should be a list item
+        assert!(matches!(&doc.blocks[0], Block::ListBlock(_)));
+        // After pard, should be a regular paragraph
+        assert!(matches!(&doc.blocks[1], Block::Paragraph(_)));
+    }
+
+    // ==========================================================================
+    // List Table Parsing Tests (Phase 3 - PR 3)
+    // ==========================================================================
+
+    #[test]
+    fn test_listtable_parses_list_id() {
+        // Test that listtable parsing extracts list IDs correctly
+        let input = r#"{\rtf1\ansi {\listtable{\list\listid123{\listlevel}\listid123}}{\listoverridetable{\listoverride\listid123\ls1}}\ls1 Item}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        // Should create a list block
+        assert!(matches!(&doc.blocks[0], Block::ListBlock(_)));
+    }
+
+    #[test]
+    fn test_listtable_parses_levelnfc_decimal() {
+        // Test that levelnfc0 (decimal) creates OrderedDecimal kind
+        let input = r#"{\rtf1\ansi {\listtable{\list\listid1{\listlevel\levelnfc0}}}{\listoverridetable{\listoverride\listid1\ls1}}\ls1 Item}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::ListBlock(list) = &doc.blocks[0] {
+            assert_eq!(list.kind, ListKind::OrderedDecimal);
+        } else {
+            panic!("Expected ListBlock");
+        }
+    }
+
+    #[test]
+    fn test_listtable_parses_levelnfc_bullet() {
+        // Test that levelnfc23 (bullet) creates Bullet kind
+        let input = r#"{\rtf1\ansi {\listtable{\list\listid1{\listlevel\levelnfc23}}}{\listoverridetable{\listoverride\listid1\ls1}}\ls1 Item}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::ListBlock(list) = &doc.blocks[0] {
+            assert_eq!(list.kind, ListKind::Bullet);
+        } else {
+            panic!("Expected ListBlock");
+        }
+    }
+
+    #[test]
+    fn test_listoverridetable_maps_ls_to_list() {
+        // Test that listoverridetable correctly maps ls_id to list_id
+        let input = r#"{\rtf1\ansi {\listtable{\list\listid100{\listlevel\levelnfc0}}}{\listoverridetable{\listoverride\listid100\ls5}}\ls5 Item}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        // Should create a list block with the resolved list
+        assert!(matches!(&doc.blocks[0], Block::ListBlock(_)));
+    }
+
+    #[test]
+    fn test_unresolved_list_override_emits_warning() {
+        // Test that referencing a non-existent ls_id emits UnresolvedListOverride warning
+        let input = r#"{\rtf1\ansi \ls999 Item}"#;
+        let (_doc, report) = Interpreter::parse(input).unwrap();
+
+        // Should have UnresolvedListOverride warning
+        assert!(report.warnings.iter().any(|w| matches!(
+            w,
+            crate::report::Warning::UnresolvedListOverride { ls_id: 999, .. }
+        )));
+    }
+
+    #[test]
+    fn test_unresolved_list_override_emits_dropped_content() {
+        // Test that unresolved override also emits DroppedContent for strict mode
+        let input = r#"{\rtf1\ansi \ls999 Item}"#;
+        let (_doc, report) = Interpreter::parse(input).unwrap();
+
+        // Should have DroppedContent warning for strict mode compatibility
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::report::Warning::DroppedContent { .. }))
+        );
+    }
+
+    #[test]
+    fn test_unsupported_nesting_level_emits_warning() {
+        // Test that level > 8 emits UnsupportedNestingLevel warning
+        let input = r#"{\rtf1\ansi \ls1\ilvl15 Item}"#;
+        let (_doc, report) = Interpreter::parse(input).unwrap();
+
+        // Should have UnsupportedNestingLevel warning
+        assert!(report.warnings.iter().any(|w| matches!(
+            w,
+            crate::report::Warning::UnsupportedNestingLevel {
+                level: 15,
+                max: 8,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn test_unsupported_list_control_emits_warning() {
+        // Test that unknown control words in list table emit UnsupportedListControl warning
+        let input =
+            r#"{\rtf1\ansi {\listtable{\list\listid1{\listlevel\unknownlistword}}}\ls1 Item}"#;
+        let (_doc, report) = Interpreter::parse(input).unwrap();
+
+        // Should have UnsupportedListControl warning
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::report::Warning::UnsupportedListControl { .. }))
+        );
+    }
+
+    #[test]
+    fn test_list_kind_fallback_when_no_listtable() {
+        // When no listtable/override is present, unresolved \ls should keep paragraph output.
+        let input = r#"{\rtf1\ansi \ls1 Item}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.runs[0].text, "Item");
+        } else {
+            panic!("Expected Paragraph");
+        }
+    }
+
+    #[test]
+    fn test_level_clamped_to_eight() {
+        // Test that level is clamped to 8 even when warning is emitted
+        let input = r#"{\rtf1\ansi {\listtable{\list\listid1{\listlevel\levelnfc0}\listid1}}{\listoverridetable{\listoverride\listid1\ls1}}\ls1\ilvl15 Item}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::ListBlock(list) = &doc.blocks[0] {
+            assert_eq!(list.items[0].level, 8); // Clamped from 15
+        } else {
+            panic!("Expected ListBlock");
+        }
+    }
+
+    #[test]
+    fn test_resolved_list_uses_correct_kind() {
+        // Test that resolved list uses kind from listtable
+        let input = r#"{\rtf1\ansi {\listtable{\list\listid1{\listlevel\levelnfc0}}}{\listoverridetable{\listoverride\listid1\ls1}}\ls1 Item}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::ListBlock(list) = &doc.blocks[0] {
+            // levelnfc0 = decimal, so should be OrderedDecimal
+            assert_eq!(list.kind, ListKind::OrderedDecimal);
+        } else {
+            panic!("Expected ListBlock");
+        }
     }
 }

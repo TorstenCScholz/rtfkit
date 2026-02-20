@@ -84,6 +84,38 @@ pub enum Warning {
         /// Severity of this warning
         severity: WarningSeverity,
     },
+
+    /// A list-related control word was encountered but not fully supported.
+    ///
+    /// This indicates list functionality that is recognized but partially implemented.
+    UnsupportedListControl {
+        /// The control word that was encountered
+        control_word: String,
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
+
+    /// A list override could not be resolved.
+    ///
+    /// This indicates a reference to a list definition that doesn't exist or is malformed.
+    UnresolvedListOverride {
+        /// The \ls index that couldn't be resolved
+        ls_id: i32,
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
+
+    /// List nesting level exceeds supported range.
+    ///
+    /// DOCX supports levels 0-8; levels beyond this are clamped.
+    UnsupportedNestingLevel {
+        /// The level that was encountered
+        level: u8,
+        /// The maximum supported level
+        max: u8,
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
 }
 
 impl Warning {
@@ -113,12 +145,40 @@ impl Warning {
         }
     }
 
+    /// Creates a new `UnsupportedListControl` warning.
+    pub fn unsupported_list_control(control_word: impl Into<String>) -> Self {
+        Warning::UnsupportedListControl {
+            control_word: control_word.into(),
+            severity: WarningSeverity::Warning,
+        }
+    }
+
+    /// Creates a new `UnresolvedListOverride` warning.
+    pub fn unresolved_list_override(ls_id: i32) -> Self {
+        Warning::UnresolvedListOverride {
+            ls_id,
+            severity: WarningSeverity::Warning,
+        }
+    }
+
+    /// Creates a new `UnsupportedNestingLevel` warning.
+    pub fn unsupported_nesting_level(level: u8, max: u8) -> Self {
+        Warning::UnsupportedNestingLevel {
+            level,
+            max,
+            severity: WarningSeverity::Info,
+        }
+    }
+
     /// Returns the severity of this warning.
     pub fn severity(&self) -> WarningSeverity {
         match self {
             Warning::UnsupportedControlWord { severity, .. } => *severity,
             Warning::UnknownDestination { severity, .. } => *severity,
             Warning::DroppedContent { severity, .. } => *severity,
+            Warning::UnsupportedListControl { severity, .. } => *severity,
+            Warning::UnresolvedListOverride { severity, .. } => *severity,
+            Warning::UnsupportedNestingLevel { severity, .. } => *severity,
         }
     }
 }
@@ -309,6 +369,35 @@ impl ReportBuilder {
             if let Some(last) = self.warnings.last_mut() {
                 *last = Warning::dropped_content(reason, size_hint);
             }
+        }
+    }
+
+    /// Records an unsupported list control word.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn unsupported_list_control(&mut self, control_word: &str) {
+        if self.can_add_warning() {
+            self.warnings
+                .push(Warning::unsupported_list_control(control_word));
+        }
+    }
+
+    /// Records an unresolved list override.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn unresolved_list_override(&mut self, ls_id: i32) {
+        if self.can_add_warning() {
+            self.warnings.push(Warning::unresolved_list_override(ls_id));
+        }
+    }
+
+    /// Records an unsupported nesting level.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn unsupported_nesting_level(&mut self, level: u8, max: u8) {
+        if self.can_add_warning() {
+            self.warnings
+                .push(Warning::unsupported_nesting_level(level, max));
         }
     }
 

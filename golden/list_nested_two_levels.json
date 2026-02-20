@@ -1,0 +1,113 @@
+{
+  "blocks": [
+    {
+      "type": "listblock",
+      "list_id": 1,
+      "kind": "ordered_decimal",
+      "items": [
+        {
+          "level": 0,
+          "blocks": [
+            {
+              "type": "paragraph",
+              "alignment": "left",
+              "runs": [
+                {
+                  "text": "Top level item one",
+                  "bold": false,
+                  "italic": false,
+                  "underline": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 1,
+          "blocks": [
+            {
+              "type": "paragraph",
+              "alignment": "left",
+              "runs": [
+                {
+                  "text": "Nested item one",
+                  "bold": false,
+                  "italic": false,
+                  "underline": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 1,
+          "blocks": [
+            {
+              "type": "paragraph",
+              "alignment": "left",
+              "runs": [
+                {
+                  "text": "Nested item two",
+                  "bold": false,
+                  "italic": false,
+                  "underline": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 0,
+          "blocks": [
+            {
+              "type": "paragraph",
+              "alignment": "left",
+              "runs": [
+                {
+                  "text": "Top level item two",
+                  "bold": false,
+                  "italic": false,
+                  "underline": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 1,
+          "blocks": [
+            {
+              "type": "paragraph",
+              "alignment": "left",
+              "runs": [
+                {
+                  "text": "Nested item three",
+                  "bold": false,
+                  "italic": false,
+                  "underline": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 0,
+          "blocks": [
+            {
+              "type": "paragraph",
+              "alignment": "left",
+              "runs": [
+                {
+                  "text": "Top level item three",
+                  "bold": false,
+                  "italic": false,
+                  "underline": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

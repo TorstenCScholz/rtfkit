@@ -1,6 +1,6 @@
 # rtfkit Architecture
 
-This document reflects the current implementation in `main` (v0.2, Phase 2).
+This document reflects the current implementation in `main` (v0.3, Phase 3).
 
 ## Overview
 
@@ -52,14 +52,22 @@ Not in scope:
 ### IR model
 
 - `Document { blocks: Vec<Block> }`
-- `Block::Paragraph(Paragraph)`
+- `Block::Paragraph(Paragraph)` or `Block::ListBlock(ListBlock)`
 - `Paragraph { alignment, runs }`
 - `Run { text, bold, italic, underline, font_size?, color? }`
+- `ListBlock { list_id, kind, items }` — list container (Phase 3)
+- `ListKind` — Bullet, OrderedDecimal, or Mixed
+- `ListItem { level, blocks }` — item with nesting level (0-8)
+
+See [Phase 3 IR Design](phase3-ir-design.md) for list model details.
 
 ### Parser/interpreter notes
 
 - Control words handled for MVP: `\b`, `\i`, `\ul`, `\ulnone`, `\par`, `\line`, `\ql`, `\qc`, `\qr`, `\qj`, `\uN`, `\ucN`
+- List control words (Phase 3): `\lsN`, `\ilvlN`
+- Legacy paragraph-numbering controls (`\pn...`, `\pnlvl*`, `\pntext`) are currently dropped with warnings
 - Destination groups are skipped at group start (e.g. `fonttbl`, `colortbl`, unknown `\*` destinations)
+- `\listtable` and `\listoverridetable` are parsed for list definitions (Phase 3)
 - Escaped symbols (`\\`, `\{`, `\}`) are preserved as text
 - Unsupported destination content emits `DroppedContent` warnings
 
@@ -83,12 +91,14 @@ Responsibilities:
 |------------|--------------|
 | `Document` | `<w:document>` |
 | `Block::Paragraph` | `<w:p>` |
+| `Block::ListBlock` | `<w:p>` with `<w:numPr>` |
 | `Run` | `<w:r>` |
 | `Run.text` | `<w:t>` |
 | `Run.bold = true` | `<w:b/>` in `<w:rPr>` |
 | `Run.italic = true` | `<w:i/>` in `<w:rPr>` |
 | `Run.underline = true` | `<w:u w:val="single"/>` |
 | `Paragraph.alignment` | `<w:jc w:val="..."/>` |
+| `ListBlock` | `numbering.xml` with `<w:abstractNum>` and `<w:num>` |
 
 ## `rtfkit` CLI
 
@@ -120,6 +130,9 @@ Warnings:
 - `UnsupportedControlWord`
 - `UnknownDestination`
 - `DroppedContent`
+- `UnsupportedListControl` (Phase 3)
+- `UnresolvedListOverride` (Phase 3)
+- `UnsupportedNestingLevel` (Phase 3)
 
 Stats:
 - `paragraph_count`
@@ -146,8 +159,8 @@ UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests
 
 ## Known gaps
 
-- Limited RTF feature coverage (no tables/lists/images as IR blocks)
-- DOCX output supports basic text formatting only
+- Limited RTF feature coverage (no tables/images as IR blocks)
+- DOCX output supports basic text formatting and lists only
 - No full RTF spec compliance target
 
 ## References
@@ -156,4 +169,6 @@ UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests
 - [ADR-0002: DOCX Writer Selection](../adr/0002-docx-writer-selection.md)
 - [Phase 1 Specification](../specs/PHASE1.md)
 - [Phase 2 Specification](../specs/PHASE2.md)
+- [Phase 3 Specification](../specs/PHASE3.md)
+- [Phase 3 IR Design](phase3-ir-design.md)
 - [Initial Description](../specs/INITIAL_DESCRIPTION.md)

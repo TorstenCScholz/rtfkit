@@ -5,6 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - Unreleased
+
+### Added
+
+- List support (Phase 3):
+  - Bullet and decimal list support with `ListBlock`, `ListKind`, `ListItem` IR types
+  - Nested lists up to 8 levels (DOCX compatibility limit)
+  - Legacy `\pn...` paragraph numbering support for older RTF files
+  - `\listtable` and `\listoverridetable` destination parsing
+  - Deterministic numbering ID allocation in DOCX output
+  - New warning types: `UnsupportedListControl`, `UnresolvedListOverride`, `UnsupportedNestingLevel`
+- New IR types: `ListBlock`, `ListKind` (Bullet/OrderedDecimal/Mixed), `ListItem`, `ListId`
+- List-related fixtures for testing: bullet, decimal, nested, mixed, and malformed lists
+
+### Changed
+
+- IR schema extended with `Block::ListBlock` variant (breaking change to IR JSON format)
+- DOCX writer now generates `numbering.xml` for list output
+- Golden IR snapshots regenerated to include list fixtures
+
+### Migration Notes
+
+- IR JSON format has changed: `blocks` array can now contain `{"type": "list_block", ...}` objects
+- External consumers of IR JSON should handle the new `list_block` type
+- Golden IR snapshots need regeneration: `UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests`
+
 ## [0.2.0] - Unreleased
 
 ### Added

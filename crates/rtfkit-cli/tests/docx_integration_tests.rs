@@ -8,8 +8,8 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use quick_xml::events::Event;
 use quick_xml::Reader;
+use quick_xml::events::Event;
 use tempfile::TempDir;
 use zip::ZipArchive;
 
@@ -254,14 +254,12 @@ fn has_run_with_formatting_and_text(xml: &str, formatting_element: &str, text: &
                     _ => {}
                 }
             }
-            Ok(Event::Empty(e)) => {
-                match e.name().as_ref() {
-                    tag if tag == formatting_element.as_bytes() && in_run => {
-                        has_formatting = true;
-                    }
-                    _ => {}
+            Ok(Event::Empty(e)) => match e.name().as_ref() {
+                tag if tag == formatting_element.as_bytes() && in_run => {
+                    has_formatting = true;
                 }
-            }
+                _ => {}
+            },
             Ok(Event::Text(e)) => {
                 if in_text {
                     if let Ok(t) = e.unescape() {
@@ -269,20 +267,18 @@ fn has_run_with_formatting_and_text(xml: &str, formatting_element: &str, text: &
                     }
                 }
             }
-            Ok(Event::End(e)) => {
-                match e.name().as_ref() {
-                    b"w:r" => {
-                        if has_formatting && current_text.contains(text) {
-                            return true;
-                        }
-                        in_run = false;
+            Ok(Event::End(e)) => match e.name().as_ref() {
+                b"w:r" => {
+                    if has_formatting && current_text.contains(text) {
+                        return true;
                     }
-                    b"w:t" => {
-                        in_text = false;
-                    }
-                    _ => {}
+                    in_run = false;
                 }
-            }
+                b"w:t" => {
+                    in_text = false;
+                }
+                _ => {}
+            },
             Ok(Event::Eof) => break,
             Err(_) => break,
             _ => {}
@@ -351,10 +347,7 @@ fn test_multiple_paragraphs_docx() {
         contains_text(&xml, "Third paragraph"),
         "Should contain 'Third paragraph'"
     );
-    assert!(
-        contains_text(&xml, "Fourth"),
-        "Should contain 'Fourth'"
-    );
+    assert!(contains_text(&xml, "Fourth"), "Should contain 'Fourth'");
 }
 
 #[test]
@@ -376,10 +369,7 @@ fn test_bold_italic_docx() {
     );
 
     // Verify text content
-    assert!(
-        contains_text(&xml, "Bold"),
-        "Should contain 'Bold' text"
-    );
+    assert!(contains_text(&xml, "Bold"), "Should contain 'Bold' text");
     assert!(
         contains_text(&xml, "Italic"),
         "Should contain 'Italic' text"
@@ -439,32 +429,20 @@ fn test_alignment_docx() {
 
     // Verify alignment elements exist
     // w:jc with w:val="left", "center", "right", "both"
-    assert!(
-        has_alignment(&xml, "left"),
-        "Should have left alignment"
-    );
+    assert!(has_alignment(&xml, "left"), "Should have left alignment");
     assert!(
         has_alignment(&xml, "center"),
         "Should have center alignment"
     );
-    assert!(
-        has_alignment(&xml, "right"),
-        "Should have right alignment"
-    );
+    assert!(has_alignment(&xml, "right"), "Should have right alignment");
 
     // Verify text content
-    assert!(
-        contains_text(&xml, "Left"),
-        "Should contain 'Left' text"
-    );
+    assert!(contains_text(&xml, "Left"), "Should contain 'Left' text");
     assert!(
         contains_text(&xml, "Centered"),
         "Should contain 'Centered' text"
     );
-    assert!(
-        contains_text(&xml, "Right"),
-        "Should contain 'Right' text"
-    );
+    assert!(contains_text(&xml, "Right"), "Should contain 'Right' text");
 }
 
 #[test]
@@ -486,10 +464,7 @@ fn test_unicode_docx() {
     // The unicode characters should be preserved in the output
     // Note: The exact representation depends on how the RTF parser handles unicode escapes
     // We check that the document has meaningful content
-    assert!(
-        !combined_text.is_empty(),
-        "Should have text content"
-    );
+    assert!(!combined_text.is_empty(), "Should have text content");
 
     // Verify we have multiple paragraphs for the unicode test
     let paragraph_count = count_elements(&xml, "w:p");
@@ -521,10 +496,7 @@ fn test_mixed_formatting_docx() {
     );
 
     // Verify text content
-    assert!(
-        contains_text(&xml, "bold"),
-        "Should contain 'bold' text"
-    );
+    assert!(contains_text(&xml, "bold"), "Should contain 'bold' text");
     assert!(
         contains_text(&xml, "italic"),
         "Should contain 'italic' text"
@@ -564,10 +536,7 @@ fn test_nested_styles_docx() {
         contains_text(&xml, "Normal"),
         "Should contain 'Normal' text"
     );
-    assert!(
-        contains_text(&xml, "bold"),
-        "Should contain 'bold' text"
-    );
+    assert!(contains_text(&xml, "bold"), "Should contain 'bold' text");
     assert!(
         contains_text(&xml, "italic"),
         "Should contain 'italic' text"
@@ -625,10 +594,7 @@ fn test_complex_docx() {
         contains_text(&xml, "Complex"),
         "Should contain 'Complex' text"
     );
-    assert!(
-        contains_text(&xml, "Title"),
-        "Should contain 'Title' text"
-    );
+    assert!(contains_text(&xml, "Title"), "Should contain 'Title' text");
 }
 
 #[test]
@@ -659,5 +625,548 @@ fn test_docx_structure_validity() {
     assert!(
         xml.contains("<w:t") && xml.contains("</w:t>"),
         "Should have w:t element with content"
+    );
+}
+
+// =============================================================================
+// List Integration Tests
+// =============================================================================
+
+/// Extract word/numbering.xml from a DOCX file.
+/// Returns the XML content as a string, or None if the file doesn't exist.
+fn extract_numbering_xml(docx_path: &Path) -> Option<String> {
+    let file = File::open(docx_path).expect("Failed to open DOCX file");
+    let mut archive = ZipArchive::new(file).expect("Failed to read DOCX as ZIP");
+
+    let mut numbering_xml = String::new();
+    match archive.by_name("word/numbering.xml") {
+        Ok(mut file) => {
+            file.read_to_string(&mut numbering_xml)
+                .expect("Failed to read numbering.xml");
+            Some(numbering_xml)
+        }
+        Err(_) => None,
+    }
+}
+
+/// Check if a <w:numPr> element exists in the document (indicates list paragraph).
+fn has_num_pr(xml: &str) -> bool {
+    has_formatting_element(xml, "w:numPr")
+}
+
+/// Count the number of <w:numPr> elements in the document.
+fn count_num_pr(xml: &str) -> usize {
+    count_elements(xml, "w:numPr")
+}
+
+/// Check if a <w:ilvl> element exists with the specified level value.
+fn has_ilvl_with_value(xml: &str, level: u8) -> bool {
+    let mut reader = Reader::from_str(xml);
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                if e.name().as_ref() == b"w:ilvl" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"w:val" {
+                            if let Ok(value) = std::str::from_utf8(&attr.value) {
+                                if let Ok(v) = value.parse::<u8>() {
+                                    if v == level {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    false
+}
+
+/// Check if numbering.xml contains an <w:abstractNum> element.
+fn has_abstract_num(numbering_xml: &str) -> bool {
+    has_formatting_element(numbering_xml, "w:abstractNum")
+}
+
+/// Check if numbering.xml contains a <w:num> element.
+fn has_num(numbering_xml: &str) -> bool {
+    has_formatting_element(numbering_xml, "w:num")
+}
+
+#[test]
+fn test_list_bullet_simple_docx() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("list_bullet_simple.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    // Verify list paragraphs exist (w:numPr indicates list membership)
+    assert!(
+        has_num_pr(&xml),
+        "Should have w:numPr elements for list paragraphs"
+    );
+
+    // Should have 3 list items
+    let num_pr_count = count_num_pr(&xml);
+    assert!(
+        num_pr_count >= 3,
+        "Should have at least 3 numPr elements for 3 list items, found {}",
+        num_pr_count
+    );
+
+    // Verify text content
+    assert!(
+        contains_text(&xml, "First item"),
+        "Should contain 'First item'"
+    );
+    assert!(
+        contains_text(&xml, "Second item"),
+        "Should contain 'Second item'"
+    );
+    assert!(
+        contains_text(&xml, "Third item"),
+        "Should contain 'Third item'"
+    );
+
+    // Verify numbering.xml exists and has proper structure
+    if let Some(numbering_xml) = extract_numbering_xml(&docx_path) {
+        assert!(
+            has_abstract_num(&numbering_xml),
+            "numbering.xml should have abstractNum definition"
+        );
+        assert!(
+            has_num(&numbering_xml),
+            "numbering.xml should have num instance"
+        );
+    }
+}
+
+#[test]
+fn test_list_decimal_simple_docx() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("list_decimal_simple.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    // Verify list paragraphs exist
+    assert!(
+        has_num_pr(&xml),
+        "Should have w:numPr elements for list paragraphs"
+    );
+
+    // Should have 3 list items
+    let num_pr_count = count_num_pr(&xml);
+    assert!(
+        num_pr_count >= 3,
+        "Should have at least 3 numPr elements for 3 list items, found {}",
+        num_pr_count
+    );
+
+    // Verify text content
+    assert!(
+        contains_text(&xml, "First item"),
+        "Should contain 'First item'"
+    );
+    assert!(
+        contains_text(&xml, "Second item"),
+        "Should contain 'Second item'"
+    );
+    assert!(
+        contains_text(&xml, "Third item"),
+        "Should contain 'Third item'"
+    );
+
+    // Verify numbering.xml exists and has proper structure
+    if let Some(numbering_xml) = extract_numbering_xml(&docx_path) {
+        assert!(
+            has_abstract_num(&numbering_xml),
+            "numbering.xml should have abstractNum definition"
+        );
+        assert!(
+            has_num(&numbering_xml),
+            "numbering.xml should have num instance"
+        );
+    }
+}
+
+#[test]
+fn test_list_nested_two_levels_docx() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("list_nested_two_levels.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    // Verify list paragraphs exist
+    assert!(
+        has_num_pr(&xml),
+        "Should have w:numPr elements for list paragraphs"
+    );
+
+    // Should have 6 list items total
+    let num_pr_count = count_num_pr(&xml);
+    assert!(
+        num_pr_count >= 6,
+        "Should have at least 6 numPr elements for 6 list items, found {}",
+        num_pr_count
+    );
+
+    // Verify both level 0 and level 1 exist
+    assert!(
+        has_ilvl_with_value(&xml, 0),
+        "Should have level 0 (top level) items"
+    );
+    assert!(
+        has_ilvl_with_value(&xml, 1),
+        "Should have level 1 (nested) items"
+    );
+
+    // Verify text content
+    assert!(
+        contains_text(&xml, "Top level item one"),
+        "Should contain 'Top level item one'"
+    );
+    assert!(
+        contains_text(&xml, "Nested item one"),
+        "Should contain 'Nested item one'"
+    );
+    assert!(
+        contains_text(&xml, "Top level item two"),
+        "Should contain 'Top level item two'"
+    );
+
+    // Verify numbering.xml exists
+    if let Some(numbering_xml) = extract_numbering_xml(&docx_path) {
+        assert!(
+            has_abstract_num(&numbering_xml),
+            "numbering.xml should have abstractNum definition"
+        );
+    }
+}
+
+#[test]
+fn test_list_mixed_kinds_docx() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("list_mixed_kinds.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    // Verify list paragraphs exist
+    assert!(
+        has_num_pr(&xml),
+        "Should have w:numPr elements for list paragraphs"
+    );
+
+    // Should have 6 list items total (3 bullet + 3 numbered)
+    let num_pr_count = count_num_pr(&xml);
+    assert!(
+        num_pr_count >= 6,
+        "Should have at least 6 numPr elements for 6 list items, found {}",
+        num_pr_count
+    );
+
+    // Verify text content for both lists
+    assert!(
+        contains_text(&xml, "Bullet List:"),
+        "Should contain 'Bullet List:'"
+    );
+    assert!(
+        contains_text(&xml, "Bullet item one"),
+        "Should contain 'Bullet item one'"
+    );
+    assert!(
+        contains_text(&xml, "Ordered List:"),
+        "Should contain 'Ordered List:'"
+    );
+    assert!(
+        contains_text(&xml, "Numbered item one"),
+        "Should contain 'Numbered item one'"
+    );
+
+    // Verify numbering.xml exists with multiple definitions
+    if let Some(numbering_xml) = extract_numbering_xml(&docx_path) {
+        // Should have abstractNum definitions for both list types
+        let abstract_num_count = count_elements(&numbering_xml, "w:abstractNum");
+        assert!(
+            abstract_num_count >= 1,
+            "numbering.xml should have at least 1 abstractNum definition, found {}",
+            abstract_num_count
+        );
+    }
+}
+
+#[test]
+fn test_list_malformed_fallback_docx() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("list_malformed_fallback.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    // Malformed list references should still produce content
+    // The document should have paragraphs with text content
+    assert!(
+        contains_text(&xml, "invalid list reference"),
+        "Should contain text about invalid list reference"
+    );
+    assert!(
+        contains_text(&xml, "Valid list item"),
+        "Should contain 'Valid list item'"
+    );
+    assert!(
+        contains_text(&xml, "Another invalid reference"),
+        "Should contain 'Another invalid reference'"
+    );
+
+    // Should have paragraphs (either as list items or regular paragraphs)
+    let paragraph_count = count_elements(&xml, "w:p");
+    assert!(
+        paragraph_count >= 3,
+        "Should have at least 3 paragraphs, found {}",
+        paragraph_count
+    );
+}
+
+// =============================================================================
+// Determinism Tests
+// =============================================================================
+
+/// Run the CLI to convert an RTF file to DOCX and return the output path.
+/// This is a separate helper for determinism tests to avoid any shared state.
+fn run_cli_convert_determinism(fixture_name: &str, temp_dir: &TempDir, suffix: &str) -> PathBuf {
+    let input = fixture_dir().join(fixture_name);
+    let output = temp_dir.path().join(format!("output_{suffix}.docx"));
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        input.to_str().unwrap(),
+        "-o",
+        output.to_str().unwrap(),
+        "--force",
+    ]);
+
+    let output_result = cmd.output().expect("Failed to run CLI");
+
+    if !output_result.status.success() {
+        panic!(
+            "CLI failed for fixture '{}':\nstdout: {}\nstderr: {}",
+            fixture_name,
+            String::from_utf8_lossy(&output_result.stdout),
+            String::from_utf8_lossy(&output_result.stderr)
+        );
+    }
+
+    assert!(output.exists(), "Output DOCX file should be created");
+    output
+}
+
+/// Extract any XML file from a DOCX archive.
+fn extract_xml_from_docx(docx_path: &Path, xml_path: &str) -> String {
+    let file = File::open(docx_path).expect("Failed to open DOCX file");
+    let mut archive = ZipArchive::new(file).expect("Failed to read DOCX as ZIP");
+
+    let mut xml_content = String::new();
+    archive
+        .by_name(xml_path)
+        .unwrap_or_else(|_| panic!("{xml_path} not found in DOCX"))
+        .read_to_string(&mut xml_content)
+        .expect("Failed to read XML content");
+
+    xml_content
+}
+
+/// Extract numId values from document.xml to verify stability.
+fn extract_num_ids(xml: &str) -> Vec<String> {
+    let mut reader = Reader::from_str(xml);
+    let mut buf = Vec::new();
+    let mut num_ids = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                if e.name().as_ref() == b"w:numId" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"w:val" {
+                            if let Ok(value) = std::str::from_utf8(&attr.value) {
+                                num_ids.push(value.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    num_ids
+}
+
+/// Extract abstractNumId values from numbering.xml to verify stability.
+fn extract_abstract_num_ids(numbering_xml: &str) -> Vec<String> {
+    let mut reader = Reader::from_str(numbering_xml);
+    let mut buf = Vec::new();
+    let mut abstract_num_ids = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                if e.name().as_ref() == b"w:abstractNumId" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"w:val" {
+                            if let Ok(value) = std::str::from_utf8(&attr.value) {
+                                abstract_num_ids.push(value.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    abstract_num_ids
+}
+
+#[test]
+fn test_list_determinism_nested_two_levels() {
+    let temp_dir = TempDir::new().unwrap();
+    let fixture = "list_nested_two_levels.rtf";
+
+    // Convert the same fixture twice
+    let output1 = run_cli_convert_determinism(fixture, &temp_dir, "1");
+    let output2 = run_cli_convert_determinism(fixture, &temp_dir, "2");
+
+    // Extract and compare document.xml
+    let doc1 = extract_xml_from_docx(&output1, "word/document.xml");
+    let doc2 = extract_xml_from_docx(&output2, "word/document.xml");
+    assert_eq!(
+        doc1, doc2,
+        "document.xml should be byte-identical across conversions"
+    );
+
+    // Extract and compare numbering.xml
+    let num1 = extract_xml_from_docx(&output1, "word/numbering.xml");
+    let num2 = extract_xml_from_docx(&output2, "word/numbering.xml");
+    assert_eq!(
+        num1, num2,
+        "numbering.xml should be byte-identical across conversions"
+    );
+
+    // Verify numId values are stable
+    let num_ids1 = extract_num_ids(&doc1);
+    let num_ids2 = extract_num_ids(&doc2);
+    assert_eq!(
+        num_ids1, num_ids2,
+        "numId values should be stable across conversions"
+    );
+
+    // Verify abstractNumId values are stable
+    let abstract_ids1 = extract_abstract_num_ids(&num1);
+    let abstract_ids2 = extract_abstract_num_ids(&num2);
+    assert_eq!(
+        abstract_ids1, abstract_ids2,
+        "abstractNumId values should be stable across conversions"
+    );
+}
+
+#[test]
+fn test_list_determinism_mixed_kinds() {
+    let temp_dir = TempDir::new().unwrap();
+    let fixture = "list_mixed_kinds.rtf";
+
+    // Convert the same fixture twice
+    let output1 = run_cli_convert_determinism(fixture, &temp_dir, "1");
+    let output2 = run_cli_convert_determinism(fixture, &temp_dir, "2");
+
+    // Extract and compare document.xml
+    let doc1 = extract_xml_from_docx(&output1, "word/document.xml");
+    let doc2 = extract_xml_from_docx(&output2, "word/document.xml");
+    assert_eq!(
+        doc1, doc2,
+        "document.xml should be byte-identical across conversions"
+    );
+
+    // Extract and compare numbering.xml
+    let num1 = extract_xml_from_docx(&output1, "word/numbering.xml");
+    let num2 = extract_xml_from_docx(&output2, "word/numbering.xml");
+    assert_eq!(
+        num1, num2,
+        "numbering.xml should be byte-identical across conversions"
+    );
+
+    // Verify numId values are stable
+    let num_ids1 = extract_num_ids(&doc1);
+    let num_ids2 = extract_num_ids(&doc2);
+    assert_eq!(
+        num_ids1, num_ids2,
+        "numId values should be stable across conversions"
+    );
+
+    // Verify abstractNumId values are stable
+    let abstract_ids1 = extract_abstract_num_ids(&num1);
+    let abstract_ids2 = extract_abstract_num_ids(&num2);
+    assert_eq!(
+        abstract_ids1, abstract_ids2,
+        "abstractNumId values should be stable across conversions"
+    );
+}
+
+#[test]
+fn test_list_determinism_bullet_simple() {
+    let temp_dir = TempDir::new().unwrap();
+    let fixture = "list_bullet_simple.rtf";
+
+    // Convert the same fixture twice
+    let output1 = run_cli_convert_determinism(fixture, &temp_dir, "1");
+    let output2 = run_cli_convert_determinism(fixture, &temp_dir, "2");
+
+    // Extract and compare document.xml
+    let doc1 = extract_xml_from_docx(&output1, "word/document.xml");
+    let doc2 = extract_xml_from_docx(&output2, "word/document.xml");
+    assert_eq!(
+        doc1, doc2,
+        "document.xml should be byte-identical across conversions"
+    );
+
+    // Extract and compare numbering.xml
+    let num1 = extract_xml_from_docx(&output1, "word/numbering.xml");
+    let num2 = extract_xml_from_docx(&output2, "word/numbering.xml");
+    assert_eq!(
+        num1, num2,
+        "numbering.xml should be byte-identical across conversions"
+    );
+}
+
+#[test]
+fn test_list_determinism_decimal_simple() {
+    let temp_dir = TempDir::new().unwrap();
+    let fixture = "list_decimal_simple.rtf";
+
+    // Convert the same fixture twice
+    let output1 = run_cli_convert_determinism(fixture, &temp_dir, "1");
+    let output2 = run_cli_convert_determinism(fixture, &temp_dir, "2");
+
+    // Extract and compare document.xml
+    let doc1 = extract_xml_from_docx(&output1, "word/document.xml");
+    let doc2 = extract_xml_from_docx(&output2, "word/document.xml");
+    assert_eq!(
+        doc1, doc2,
+        "document.xml should be byte-identical across conversions"
+    );
+
+    // Extract and compare numbering.xml
+    let num1 = extract_xml_from_docx(&output1, "word/numbering.xml");
+    let num2 = extract_xml_from_docx(&output2, "word/numbering.xml");
+    assert_eq!(
+        num1, num2,
+        "numbering.xml should be byte-identical across conversions"
     );
 }

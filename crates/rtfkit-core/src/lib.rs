@@ -26,7 +26,10 @@ pub use limits::ParserLimits;
 pub mod interpreter;
 
 // Re-export key types from interpreter module for convenience
-pub use interpreter::{Interpreter, RtfEvent, StyleState, Token};
+pub use interpreter::{
+    Interpreter, ParagraphListRef, ParsedListDefinition, ParsedListLevel, ParsedListOverride,
+    RtfEvent, StyleState, Token,
+};
 
 // =============================================================================
 // Report Module
@@ -182,16 +185,107 @@ impl Paragraph {
     }
 }
 
+// =============================================================================
+// List Types for Phase 3
+// =============================================================================
+
+/// Unique identifier for a list within a document.
+///
+/// List IDs are assigned during interpretation and used to group
+/// list items that belong to the same logical list.
+pub type ListId = u32;
+
+/// The kind of list numbering.
+///
+/// Represents the numbering style for a list or list level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ListKind {
+    /// Bullet list with glyph markers
+    #[default]
+    Bullet,
+    /// Decimal numbered list (1, 2, 3, ...)
+    OrderedDecimal,
+    /// Mixed or inconsistent list kind (fallback for ambiguous sources)
+    Mixed,
+}
+
+/// A single item within a list.
+///
+/// Each item has a nesting level and contains blocks (typically paragraphs).
+/// The level is 0-indexed, where 0 is the top level.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ListItem {
+    /// Nesting level (0-8, clamped for DOCX compatibility)
+    pub level: u8,
+    /// Content blocks for this item (typically one Paragraph in Phase 3)
+    pub blocks: Vec<Block>,
+}
+
+impl ListItem {
+    /// Creates a new list item at the given level.
+    pub fn new(level: u8) -> Self {
+        Self {
+            level: level.min(8), // Clamp to DOCX max
+            blocks: Vec::new(),
+        }
+    }
+
+    /// Creates a list item from a paragraph at the given level.
+    pub fn from_paragraph(level: u8, paragraph: Paragraph) -> Self {
+        Self {
+            level: level.min(8),
+            blocks: vec![Block::Paragraph(paragraph)],
+        }
+    }
+}
+
+/// A list containing one or more items.
+///
+/// Lists are block-level elements that contain numbered or bulleted items.
+/// All items in a ListBlock share the same list_id and kind.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ListBlock {
+    /// Unique identifier for this list
+    pub list_id: ListId,
+    /// The kind of list (bullet, ordered, or mixed)
+    pub kind: ListKind,
+    /// The items in this list
+    pub items: Vec<ListItem>,
+}
+
+impl ListBlock {
+    /// Creates a new empty list with the given ID and kind.
+    pub fn new(list_id: ListId, kind: ListKind) -> Self {
+        Self {
+            list_id,
+            kind,
+            items: Vec::new(),
+        }
+    }
+
+    /// Adds an item to the list.
+    pub fn add_item(&mut self, item: ListItem) {
+        self.items.push(item);
+    }
+
+    /// Returns true if the list has no items.
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+}
+
 /// A block-level element in the document.
 ///
 /// `Block` represents the top-level structural elements of a document.
-/// Currently, only paragraphs are supported, but the enum structure
-/// allows for future expansion (e.g., tables, lists, images).
+/// Currently supports paragraphs and lists.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Block {
     /// A paragraph block containing text
     Paragraph(Paragraph),
+    /// A list block containing items
+    ListBlock(ListBlock),
 }
 
 /// The root document structure containing all content.

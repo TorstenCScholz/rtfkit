@@ -982,6 +982,7 @@ name = "rtfkit-docx"
 version = "0.1.0"
 dependencies = [
  "docx-rs",
+ "indexmap",
  "rtfkit-core",
  "tempfile",
  "thiserror",

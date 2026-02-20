@@ -1,0 +1,144 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Bullet List:",
+          "bold": true,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "listblock",
+      "list_id": 1,
+      "kind": "bullet",
+      "items": [
+        {
+          "level": 0,
+          "blocks": [
+            {
+              "type": "paragraph",
+              "alignment": "left",
+              "runs": [
+                {
+                  "text": "Bullet item one",
+                  "bold": false,
+                  "italic": false,
+                  "underline": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 0,
+          "blocks": [
+            {
+              "type": "paragraph",
+              "alignment": "left",
+              "runs": [
+                {
+                  "text": "Bullet item two",
+                  "bold": false,
+                  "italic": false,
+                  "underline": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 0,
+          "blocks": [
+            {
+              "type": "paragraph",
+              "alignment": "left",
+              "runs": [
+                {
+                  "text": "Bullet item three",
+                  "bold": false,
+                  "italic": false,
+                  "underline": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Ordered List:",
+          "bold": true,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "listblock",
+      "list_id": 2,
+      "kind": "ordered_decimal",
+      "items": [
+        {
+          "level": 0,
+          "blocks": [
+            {
+              "type": "paragraph",
+              "alignment": "left",
+              "runs": [
+                {
+                  "text": "Numbered item one",
+                  "bold": false,
+                  "italic": false,
+                  "underline": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 0,
+          "blocks": [
+            {
+              "type": "paragraph",
+              "alignment": "left",
+              "runs": [
+                {
+                  "text": "Numbered item two",
+                  "bold": false,
+                  "italic": false,
+                  "underline": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 0,
+          "blocks": [
+            {
+              "type": "paragraph",
+              "alignment": "left",
+              "runs": [
+                {
+                  "text": "Numbered item three",
+                  "bold": false,
+                  "italic": false,
+                  "underline": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -318,6 +318,18 @@ fn print_report_text(report: &Report) {
                         println!("  - Dropped content: {}", reason);
                     }
                 }
+                Warning::UnsupportedListControl { control_word, .. } => {
+                    println!("  - Unsupported list control: \\{}", control_word);
+                }
+                Warning::UnresolvedListOverride { ls_id, .. } => {
+                    println!("  - Unresolved list override: ls_id={}", ls_id);
+                }
+                Warning::UnsupportedNestingLevel { level, max, .. } => {
+                    println!(
+                        "  - Unsupported nesting level: {} (max supported: {})",
+                        level, max
+                    );
+                }
             }
         }
     }

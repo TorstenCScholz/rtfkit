@@ -2,9 +2,10 @@
 
 RTF parsing toolkit with a CLI-first workflow.
 
-Current status (Phase 2):
+Current status (Phase 3):
 - Parses RTF into a deterministic intermediate representation (IR)
 - Converts RTF to DOCX via `-o/--output` flag
+- Supports bullet and decimal lists with nested levels (up to 8)
 - Emits conversion reports (`text` or `json`)
 - Supports `--emit-ir` for snapshot/debug workflows
 - Parser limits for safety (input size, depth, warnings)
@@ -80,9 +81,13 @@ For safety, the parser enforces these limits:
 - `unsupported_control_word`
 - `unknown_destination`
 - `dropped_content`
+- `unsupported_list_control`
+- `unresolved_list_override`
+- `unsupported_nesting_level`
 
 ### IR JSON (`--emit-ir`)
 
+Paragraph example:
 ```json
 {
   "blocks": [
@@ -95,6 +100,31 @@ For safety, the parser enforces these limits:
           "bold": false,
           "italic": false,
           "underline": false
+        }
+      ]
+    }
+  ]
+}
+```
+
+List example:
+```json
+{
+  "blocks": [
+    {
+      "type": "list_block",
+      "list_id": 1,
+      "kind": "bullet",
+      "items": [
+        {
+          "level": 0,
+          "blocks": [
+            {
+              "type": "paragraph",
+              "alignment": "left",
+              "runs": [{"text": "First item", "bold": false, "italic": false, "underline": false}]
+            }
+          ]
         }
       ]
     }
@@ -118,11 +148,12 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --all
 ```
 
-## Limitations (v0.2)
+## Limitations (v0.3)
 
 - Partial RTF coverage only (focused on common text/style cases)
-- No tables/lists/images as first-class IR blocks yet
-- DOCX output supports basic text formatting (bold, italic, underline, alignment)
+- No tables/images as first-class IR blocks yet
+- DOCX output supports basic text formatting (bold, italic, underline, alignment) and lists
+- List nesting limited to 8 levels (DOCX compatibility)
 
 ## License
 

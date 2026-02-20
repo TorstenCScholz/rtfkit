@@ -11,6 +11,7 @@ rtfkit-core = { path = "../rtfkit-core" }
 docx-rs = "0.4"
 thiserror = "2.0"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
+indexmap = "2.7"
 
 [dev-dependencies]
 tempfile = "3.14"

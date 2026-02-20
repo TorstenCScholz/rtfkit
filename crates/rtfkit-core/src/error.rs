@@ -166,7 +166,10 @@ mod tests {
     fn test_conversion_error_from_parse_error() {
         let parse_err = ParseError::MissingRtfHeader;
         let conv_err: ConversionError = parse_err.into();
-        assert!(matches!(conv_err, ConversionError::Parse(ParseError::MissingRtfHeader)));
+        assert!(matches!(
+            conv_err,
+            ConversionError::Parse(ParseError::MissingRtfHeader)
+        ));
     }
 
     #[test]
