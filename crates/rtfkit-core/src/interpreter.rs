@@ -14,11 +14,18 @@
 //!
 //! ```ignore
 //! use rtfkit_core::interpreter::Interpreter;
+//! use rtfkit_core::ParserLimits;
 //!
 //! let rtf = r#"{\rtf1\ansi Hello \b World\b0 !}"#;
 //! let (document, report) = Interpreter::parse(rtf)?;
+//!
+//! // Or with custom limits:
+//! let limits = ParserLimits::default().with_max_input_bytes(5 * 1024 * 1024);
+//! let (document, report) = Interpreter::parse_with_limits(rtf, limits)?;
 //! ```
 
+use crate::error::{ConversionError, ParseError};
+use crate::limits::ParserLimits;
 use crate::report::ReportBuilder;
 use crate::{Alignment, Block, Document, Paragraph, Report, Run};
 use nom::{
@@ -127,6 +134,7 @@ enum DestinationBehavior {
 /// - Text aggregation for building runs
 /// - The document being built
 /// - A report builder for collecting warnings and stats
+/// - Parser limits for resource protection
 pub struct Interpreter {
     /// Stack of style states for group handling
     group_stack: Vec<StyleState>,
@@ -154,11 +162,20 @@ pub struct Interpreter {
     skip_destination_depth: usize,
     /// Whether each open group still allows destination detection at its start
     group_can_start_destination: Vec<bool>,
+    /// Parser limits for resource protection
+    limits: ParserLimits,
+    /// Current group depth (for limit enforcement)
+    current_depth: usize,
 }
 
 impl Interpreter {
-    /// Creates a new interpreter with default state.
+    /// Creates a new interpreter with default state and limits.
     pub fn new() -> Self {
+        Self::with_limits(ParserLimits::default())
+    }
+
+    /// Creates a new interpreter with custom limits.
+    pub fn with_limits(limits: ParserLimits) -> Self {
         Self {
             group_stack: Vec::new(),
             current_style: StyleState::new(),
@@ -173,10 +190,15 @@ impl Interpreter {
             destination_marker: false,
             skip_destination_depth: 0,
             group_can_start_destination: Vec::new(),
+            limits,
+            current_depth: 0,
         }
     }
 
     /// Parses RTF text and returns a Document with a Report.
+    ///
+    /// Uses default parser limits. For custom limits, use
+    /// [`parse_with_limits`](Self::parse_with_limits).
     ///
     /// # Arguments
     ///
@@ -185,14 +207,51 @@ impl Interpreter {
     /// # Returns
     ///
     /// A tuple of `(Document, Report)` containing the parsed content
-    /// and conversion report, or an error message.
-    pub fn parse(input: &str) -> Result<(Document, Report), String> {
-        let mut interpreter = Self::new();
-        let tokens = tokenize(input).map_err(|e| format!("Tokenization error: {:?}", e))?;
+    /// and conversion report, or an error.
+    pub fn parse(input: &str) -> Result<(Document, Report), ConversionError> {
+        Self::parse_with_limits(input, ParserLimits::default())
+    }
+
+    /// Parses RTF text with custom limits and returns a Document with a Report.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - The RTF text to parse
+    /// * `limits` - Parser limits for resource protection
+    ///
+    /// # Returns
+    ///
+    /// A tuple of `(Document, Report)` containing the parsed content
+    /// and conversion report, or an error.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConversionError::Parse`] with [`ParseError::InputTooLarge`]
+    /// if the input exceeds `max_input_bytes`.
+    ///
+    /// Returns [`ConversionError::Parse`] with [`ParseError::GroupDepthExceeded`]
+    /// if group nesting exceeds `max_group_depth`.
+    pub fn parse_with_limits(
+        input: &str,
+        limits: ParserLimits,
+    ) -> Result<(Document, Report), ConversionError> {
+        // Check input size limit
+        if input.len() > limits.max_input_bytes {
+            return Err(ConversionError::Parse(ParseError::InputTooLarge {
+                size: input.len(),
+                limit: limits.max_input_bytes,
+            }));
+        }
+
+        let mut interpreter = Self::with_limits(limits.clone());
+        let tokens = tokenize(input).map_err(|e| {
+            ConversionError::Parse(ParseError::TokenizationError(format!("{:?}", e)))
+        })?;
         validate_tokens(&tokens)?;
 
         // Track bytes processed
         interpreter.report_builder.set_bytes_processed(input.len());
+        interpreter.report_builder.set_limits(limits);
 
         for token in tokens {
             let event = token_to_event(token);
@@ -209,14 +268,21 @@ impl Interpreter {
     }
 
     /// Process a single RTF event.
-    fn process_event(&mut self, event: RtfEvent) -> Result<(), String> {
+    fn process_event(&mut self, event: RtfEvent) -> Result<(), ConversionError> {
         if self.skip_destination_depth > 0 {
-            self.process_skipped_destination_event(event);
-            return Ok(());
+            return self.process_skipped_destination_event(event);
         }
 
         match event {
             RtfEvent::GroupStart => {
+                // Check depth limit
+                self.current_depth += 1;
+                if self.current_depth > self.limits.max_group_depth {
+                    return Err(ConversionError::Parse(ParseError::GroupDepthExceeded {
+                        depth: self.current_depth,
+                        limit: self.limits.max_group_depth,
+                    }));
+                }
                 // Push current style onto stack
                 self.group_stack.push(self.current_style.snapshot());
                 self.group_can_start_destination.push(true);
@@ -226,6 +292,7 @@ impl Interpreter {
                 if let Some(previous_style) = self.group_stack.pop() {
                     self.current_style = previous_style;
                 }
+                self.current_depth = self.current_depth.saturating_sub(1);
                 self.group_can_start_destination.pop();
                 self.destination_marker = false;
             }
@@ -247,9 +314,19 @@ impl Interpreter {
         Ok(())
     }
 
-    fn process_skipped_destination_event(&mut self, event: RtfEvent) {
+    fn process_skipped_destination_event(
+        &mut self,
+        event: RtfEvent,
+    ) -> Result<(), ConversionError> {
         match event {
             RtfEvent::GroupStart => {
+                self.current_depth += 1;
+                if self.current_depth > self.limits.max_group_depth {
+                    return Err(ConversionError::Parse(ParseError::GroupDepthExceeded {
+                        depth: self.current_depth,
+                        limit: self.limits.max_group_depth,
+                    }));
+                }
                 self.group_stack.push(self.current_style.snapshot());
                 self.group_can_start_destination.push(false);
                 self.skip_destination_depth += 1;
@@ -258,6 +335,7 @@ impl Interpreter {
                 if let Some(previous_style) = self.group_stack.pop() {
                     self.current_style = previous_style;
                 }
+                self.current_depth = self.current_depth.saturating_sub(1);
                 self.group_can_start_destination.pop();
                 self.skip_destination_depth = self.skip_destination_depth.saturating_sub(1);
                 if self.skip_destination_depth == 0 {
@@ -269,6 +347,7 @@ impl Interpreter {
             | RtfEvent::Text(_)
             | RtfEvent::BinaryData(_) => {}
         }
+        Ok(())
     }
 
     fn handle_control_symbol(&mut self, symbol: char) {
@@ -464,7 +543,7 @@ impl Interpreter {
             let skip = self.skip_next_chars.min(text.chars().count());
             let chars_to_take = text.chars().skip(skip);
             let remaining: String = chars_to_take.collect();
-            self.skip_next_chars = 0;
+            self.skip_next_chars -= skip;
 
             if remaining.is_empty() {
                 return;
@@ -522,14 +601,7 @@ impl Interpreter {
     fn finalize_paragraph(&mut self) {
         // Flush any remaining text as a run
         if !self.current_text.is_empty() {
-            let run = Run {
-                text: self.current_text.clone(),
-                bold: self.current_run_style.bold,
-                italic: self.current_run_style.italic,
-                underline: self.current_run_style.underline,
-                font_size: None,
-                color: None,
-            };
+            let run = self.create_run();
             self.current_paragraph.runs.push(run);
             self.current_text.clear();
         }
@@ -591,9 +663,9 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, nom::Err<nom::error::Error<&s
     Ok(tokens)
 }
 
-fn validate_tokens(tokens: &[Token]) -> Result<(), String> {
+fn validate_tokens(tokens: &[Token]) -> Result<(), ParseError> {
     if tokens.is_empty() {
-        return Err("Invalid RTF: empty input".to_string());
+        return Err(ParseError::EmptyInput);
     }
 
     let mut depth = 0usize;
@@ -602,7 +674,7 @@ fn validate_tokens(tokens: &[Token]) -> Result<(), String> {
             Token::GroupStart => depth += 1,
             Token::GroupEnd => {
                 if depth == 0 {
-                    return Err("Invalid RTF: unmatched group end ('}')".to_string());
+                    return Err(ParseError::UnmatchedGroupEnd);
                 }
                 depth -= 1;
             }
@@ -610,7 +682,7 @@ fn validate_tokens(tokens: &[Token]) -> Result<(), String> {
         }
     }
     if depth != 0 {
-        return Err("Invalid RTF: unbalanced groups".to_string());
+        return Err(ParseError::UnbalancedGroups);
     }
 
     // Basic format guard: RTF should begin with {\rtf...}
@@ -619,7 +691,7 @@ fn validate_tokens(tokens: &[Token]) -> Result<(), String> {
         .filter(|t| !matches!(t, Token::Text(text) if text.trim().is_empty()));
     match (iter.next(), iter.next()) {
         (Some(Token::GroupStart), Some(Token::ControlWord { word, .. })) if word == "rtf" => Ok(()),
-        _ => Err("Invalid RTF: missing \\rtf header".to_string()),
+        _ => Err(ParseError::MissingRtfHeader),
     }
 }
 
@@ -900,14 +972,173 @@ mod tests {
     fn test_parse_rejects_non_rtf_input() {
         let input = "not rtf at all";
         let err = Interpreter::parse(input).unwrap_err();
-        assert!(err.contains("missing \\rtf header"));
+        assert!(matches!(
+            err,
+            ConversionError::Parse(ParseError::MissingRtfHeader)
+        ));
     }
 
     #[test]
     fn test_parse_rejects_unbalanced_groups() {
         let input = r#"{\rtf1\ansi missing_end"#;
         let err = Interpreter::parse(input).unwrap_err();
-        assert!(err.contains("unbalanced groups"));
+        assert!(matches!(
+            err,
+            ConversionError::Parse(ParseError::UnbalancedGroups)
+        ));
+    }
+
+    // ==========================================================================
+    // Limit Enforcement Tests
+    // ==========================================================================
+
+    #[test]
+    fn test_input_size_limit() {
+        // Create a small RTF input
+        let input = r#"{\rtf1\ansi Hello}"#;
+
+        // Set a limit smaller than the input
+        let limits = ParserLimits::new().with_max_input_bytes(5);
+
+        let result = Interpreter::parse_with_limits(input, limits);
+        assert!(matches!(
+            result,
+            Err(ConversionError::Parse(ParseError::InputTooLarge { .. }))
+        ));
+
+        // Verify error message contains sizes
+        if let Err(ConversionError::Parse(ParseError::InputTooLarge { size, limit })) = result {
+            assert_eq!(size, input.len());
+            assert_eq!(limit, 5);
+        }
+    }
+
+    #[test]
+    fn test_input_size_limit_allows_normal_input() {
+        let input = r#"{\rtf1\ansi Hello World}"#;
+
+        // Set a limit larger than the input
+        let limits = ParserLimits::new().with_max_input_bytes(1000);
+
+        let result = Interpreter::parse_with_limits(input, limits);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_group_depth_limit() {
+        // Create deeply nested RTF (10 levels of nesting inside the root group)
+        // Format: {\rtf1\ansi {{{{{{{{{{Hello}}}}}}}}}}
+        let inner_braces = "{".repeat(10);
+        let outer_braces = "}".repeat(10);
+        let input = format!("{{\\rtf1\\ansi {}Hello{}}}", inner_braces, outer_braces);
+
+        // Set a depth limit of 5
+        let limits = ParserLimits::new().with_max_group_depth(5);
+
+        let result = Interpreter::parse_with_limits(&input, limits);
+        assert!(matches!(
+            result,
+            Err(ConversionError::Parse(
+                ParseError::GroupDepthExceeded { .. }
+            ))
+        ));
+
+        // Verify error message contains depths
+        if let Err(ConversionError::Parse(ParseError::GroupDepthExceeded { depth, limit })) = result
+        {
+            assert_eq!(depth, 6); // Fails on the 6th opening brace
+            assert_eq!(limit, 5);
+        }
+    }
+
+    #[test]
+    fn test_group_depth_limit_allows_normal_nesting() {
+        // Create RTF with 5 levels of nesting inside the root group
+        let inner_braces = "{".repeat(3);
+        let outer_braces = "}".repeat(3);
+        let input = format!("{{\\rtf1\\ansi {}Hello{}}}", inner_braces, outer_braces);
+
+        // Set a depth limit of 10
+        let limits = ParserLimits::new().with_max_group_depth(10);
+
+        let result = Interpreter::parse_with_limits(&input, limits);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_group_depth_limit_applies_inside_skipped_destination() {
+        // Unknown destination group with deep nested content.
+        let inner_braces = "{".repeat(10);
+        let outer_braces = "}".repeat(10);
+        let input = format!(
+            "{{\\rtf1\\ansi {{\\*\\foo {}X{}}} Hello}}",
+            inner_braces, outer_braces
+        );
+
+        // Root group + destination group + 10 nested groups exceeds limit 5.
+        let limits = ParserLimits::new().with_max_group_depth(5);
+
+        let result = Interpreter::parse_with_limits(&input, limits);
+        assert!(matches!(
+            result,
+            Err(ConversionError::Parse(
+                ParseError::GroupDepthExceeded { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    fn test_warning_count_limit() {
+        // Create RTF with many unknown control words
+        let mut input = String::from("{\\rtf1\\ansi ");
+        for i in 0..20 {
+            input.push_str(&format!("\\unknown{} ", i));
+        }
+        input.push_str("}");
+
+        // Set a warning limit of 5
+        let limits = ParserLimits::new().with_max_warning_count(5);
+
+        let result = Interpreter::parse_with_limits(&input, limits);
+        assert!(result.is_ok());
+
+        // Verify warning count is capped
+        let (_, report) = result.unwrap();
+        assert_eq!(report.warnings.len(), 5);
+    }
+
+    #[test]
+    fn test_warning_count_limit_allows_normal_warnings() {
+        // Create RTF with a few unknown control words
+        let input = r#"{\rtf1\ansi \unknown1 \unknown2 \unknown3}"#;
+
+        // Set a warning limit of 10
+        let limits = ParserLimits::new().with_max_warning_count(10);
+
+        let result = Interpreter::parse_with_limits(input, limits);
+        assert!(result.is_ok());
+
+        // Verify all warnings are captured
+        let (_, report) = result.unwrap();
+        assert_eq!(report.warnings.len(), 3);
+    }
+
+    #[test]
+    fn test_default_limits_allow_normal_documents() {
+        // Test that default limits work with a typical RTF document
+        let input = r#"{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}
+{\colortbl;\red0\green0\blue0;}
+\viewkind4\uc1\pard\f0\fs20 Hello World\par
+This is a \b bold\b0  test.\par
+}"#;
+
+        let result = Interpreter::parse(input);
+        assert!(result.is_ok());
+
+        let (doc, _report) = result.unwrap();
+        assert!(!doc.blocks.is_empty());
+        // Note: Some control words like \viewkind may generate warnings,
+        // but the document should still parse successfully
     }
 
     #[test]

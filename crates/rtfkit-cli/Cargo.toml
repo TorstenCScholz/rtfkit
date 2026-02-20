@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 rtfkit-core = { path = "../rtfkit-core" }
+rtfkit-docx = { path = "../rtfkit-docx" }
 clap = { version = "4", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
@@ -23,3 +24,5 @@ assert_cmd = "2"
 predicates = "3"
 similar = "2"
 tempfile = "3"
+zip = "2"
+quick-xml = "0.37"

@@ -1,10 +1,10 @@
 # rtfkit Architecture
 
-This document reflects the current implementation in `main` (v0.1, Phase 1).
+This document reflects the current implementation in `main` (v0.2, Phase 2).
 
 ## Overview
 
-`rtfkit` currently provides a parser/interpreter pipeline from RTF to an internal IR plus a conversion report.
+`rtfkit` provides a complete RTF-to-DOCX conversion pipeline with an intermediate representation (IR) and conversion reporting.
 
 ```mermaid
 flowchart LR
@@ -13,6 +13,8 @@ flowchart LR
     Events --> Interpreter[Interpreter]
     Interpreter --> IR[IR Document]
     Interpreter --> Report[Report]
+    IR --> DOCXWriter[DOCX Writer]
+    DOCXWriter --> DOCXFile[.docx File]
     IR --> CLI[--emit-ir JSON]
     Report --> CLIOut[stdout text/json]
 ```
@@ -23,6 +25,7 @@ flowchart LR
 rtfkit/
 ├── crates/
 │   ├── rtfkit-core/   # Parser, interpreter, IR, reporting
+│   ├── rtfkit-docx/   # DOCX writer implementation
 │   └── rtfkit-cli/    # CLI entrypoint and IO/report rendering
 ├── fixtures/          # RTF inputs for tests
 ├── golden/            # Golden IR snapshots
@@ -39,6 +42,7 @@ Responsibilities:
 - IR construction (`Document -> Block::Paragraph -> Run`)
 - Warning/stats reporting
 - Structural RTF validation (header + balanced groups)
+- Parser limits enforcement (input size, depth, warnings)
 
 Not in scope:
 - File IO
@@ -59,6 +63,33 @@ Not in scope:
 - Escaped symbols (`\\`, `\{`, `\}`) are preserved as text
 - Unsupported destination content emits `DroppedContent` warnings
 
+### Parser limits
+
+For safety and resource management:
+- Maximum input size: 10 MB
+- Maximum group depth: 256 levels
+- Maximum warnings: 1000 (then truncated)
+
+## `rtfkit-docx`
+
+Responsibilities:
+- Convert IR `Document` to DOCX format
+- Map IR styles to OpenXML elements
+- Write valid `.docx` ZIP archives
+
+### IR → DOCX mapping
+
+| IR Element | DOCX Element |
+|------------|--------------|
+| `Document` | `<w:document>` |
+| `Block::Paragraph` | `<w:p>` |
+| `Run` | `<w:r>` |
+| `Run.text` | `<w:t>` |
+| `Run.bold = true` | `<w:b/>` in `<w:rPr>` |
+| `Run.italic = true` | `<w:i/>` in `<w:rPr>` |
+| `Run.underline = true` | `<w:u w:val="single"/>` |
+| `Paragraph.alignment` | `<w:jc w:val="..."/>` |
+
 ## `rtfkit` CLI
 
 Binary name: `rtfkit`
@@ -73,14 +104,14 @@ Options:
 - `--format <text|json>`: report output format (default `text`)
 - `--emit-ir <FILE>`: write IR as pretty JSON
 - `--strict`: exit non-zero if `DroppedContent` warnings exist
-- `--to <docx>`: reserved target selector (currently only `docx` accepted)
-- `-o, --output <FILE>`: reserved for future DOCX writer; rejected in v0.1
+- `-o, --output <FILE>`: write DOCX output to file
+- `--force`: overwrite existing output file
 - `--verbose`: debug logging
 
 Exit codes:
 - `0`: success
 - `2`: parse/validation error (invalid RTF)
-- `3`: conversion/IO contract error (including unsupported `--output`)
+- `3`: writer/IO failure (cannot write output file)
 - `4`: strict-mode violation
 
 ## Reporting
@@ -102,8 +133,10 @@ Strict mode checks `DroppedContent` warnings.
 
 Test layers:
 - Core unit tests for tokenizer/interpreter/report behavior
+- DOCX writer unit tests
 - Golden IR snapshot tests over all fixtures
 - CLI contract tests for exit codes/strict mode/invalid input
+- DOCX integration tests for end-to-end conversion
 
 Golden update command:
 
@@ -113,12 +146,14 @@ UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests
 
 ## Known gaps
 
-- No DOCX writer yet (Phase 2)
 - Limited RTF feature coverage (no tables/lists/images as IR blocks)
-- No full RTF spec compliance target for v0.1
+- DOCX output supports basic text formatting only
+- No full RTF spec compliance target
 
 ## References
 
 - [ADR-0001: RTF Parser Selection](../adr/0001-rtf-parser-selection.md)
+- [ADR-0002: DOCX Writer Selection](../adr/0002-docx-writer-selection.md)
 - [Phase 1 Specification](../specs/PHASE1.md)
+- [Phase 2 Specification](../specs/PHASE2.md)
 - [Initial Description](../specs/INITIAL_DESCRIPTION.md)

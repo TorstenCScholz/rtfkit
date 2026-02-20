@@ -13,6 +13,7 @@
 //! // During interpretation, warnings and stats are collected
 //! ```
 
+use crate::limits::ParserLimits;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
@@ -236,6 +237,10 @@ pub struct ReportBuilder {
     run_count: usize,
     bytes_processed: usize,
     start_time: Instant,
+    /// Parser limits for warning count enforcement
+    limits: Option<ParserLimits>,
+    /// Whether warning limit has been reached (to avoid repeated checks)
+    warning_limit_reached: bool,
 }
 
 impl Default for ReportBuilder {
@@ -253,25 +258,73 @@ impl ReportBuilder {
             run_count: 0,
             bytes_processed: 0,
             start_time: Instant::now(),
+            limits: None,
+            warning_limit_reached: false,
         }
     }
 
+    /// Sets the parser limits for this report builder.
+    pub fn set_limits(&mut self, limits: ParserLimits) {
+        self.limits = Some(limits);
+    }
+
     /// Records an unsupported control word.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
     pub fn unsupported_control_word(&mut self, word: &str, parameter: Option<i32>) {
-        self.warnings
-            .push(Warning::unsupported_control_word(word, parameter));
+        if self.can_add_warning() {
+            self.warnings
+                .push(Warning::unsupported_control_word(word, parameter));
+        }
     }
 
     /// Records an unknown destination.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
     pub fn unknown_destination(&mut self, destination: &str) {
-        self.warnings
-            .push(Warning::unknown_destination(destination));
+        if self.can_add_warning() {
+            self.warnings
+                .push(Warning::unknown_destination(destination));
+        }
     }
 
     /// Records dropped content.
+    ///
+    /// If the warning limit is reached, this preserves strict-mode behavior by
+    /// ensuring at least one `DroppedContent` warning remains in the report.
     pub fn dropped_content(&mut self, reason: &str, size_hint: Option<usize>) {
-        self.warnings
-            .push(Warning::dropped_content(reason, size_hint));
+        if self.can_add_warning() {
+            self.warnings
+                .push(Warning::dropped_content(reason, size_hint));
+            return;
+        }
+
+        // Preserve strict-mode signal even when warning collection is capped.
+        // If we have no dropped-content warning yet, replace the last warning.
+        if !self
+            .warnings
+            .iter()
+            .any(|w| matches!(w, Warning::DroppedContent { .. }))
+        {
+            if let Some(last) = self.warnings.last_mut() {
+                *last = Warning::dropped_content(reason, size_hint);
+            }
+        }
+    }
+
+    /// Check if we can add another warning (respects warning count limit).
+    fn can_add_warning(&mut self) -> bool {
+        if self.warning_limit_reached {
+            return false;
+        }
+
+        if let Some(ref limits) = self.limits {
+            if self.warnings.len() >= limits.max_warning_count {
+                self.warning_limit_reached = true;
+                return false;
+            }
+        }
+        true
     }
 
     /// Increments the paragraph count.
@@ -426,6 +479,28 @@ mod tests {
         assert_eq!(report.stats.run_count, 5);
         assert_eq!(report.stats.bytes_processed, 1000);
         // duration_ms is non-zero but we can't predict exact value
+    }
+
+    #[test]
+    fn test_warning_cap_preserves_dropped_content_signal() {
+        let mut builder = ReportBuilder::new();
+        builder.set_limits(ParserLimits::new().with_max_warning_count(2));
+
+        // Fill the warning budget with non-dropped warnings.
+        builder.unsupported_control_word("foo", None);
+        builder.unsupported_control_word("bar", None);
+
+        // This arrives after the cap; strict mode still needs to see it.
+        builder.dropped_content("Dropped unsupported destination", None);
+
+        let report = builder.build();
+        assert_eq!(report.warnings.len(), 2);
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, Warning::DroppedContent { .. }))
+        );
     }
 
     #[test]

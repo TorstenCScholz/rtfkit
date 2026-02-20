@@ -1,0 +1,16 @@
+[package]
+name = "rtfkit-docx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "DOCX writer for rtfkit IR documents"
+
+[dependencies]
+rtfkit-core = { path = "../rtfkit-core" }
+docx-rs = "0.4"
+thiserror = "2.0"
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+tempfile = "3.14"

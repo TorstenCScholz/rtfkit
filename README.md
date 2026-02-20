@@ -2,11 +2,12 @@
 
 RTF parsing toolkit with a CLI-first workflow.
 
-Current status (Phase 1):
+Current status (Phase 2):
 - Parses RTF into a deterministic intermediate representation (IR)
+- Converts RTF to DOCX via `-o/--output` flag
 - Emits conversion reports (`text` or `json`)
 - Supports `--emit-ir` for snapshot/debug workflows
-- DOCX writing is planned; `-o/--output` is intentionally rejected for now
+- Parser limits for safety (input size, depth, warnings)
 
 [![CI](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml/badge.svg)](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml)
 
@@ -23,23 +24,41 @@ Or download a pre-built binary from [Releases](https://github.com/TorstenCScholz
 ## Usage
 
 ```sh
-# Human-readable report
+# Convert RTF to DOCX
+rtfkit convert input.rtf -o output.docx
+
+# Convert and overwrite existing output file
+rtfkit convert input.rtf -o output.docx --force
+
+# Human-readable report (stdout)
 rtfkit convert fixtures/simple_paragraph.rtf
 
-# JSON report
+# JSON report (stdout)
 rtfkit convert fixtures/simple_paragraph.rtf --format json
 
-# Emit IR JSON
+# Emit IR JSON to file
 rtfkit convert fixtures/simple_paragraph.rtf --emit-ir out.json
 
 # Strict mode: fail when dropped content is reported
 rtfkit convert fixtures/complex.rtf --strict --format json
 ```
 
-### Reserved flags
+### Exit Codes
 
-`-o/--output` and `--to docx` are part of the long-term converter interface.
-In v0.1, `--output` returns an explicit error because the DOCX writer is not implemented yet.
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 2 | Parse/validation error (invalid RTF) |
+| 3 | Writer/IO failure (e.g., cannot write output file) |
+| 4 | Strict-mode violation (dropped content detected) |
+
+### Parser Limits
+
+For safety, the parser enforces these limits:
+
+- Maximum input size: 10 MB
+- Maximum group depth: 256 levels
+- Maximum warnings: 1000
 
 ## Output contract
 
@@ -99,11 +118,11 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --all
 ```
 
-## Limitations (v0.1)
+## Limitations (v0.2)
 
-- No DOCX output writer yet
 - Partial RTF coverage only (focused on common text/style cases)
 - No tables/lists/images as first-class IR blocks yet
+- DOCX output supports basic text formatting (bold, italic, underline, alignment)
 
 ## License
 

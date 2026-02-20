@@ -2,6 +2,24 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // =============================================================================
+// Error Module
+// =============================================================================
+
+pub mod error;
+
+// Re-export key error types for convenience
+pub use error::{ConversionError, ParseError, ReportError};
+
+// =============================================================================
+// Limits Module
+// =============================================================================
+
+pub mod limits;
+
+// Re-export limits types for convenience
+pub use limits::ParserLimits;
+
+// =============================================================================
 // Interpreter Module
 // =============================================================================
 

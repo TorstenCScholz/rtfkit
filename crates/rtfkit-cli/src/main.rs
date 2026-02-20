@@ -1,10 +1,11 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use rtfkit_core::{Document, Interpreter, Report, Warning};
+use rtfkit_docx::write_docx;
 use tracing::debug;
 
 /// RTF conversion toolkit - convert RTF files to various formats.
@@ -27,7 +28,7 @@ enum Commands {
         #[arg(required = true)]
         input: PathBuf,
 
-        /// Output file path (reserved for future DOCX writer)
+        /// Output file path (e.g., output.docx)
         #[arg(short, long)]
         output: Option<PathBuf>,
 
@@ -46,6 +47,10 @@ enum Commands {
         /// Fail on unsupported features (DroppedContent warnings)
         #[arg(long)]
         strict: bool,
+
+        /// Overwrite existing output file without prompting
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -74,6 +79,7 @@ fn run() -> Result<ExitCode> {
             format,
             emit_ir,
             strict,
+            force,
         } => handle_convert(
             input,
             output.as_ref(),
@@ -81,6 +87,7 @@ fn run() -> Result<ExitCode> {
             &format,
             emit_ir.as_ref(),
             strict,
+            force,
         ),
     }
 }
@@ -92,11 +99,8 @@ fn handle_convert(
     format: &str,
     emit_ir: Option<&PathBuf>,
     strict: bool,
+    force: bool,
 ) -> Result<ExitCode> {
-    if output.is_some() {
-        bail!("--output is not supported yet in v0.1 (DOCX writer is planned for a later phase)");
-    }
-
     debug!("Target format requested: {to}");
 
     // Read input file
@@ -142,7 +146,12 @@ fn handle_convert(
         emit_ir_to_file(&document, ir_path)?;
     }
 
-    // Output report to stdout
+    // Handle DOCX output if --output is specified
+    if let Some(output_path) = output {
+        return handle_docx_output(&document, output_path, force);
+    }
+
+    // Output report to stdout (when no --output specified)
     match format {
         "json" => print_report_json(&report)?,
         "text" => print_report_text(&report),
@@ -150,6 +159,106 @@ fn handle_convert(
     }
 
     Ok(ExitCode::from(EXIT_SUCCESS))
+}
+
+/// Handle writing DOCX output with validation and error handling
+fn handle_docx_output(document: &Document, output_path: &PathBuf, force: bool) -> Result<ExitCode> {
+    // Validate .docx extension
+    let extension = output_path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase());
+
+    match extension.as_deref() {
+        Some("docx") => {}
+        Some(other) => {
+            eprintln!(
+                "Warning: Output file has '.{other}' extension, but DOCX format will be written."
+            );
+            eprintln!("         Consider using '.docx' extension for clarity.");
+        }
+        None => {
+            eprintln!("Warning: Output file has no extension. DOCX format will be written.");
+            eprintln!("         Consider using '.docx' extension for clarity.");
+        }
+    }
+
+    // Check if output directory exists and is writable
+    if let Some(parent) = output_path.parent() {
+        if !parent.exists() {
+            eprintln!(
+                "Error: Output directory does not exist: {}",
+                parent.display()
+            );
+            return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+        }
+
+        // Check directory writability using a unique probe filename.
+        match check_directory_writable(parent) {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!(
+                    "Error: Output directory is not writable: {}",
+                    parent.display()
+                );
+                eprintln!("  {e}");
+                return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+            }
+        }
+    }
+
+    // Check if file exists and --force is not set
+    if output_path.exists() && !force {
+        eprintln!(
+            "Error: Output file already exists: {}",
+            output_path.display()
+        );
+        eprintln!("       Use --force to overwrite existing files.");
+        return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+    }
+
+    // Write DOCX file
+    debug!("Writing DOCX to: {}", output_path.display());
+    if let Err(e) = write_docx(document, output_path) {
+        eprintln!("Error writing DOCX file: {}", output_path.display());
+        eprintln!("  {e}");
+        return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+    }
+
+    eprintln!("DOCX written to: {}", output_path.display());
+    Ok(ExitCode::from(EXIT_SUCCESS))
+}
+
+fn check_directory_writable(dir: &Path) -> std::io::Result<()> {
+    use std::fs::OpenOptions;
+    use std::io::ErrorKind;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let pid = std::process::id();
+    for attempt in 0..16_u32 {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let probe_path = dir.join(format!(".rtfkit_write_test.{pid}.{timestamp}.{attempt}"));
+
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&probe_path)
+        {
+            Ok(_) => {
+                let _ = fs::remove_file(&probe_path);
+                return Ok(());
+            }
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "Failed to create unique probe file for write check",
+    ))
 }
 
 /// Serialize IR Document to JSON file
