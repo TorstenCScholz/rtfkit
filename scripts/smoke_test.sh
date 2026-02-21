@@ -41,12 +41,12 @@ log_test() {
 
 pass() {
     log_info "✅ PASSED: $1"
-    ((TESTS_PASSED++))
+    TESTS_PASSED=$((TESTS_PASSED + 1))
 }
 
 fail() {
     log_error "❌ FAILED: $1"
-    ((TESTS_FAILED++))
+    TESTS_FAILED=$((TESTS_FAILED + 1))
 }
 
 cleanup() {
