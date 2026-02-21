@@ -75,10 +75,10 @@ jobs:
             os: ubuntu-latest
             artifact-name: rtfkit-aarch64-unknown-linux-gnu
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-latest
             artifact-name: rtfkit-x86_64-apple-darwin
           - target: aarch64-apple-darwin
-            os: macos-14
+            os: macos-latest
             artifact-name: rtfkit-aarch64-apple-darwin
           - target: x86_64-pc-windows-msvc
             os: windows-latest
@@ -178,11 +178,11 @@ jobs:
             artifact-name: rtfkit-aarch64-unknown-linux-gnu
             binary-name: rtfkit
             emulate_arm64: true
-          - os: macos-13
+          - os: macos-latest
             artifact-name: rtfkit-x86_64-apple-darwin
             binary-name: rtfkit
             emulate_arm64: false
-          - os: macos-14
+          - os: macos-latest
             artifact-name: rtfkit-aarch64-apple-darwin
             binary-name: rtfkit
             emulate_arm64: false
