@@ -1,0 +1,22 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Times New Roman;}}
+\viewkind4\uc1\pard\f0\fs24
+
+% Malformed RTF with repeated bad controls but preserved text
+% Tests graceful degradation with multiple malformed constructs
+
+\par First normal paragraph.\par
+
+\par \cellx1000 Orphan cell control\par
+\par \row Orphan row control\par
+\par \cellx2000 Another orphan cell\par
+
+\par Text between bad controls.\par
+
+\par \trowd\cellx1000\intbl Valid cell\cell\row
+
+\par \cellx3000 Yet another orphan\par
+\par \row And another orphan row\par
+
+\par Final normal paragraph.\par
+}

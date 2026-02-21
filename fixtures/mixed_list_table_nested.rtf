@@ -1,0 +1,32 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Times New Roman;}}
+{\colortbl;\red0\green0\blue0;}
+\viewkind4\uc1\pard\f0\fs24
+
+% Mixed content with nested structures: table with lists in multiple cells
+% Tests nested list inside table cells
+
+\par Document with nested list in table:\par
+
+\par \trowd\cellx2880\cellx5760\cellx8640\intbl 
+Simple cell\cell 
+\ls1\ilvl0 Item A\par
+\ls1\ilvl0 Item B\par
+\ls1\ilvl0 Item C\cell 
+Another simple cell\cell\row
+
+\trowd\cellx2880\cellx5760\cellx8640\intbl 
+Row 2 Cell 1\cell 
+\ls1\ilvl0 Nested item 1\par
+\ls1\ilvl0 Nested item 2\cell 
+Row 2 Cell 3\cell\row
+
+\par Paragraph after table.\par
+
+{\listoverridetable
+{\listoverride\listid1\listoverridecount0\ls1}
+{\listtable\listtemplateid1\listhybrid
+{\listlevel\levelnfc23\levelnfcn23\leveljc0\levelfollow0\levelstartat1\levelspace0\levelindent0{\leveltext\'01\u8226?;}{\levelnumbers;}\fi-360\li720\lin720}
+{\listname;}\listid1}
+}
+}

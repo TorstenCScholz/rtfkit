@@ -297,7 +297,7 @@ fn has_run_with_formatting_and_text(xml: &str, formatting_element: &str, text: &
 #[test]
 fn test_simple_paragraph_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("simple_paragraph.rtf", &temp_dir);
+    let docx_path = run_cli_convert("text_simple_paragraph.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify basic structure
@@ -324,7 +324,7 @@ fn test_simple_paragraph_docx() {
 #[test]
 fn test_multiple_paragraphs_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("multiple_paragraphs.rtf", &temp_dir);
+    let docx_path = run_cli_convert("text_multiple_paragraphs.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify multiple paragraphs
@@ -354,7 +354,7 @@ fn test_multiple_paragraphs_docx() {
 #[test]
 fn test_bold_italic_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("bold_italic.rtf", &temp_dir);
+    let docx_path = run_cli_convert("text_bold_italic.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify bold formatting element exists
@@ -396,7 +396,7 @@ fn test_bold_italic_docx() {
 #[test]
 fn test_underline_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("underline.rtf", &temp_dir);
+    let docx_path = run_cli_convert("text_underline.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify underline formatting element exists
@@ -425,7 +425,7 @@ fn test_underline_docx() {
 #[test]
 fn test_alignment_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("alignment.rtf", &temp_dir);
+    let docx_path = run_cli_convert("text_alignment.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify alignment elements exist
@@ -449,7 +449,7 @@ fn test_alignment_docx() {
 #[test]
 fn test_unicode_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("unicode.rtf", &temp_dir);
+    let docx_path = run_cli_convert("text_unicode.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify text content is preserved
@@ -479,7 +479,7 @@ fn test_unicode_docx() {
 #[test]
 fn test_mixed_formatting_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("mixed_formatting.rtf", &temp_dir);
+    let docx_path = run_cli_convert("text_mixed_formatting.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify all formatting types exist
@@ -519,7 +519,7 @@ fn test_mixed_formatting_docx() {
 #[test]
 fn test_nested_styles_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("nested_styles.rtf", &temp_dir);
+    let docx_path = run_cli_convert("text_nested_styles.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify both bold and italic formatting exist
@@ -555,7 +555,7 @@ fn test_nested_styles_docx() {
 #[test]
 fn test_complex_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("complex.rtf", &temp_dir);
+    let docx_path = run_cli_convert("mixed_complex.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify document structure
@@ -601,7 +601,7 @@ fn test_complex_docx() {
 #[test]
 fn test_docx_structure_validity() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("simple_paragraph.rtf", &temp_dir);
+    let docx_path = run_cli_convert("text_simple_paragraph.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify the XML has proper DOCX namespace
@@ -902,7 +902,7 @@ fn test_list_mixed_kinds_docx() {
 #[test]
 fn test_list_malformed_fallback_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("list_malformed_fallback.rtf", &temp_dir);
+    let docx_path = run_cli_convert("malformed_list_fallback.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Malformed list references should still produce content
@@ -1319,7 +1319,7 @@ fn test_table_with_list_in_cell_docx() {
 #[test]
 fn test_table_missing_cell_terminator_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("table_missing_cell_terminator.rtf", &temp_dir);
+    let docx_path = run_cli_convert("malformed_table_missing_cell_terminator.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify text is preserved despite malformed input
@@ -1347,7 +1347,7 @@ fn test_table_missing_cell_terminator_docx() {
 #[test]
 fn test_table_missing_row_terminator_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("table_missing_row_terminator.rtf", &temp_dir);
+    let docx_path = run_cli_convert("malformed_table_missing_row_terminator.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify text is preserved despite malformed input
@@ -1375,7 +1375,7 @@ fn test_table_missing_row_terminator_docx() {
 #[test]
 fn test_table_orphan_controls_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("table_orphan_controls.rtf", &temp_dir);
+    let docx_path = run_cli_convert("malformed_table_orphan_controls.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify text is preserved as paragraphs (not table)
@@ -1414,7 +1414,7 @@ fn test_table_orphan_controls_docx() {
 #[test]
 fn test_table_merge_controls_degraded_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("table_merge_controls_degraded.rtf", &temp_dir);
+    let docx_path = run_cli_convert("malformed_table_merge_controls_degraded.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify table structure is created
@@ -1581,7 +1581,7 @@ fn test_mixed_merge_docx() {
 #[test]
 fn test_orphan_merge_continuation_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("table_orphan_merge_continuation.rtf", &temp_dir);
+    let docx_path = run_cli_convert("malformed_table_orphan_merge_continuation.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify table structure is created
@@ -1601,7 +1601,7 @@ fn test_orphan_merge_continuation_docx() {
 #[test]
 fn test_conflicting_merge_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("table_conflicting_merge.rtf", &temp_dir);
+    let docx_path = run_cli_convert("malformed_table_conflicting_merge.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify table structure is created
@@ -1621,7 +1621,7 @@ fn test_conflicting_merge_docx() {
 #[test]
 fn test_non_monotonic_cellx_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("table_non_monotonic_cellx.rtf", &temp_dir);
+    let docx_path = run_cli_convert("malformed_table_non_monotonic_cellx.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify table structure is created
@@ -1639,7 +1639,7 @@ fn test_non_monotonic_cellx_docx() {
 #[test]
 fn test_large_stress_table_docx() {
     let temp_dir = TempDir::new().unwrap();
-    let docx_path = run_cli_convert("table_large_stress.rtf", &temp_dir);
+    let docx_path = run_cli_convert("limits_table_stress.rtf", &temp_dir);
     let xml = extract_document_xml(&docx_path);
 
     // Verify table structure is created

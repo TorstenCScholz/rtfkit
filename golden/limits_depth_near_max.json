@@ -1,0 +1,22 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "% Limits test: Group nesting near max_group_depth (256)% This fixture has 10 nested groups as a representative test (actual near-limit would be 255)% Tests that the parser handles deep nesting correctly",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "text": "Deeply nested text",
+          "bold": true,
+          "italic": true,
+          "underline": true
+        }
+      ]
+    }
+  ]
+}

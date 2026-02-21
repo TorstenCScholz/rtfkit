@@ -1,0 +1,124 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "% Malformed RTF with deeply nested groups (valid but complex)% Tests parser's handling of deep nesting and group boundaries",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "First paragraph.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "This bold text is in a group",
+          "bold": true,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Normal text after group.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Bold and italic",
+          "bold": true,
+          "italic": true,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Normal text.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Double nested underline",
+          "bold": false,
+          "italic": false,
+          "underline": true
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Normal text.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Superscript bold italic",
+          "bold": true,
+          "italic": true,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Final paragraph.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}

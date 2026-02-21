@@ -1,10 +1,10 @@
 # rtfkit Architecture
 
-This document reflects the current implementation in `main` (v0.5, Phase 5).
+This document reflects the current implementation in `main` (v0.6, Phase 6).
 
 ## Overview
 
-`rtfkit` provides a complete RTF-to-DOCX conversion pipeline with an intermediate representation (IR) and conversion reporting.
+`rtfkit` provides a complete RTF-to-DOCX conversion pipeline with an intermediate representation (IR), conversion reporting, and comprehensive test coverage.
 
 ```mermaid
 flowchart LR
@@ -24,14 +24,15 @@ flowchart LR
 ```text
 rtfkit/
 ├── crates/
-│   ├── rtfkit-core/   # Parser, interpreter, IR, reporting
+│   ├── rtfkit-core/   # Parser, interpreter, IR, reporting, limits
 │   ├── rtfkit-docx/   # DOCX writer implementation
-│   └── rtfkit-cli/    # CLI entrypoint and IO/report rendering
-├── fixtures/          # RTF inputs for tests
+│   └── rtfkit-cli/    # CLI entrypoint, tests, IO/report rendering
+├── fixtures/          # RTF inputs for tests (44 fixtures organized by category)
 ├── golden/            # Golden IR snapshots
 └── docs/
-    ├── adr/
-    └── specs/
+    ├── adr/           # Architecture Decision Records
+    ├── arch/          # Architecture documentation
+    └── specs/         # Phase specifications
 ```
 
 ## `rtfkit-core`
@@ -39,60 +40,95 @@ rtfkit/
 Responsibilities:
 - Tokenization and event conversion
 - Stateful interpretation with group stack/style stack
-- IR construction (`Document -> Block::Paragraph -> Run`)
+- IR construction (`Document -> Block -> Run`)
 - Warning/stats reporting
 - Structural RTF validation (header + balanced groups)
-- Parser limits enforcement (input size, depth, warnings)
+- Parser limits enforcement (input size, depth, warnings, table limits)
 
 Not in scope:
 - File IO
 - CLI argument handling
 - DOCX writing
 
-### IR model
+### IR Model
 
-- `Document { blocks: Vec<Block> }`
-- `Block::Paragraph(Paragraph)`, `Block::ListBlock(ListBlock)`, or `Block::TableBlock(TableBlock)`
-- `Paragraph { alignment, runs }`
-- `Run { text, bold, italic, underline, font_size?, color? }`
-- `ListBlock { list_id, kind, items }` — list container (Phase 3)
-- `ListKind` — Bullet, OrderedDecimal, or Mixed
-- `ListItem { level, blocks }` — item with nesting level (0-8)
-- `TableBlock { rows }` — table container (Phase 4)
-- `TableRow { cells }` — table row
-- `TableCell { blocks }` — table cell with nested blocks
-- `CellMerge` — merge state for cells (Phase 5)
-- `CellVerticalAlign` — vertical alignment in cells (Phase 5)
-- `RowAlignment` — row-level alignment (Phase 5)
-- `RowProps` — row-level formatting properties (Phase 5)
+The Intermediate Representation (IR) is the core data model for RTF documents:
+
+```
+Document
+└── blocks: Vec<Block>
+    ├── Paragraph { alignment, runs: Vec<Run> }
+    ├── ListBlock { list_id, kind, items: Vec<ListItem> }
+    └── TableBlock { rows: Vec<TableRow> }
+        └── TableRow { cells: Vec<TableCell>, row_props }
+            └── TableCell { blocks, width_twips, merge, v_align }
+```
+
+**Core Types:**
+- `Document { blocks: Vec<Block> }` - Root document container
+- `Block` - Block-level element (Paragraph, ListBlock, TableBlock)
+- `Paragraph { alignment, runs }` - Text paragraph
+- `Run { text, bold, italic, underline, font_size?, color? }` - Text run with formatting
+
+**List Types (Phase 3):**
+- `ListBlock { list_id, kind, items }` - List container
+- `ListKind` - Bullet, OrderedDecimal, or Mixed
+- `ListItem { level, blocks }` - Item with nesting level (0-8)
+
+**Table Types (Phase 4-5):**
+- `TableBlock { rows, table_props }` - Table container
+- `TableRow { cells, row_props }` - Table row
+- `TableCell { blocks, width_twips, merge, v_align }` - Table cell
+- `CellMerge` - None, HorizontalStart, HorizontalContinue, VerticalStart, VerticalContinue
+- `CellVerticalAlign` - Top, Center, Bottom
+- `RowAlignment` - Left, Center, Right
+- `RowProps` - Row-level formatting properties
+- `TableProps` - Table-level properties (placeholder)
 
 See [Phase 3 IR Design](phase3-ir-design.md) for list model details.
 See [Phase 4 IR Design](phase4-ir-design.md) for table model details.
 See [Phase 5 IR Design](phase5-ir-design.md) for merge semantics details.
 
-### Parser/interpreter notes
+### Parser/Interpreter Notes
 
-- Control words handled for MVP: `\b`, `\i`, `\ul`, `\ulnone`, `\par`, `\line`, `\ql`, `\qc`, `\qr`, `\qj`, `\uN`, `\ucN`
-- List control words (Phase 3): `\lsN`, `\ilvlN`
-- Table control words (Phase 4): `\trowd`, `\cellxN`, `\intbl`, `\cell`, `\row`
-- Merge control words (Phase 5): `\clmgf`, `\clmrg`, `\clvmgf`, `\clvmrg`
-- Cell alignment (Phase 5): `\clvertalt`, `\clvertalc`, `\clvertalb`
-- Row alignment (Phase 5): `\trql`, `\trqc`, `\trqr`, `\trleft`
-- Legacy paragraph-numbering controls (`\pn...`, `\pnlvl*`, `\pntext`) are currently dropped with warnings
-- Destination groups are skipped at group start (e.g. `fonttbl`, `colortbl`, unknown `\*` destinations)
-- `\listtable` and `\listoverridetable` are parsed for list definitions (Phase 3)
-- Escaped symbols (`\\`, `\{`, `\}`) are preserved as text
-- Unsupported destination content emits `DroppedContent` warnings
+**Text Formatting:**
+- `\b`, `\i`, `\ul`, `\ulnone` - Bold, italic, underline toggles
+- `\ql`, `\qc`, `\qr`, `\qj` - Paragraph alignment
+- `\uN`, `\ucN` - Unicode escape handling
 
-### Parser limits
+**List Controls (Phase 3):**
+- `\lsN` - List reference
+- `\ilvlN` - Nesting level
+- `\listtable`, `\listoverridetable` - List definitions
 
-For safety and resource management:
-- Maximum input size: 10 MB
-- Maximum group depth: 256 levels
-- Maximum warnings: 1000 (then truncated)
-- Maximum rows per table: 10000 (Phase 5)
-- Maximum cells per row: 1000 (Phase 5)
-- Maximum merge span: 1000 (Phase 5)
+**Table Controls (Phase 4-5):**
+- `\trowd`, `\cellxN`, `\intbl`, `\cell`, `\row` - Table structure
+- `\clmgf`, `\clmrg` - Horizontal merge
+- `\clvmgf`, `\clvmrg` - Vertical merge
+- `\clvertalt`, `\clvertalc`, `\clvertalb` - Cell vertical alignment
+- `\trql`, `\trqc`, `\trqr`, `\trleft` - Row alignment and indent
+
+**Destination Handling:**
+- `fonttbl`, `colortbl` - Skipped (formatting not fully mapped)
+- `\listtable`, `\listoverridetable` - Parsed for list definitions
+- Unknown `\*` destinations - Skipped with `DroppedContent` warning
+- Legacy `\pn...` controls - Dropped with warnings
+
+**Escaped Symbols:**
+- `\\`, `\{`, `\}` - Preserved as text
+
+### Parser Limits
+
+For safety and resource management (see [Limits Policy](../limits-policy.md)):
+
+| Limit | Default | Error Type |
+|-------|---------|------------|
+| `max_input_bytes` | 10 MB | `ParseError::InputTooLarge` |
+| `max_group_depth` | 256 levels | `ParseError::GroupDepthExceeded` |
+| `max_warning_count` | 1000 | Warning cap (continues) |
+| `max_rows_per_table` | 10,000 | `ParseError` (table structure) |
+| `max_cells_per_row` | 1,000 | `ParseError` (table structure) |
+| `max_merge_span` | 1,000 | `ParseError` (table structure) |
 
 ## `rtfkit-docx`
 
@@ -101,7 +137,7 @@ Responsibilities:
 - Map IR styles to OpenXML elements
 - Write valid `.docx` ZIP archives
 
-### IR → DOCX mapping
+### IR → DOCX Mapping
 
 | IR Element | DOCX Element |
 |------------|--------------|
@@ -117,10 +153,10 @@ Responsibilities:
 | `Paragraph.alignment` | `<w:jc w:val="..."/>` |
 | `ListBlock` | `numbering.xml` with `<w:abstractNum>` and `<w:num>` |
 | `TableBlock` | `<w:tbl>` with grid columns |
-| `CellMerge::HorizontalStart` | `<w:gridSpan w:val="N"/>` (Phase 5) |
-| `CellMerge::VerticalStart` | `<w:vMerge w:val="restart"/>` (Phase 5) |
-| `CellMerge::VerticalContinue` | `<w:vMerge w:val="continue"/>` (Phase 5) |
-| `CellVerticalAlign` | `<w:vAlign w:val="..."/>` (Phase 5) |
+| `CellMerge::HorizontalStart` | `<w:gridSpan w:val="N"/>` |
+| `CellMerge::VerticalStart` | `<w:vMerge w:val="restart"/>` |
+| `CellMerge::VerticalContinue` | `<w:vMerge w:val="continue"/>` |
+| `CellVerticalAlign` | `<w:vAlign w:val="..."/>` |
 
 ## `rtfkit` CLI
 
@@ -142,55 +178,87 @@ Options:
 
 Exit codes:
 - `0`: success
-- `2`: parse/validation error (invalid RTF)
+- `2`: parse/validation failure (invalid RTF or limit violation)
 - `3`: writer/IO failure (cannot write output file)
 - `4`: strict-mode violation
 
 ## Reporting
 
-Warnings:
-- `UnsupportedControlWord`
-- `UnknownDestination`
-- `DroppedContent`
-- `UnsupportedListControl` (Phase 3)
-- `UnresolvedListOverride` (Phase 3)
-- `UnsupportedNestingLevel` (Phase 3)
-- `UnsupportedTableControl` (Phase 4)
-- `MalformedTableStructure` (Phase 4)
-- `UnclosedTableCell` (Phase 4)
-- `UnclosedTableRow` (Phase 4)
-- `MergeConflict` (Phase 5)
-- `TableGeometryConflict` (Phase 5)
+### Warning Types
 
-Stats:
-- `paragraph_count`
-- `run_count`
-- `bytes_processed`
-- `duration_ms`
+| Type | Severity | Strict Mode | Description |
+|------|----------|-------------|-------------|
+| `UnsupportedControlWord` | Warning | No failure | Control word not implemented |
+| `UnknownDestination` | Info | No failure | RTF destination skipped |
+| `DroppedContent` | Warning | **Fails** | Content could not be represented |
+| `UnsupportedListControl` | Warning | No failure | List control not fully supported |
+| `UnresolvedListOverride` | Warning | **Fails** | List reference not found |
+| `UnsupportedNestingLevel` | Info | No failure | List level clamped to 8 |
+| `UnsupportedTableControl` | Warning | No failure | Table control not mapped |
+| `MalformedTableStructure` | Warning | May fail | Table structure issue |
+| `UnclosedTableCell` | Warning | May fail | Missing `\cell` terminator |
+| `UnclosedTableRow` | Warning | May fail | Missing `\row` terminator |
+| `MergeConflict` | Warning | **Fails** | Merge semantics conflict |
+| `TableGeometryConflict` | Warning | **Fails** | Invalid table geometry |
 
-Strict mode checks `DroppedContent` warnings.
+See [Warning Reference](../warning-reference.md) for detailed documentation.
+
+### Stats
+
+- `paragraph_count` - Number of paragraphs processed
+- `run_count` - Number of text runs processed
+- `bytes_processed` - Total bytes read from input
+- `duration_ms` - Processing duration in milliseconds
+
+### Strict Mode
+
+Strict mode checks for `DroppedContent` warnings and fails with exit code 4 if any are present. This ensures semantic fidelity in conversion.
+
+**Warning Cap Behavior:** When the warning count limit is reached, `DroppedContent` warnings are specially preserved to ensure the strict-mode signal is not lost.
 
 ## Testing
 
-Test layers:
-- Core unit tests for tokenizer/interpreter/report behavior
-- DOCX writer unit tests
-- Golden IR snapshot tests over all fixtures
-- CLI contract tests for exit codes/strict mode/invalid input
-- DOCX integration tests for end-to-end conversion
+### Test Layers
 
-Golden update command:
+1. **Core unit tests** - Tokenizer/interpreter/report behavior
+2. **DOCX writer unit tests** - XML generation
+3. **Golden IR snapshot tests** - IR validation over all fixtures
+4. **CLI contract tests** - Exit codes, strict mode, warning semantics (83 tests)
+5. **Determinism tests** - IR/report/DOCX stability verification (35 tests)
+6. **Limits tests** - Safety and resource protection (34 tests)
+7. **DOCX integration tests** - End-to-end conversion validation
+
+### Test Counts (Phase 6)
+
+- Total tests: 300+
+- Contract tests: 83
+- Determinism tests: 35
+- Limits tests: 34
+- Golden fixtures: 44
+
+### Golden Update Command
 
 ```bash
 UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests
 ```
 
-## Known gaps
+### Fixture Categories
+
+Fixtures are organized by category:
+
+- `text_*` - Text and formatting tests
+- `list_*` - List structure tests
+- `table_*` - Table structure tests
+- `mixed_*` - Combined content tests
+- `malformed_*` - Error recovery tests
+- `limits_*` - Limit boundary tests
+
+## Known Gaps
 
 - Limited RTF feature coverage (no images as IR blocks)
+- No hyperlinks/fields as first-class output
 - DOCX output supports basic text formatting, lists, and tables
-- Table support includes cell merging and vertical alignment (Phase 5)
-- Row alignment and indent not supported by docx-rs (cosmetic loss only)
+- Row alignment and indent not fully supported by docx-rs (cosmetic loss only)
 - No full RTF spec compliance target
 
 ## References
@@ -205,4 +273,8 @@ UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests
 - [Phase 4 IR Design](phase4-ir-design.md)
 - [Phase 5 Specification](../specs/PHASE5.md)
 - [Phase 5 IR Design](phase5-ir-design.md)
+- [Phase 6 Specification](../specs/PHASE6.md)
 - [Initial Description](../specs/INITIAL_DESCRIPTION.md)
+- [Limits Policy](../limits-policy.md)
+- [Warning Reference](../warning-reference.md)
+- [Feature Support Matrix](../feature-support.md)

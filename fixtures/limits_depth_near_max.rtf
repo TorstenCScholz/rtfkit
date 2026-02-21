@@ -1,0 +1,10 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Times New Roman;}}
+\viewkind4\uc1\pard\f0\fs24
+
+% Limits test: Group nesting near max_group_depth (256)
+% This fixture has 10 nested groups as a representative test (actual near-limit would be 255)
+% Tests that the parser handles deep nesting correctly
+
+{\b {\i {\ul {\super {\sub {\strike {\scaps {\caps {\cf1 Deeply nested text}}}}}}}}}
+}

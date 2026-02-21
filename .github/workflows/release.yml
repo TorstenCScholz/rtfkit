@@ -1,79 +1,387 @@
+# Release Pipeline for rtfkit
+# Triggered on version tags (v*)
+# Builds cross-platform binaries, runs smoke tests, generates checksums, creates GitHub release
+
 name: Release
 
 on:
   push:
-    tags: ["v*"]
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
+  # ============================================
+  # Validate - Ensure tag format is correct
+  # ============================================
+  validate:
+    name: Validate Release Tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+      prerelease: ${{ steps.parse.outputs.prerelease }}
+    steps:
+      - name: Parse version from tag
+        id: parse
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+          # Validate accepted tag formats:
+          # - vX.Y.Z
+          # - vX.Y.Z-rc.N
+          # - vX.Y.Z-beta.N
+          # - vX.Y.Z-alpha.N
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-((alpha|beta|rc)\.[0-9]+))?$ ]]; then
+            echo "::error::Invalid release tag format: $TAG"
+            echo "::error::Expected: vX.Y.Z or vX.Y.Z-{alpha|beta|rc}.N"
+            exit 1
+          fi
+          
+          # Extract version without 'v' prefix
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Check if this is a prerelease
+          if [[ "$VERSION" =~ -(alpha|beta|rc)\. ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "📋 This is a prerelease: $TAG"
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "📦 This is a stable release: $TAG"
+          fi
+
+  # ============================================
+  # Build - Cross-platform release binaries
+  # ============================================
   build:
-    name: ${{ matrix.target }}
+    name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
+            artifact-name: rtfkit-x86_64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact-name: rtfkit-aarch64-unknown-linux-gnu
           - target: x86_64-apple-darwin
-            os: macos-latest
+            os: macos-13
+            artifact-name: rtfkit-x86_64-apple-darwin
           - target: aarch64-apple-darwin
-            os: macos-latest
+            os: macos-14
+            artifact-name: rtfkit-aarch64-apple-darwin
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            artifact-name: rtfkit-x86_64-pc-windows-msvc
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
           targets: ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
         with:
-          key: ${{ matrix.target }}
+          key: ${{ matrix.target }}-release
 
-      - name: Build
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Configure cross-compilation (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          mkdir -p ~/.cargo
+          echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config.toml
+          echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config.toml
+
+      - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }} -p rtfkit
 
-      - name: Package (Unix)
+      - name: Strip binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+            aarch64-linux-gnu-strip target/${{ matrix.target }}/release/rtfkit
+          else
+            strip target/${{ matrix.target }}/release/rtfkit
+          fi
+
+      - name: Package binary (Unix)
         if: runner.os != 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf ../../../rtfkit-${{ matrix.target }}.tar.gz rtfkit
+          tar czf ../../../${{ matrix.artifact-name }}.tar.gz rtfkit
           cd ../../..
+          echo "✅ Created artifact: ${{ matrix.artifact-name }}.tar.gz"
 
-      - name: Package (Windows)
+      - name: Package binary (Windows)
         if: runner.os == 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          7z a ../../../rtfkit-${{ matrix.target }}.zip rtfkit.exe
+          7z a ../../../${{ matrix.artifact-name }}.zip rtfkit.exe
           cd ../../..
+          echo "✅ Created artifact: ${{ matrix.artifact-name }}.zip"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Generate checksum (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          sha256sum ${{ matrix.artifact-name }}.tar.gz > ${{ matrix.artifact-name }}.tar.gz.sha256
+          echo "✅ Generated checksum: ${{ matrix.artifact-name }}.tar.gz.sha256"
+
+      - name: Generate checksum (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          certutil -hashfile ${{ matrix.artifact-name }}.zip SHA256 > ${{ matrix.artifact-name }}.zip.sha256
+          echo "✅ Generated checksum: ${{ matrix.artifact-name }}.zip.sha256"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: rtfkit-${{ matrix.target }}
-          path: rtfkit-${{ matrix.target }}.*
+          name: ${{ matrix.artifact-name }}
+          path: |
+            ${{ matrix.artifact-name }}.*
+          retention-days: 30
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
+  # ============================================
+  # Smoke Test - Verify binaries work before release
+  # ============================================
+  smoke-test:
+    name: Smoke Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [validate, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact-name: rtfkit-x86_64-unknown-linux-gnu
+            binary-name: rtfkit
+            emulate_arm64: false
+          - os: ubuntu-latest
+            artifact-name: rtfkit-aarch64-unknown-linux-gnu
+            binary-name: rtfkit
+            emulate_arm64: true
+          - os: macos-13
+            artifact-name: rtfkit-x86_64-apple-darwin
+            binary-name: rtfkit
+            emulate_arm64: false
+          - os: macos-14
+            artifact-name: rtfkit-aarch64-apple-darwin
+            binary-name: rtfkit
+            emulate_arm64: false
+          - os: windows-latest
+            artifact-name: rtfkit-x86_64-pc-windows-msvc
+            binary-name: rtfkit.exe
+            emulate_arm64: false
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/download-artifact@v4
+      - name: Download build artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          path: artifacts
-          merge-multiple: true
+          name: ${{ matrix.artifact-name }}
+          path: ./artifacts
+
+      - name: Extract binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd artifacts
+          tar xzf ${{ matrix.artifact-name }}.tar.gz
+          chmod +x rtfkit
+
+      - name: Extract binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd artifacts
+          7z x ${{ matrix.artifact-name }}.zip
+
+      - name: Verify checksum (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd artifacts
+          sha256sum -c ${{ matrix.artifact-name }}.tar.gz.sha256 || exit 1
+          echo "✅ Checksum verified"
+
+      - name: Verify checksum (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd artifacts
+          # Read expected hash (second line of certutil output)
+          $expected = (Get-Content ${{ matrix.artifact-name }}.zip.sha256)[1].Trim()
+          $actual = (Get-FileHash ${{ matrix.artifact-name }}.zip -Algorithm SHA256).Hash
+          if ($expected -ne $actual) {
+            Write-Error "Checksum mismatch! Expected: $expected, Actual: $actual"
+            exit 1
+          }
+          Write-Host "✅ Checksum verified"
+
+      - name: Install ARM64 emulation tools (Linux)
+        if: matrix.emulate_arm64 == true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user gcc-aarch64-linux-gnu
+
+      - name: Create ARM64 emulation wrapper (Linux)
+        if: matrix.emulate_arm64 == true
+        run: |
+          cat > ./artifacts/rtfkit-emulated <<'EOF'
+          #!/usr/bin/env bash
+          exec qemu-aarch64 -L /usr/aarch64-linux-gnu ./artifacts/rtfkit "$@"
+          EOF
+          chmod +x ./artifacts/rtfkit-emulated
+
+      - name: Run smoke test (Unix)
+        if: runner.os != 'Windows' && matrix.emulate_arm64 != true
+        run: |
+          chmod +x scripts/smoke_test.sh
+          ./scripts/smoke_test.sh ./artifacts/rtfkit
+
+      - name: Run smoke test (Linux ARM64 via emulation)
+        if: matrix.emulate_arm64 == true
+        run: |
+          chmod +x scripts/smoke_test.sh
+          ./scripts/smoke_test.sh ./artifacts/rtfkit-emulated
+
+      - name: Run smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/smoke_test.ps1 -BinaryPath ./artifacts/rtfkit.exe
+
+  # ============================================
+  # Create Release - GitHub release with artifacts
+  # ============================================
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, build, smoke-test]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: ./artifacts
+          merge-multiple: false
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          # Move all artifacts to release-assets directory
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" \) -exec cp {} release-assets/ \;
+          echo "📦 Release assets prepared:"
+          ls -la release-assets/
+
+      - name: Generate combined checksums file
+        run: |
+          cd release-assets
+          sha256sum *.tar.gz *.zip > SHA256SUMS
+          echo "📝 Generated combined checksums:"
+          cat SHA256SUMS
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          
+          # Try to extract changelog entry for this version
+          if [ -f CHANGELOG.md ]; then
+            # Extract section for this version (between ## [version] and next ##)
+            CHANGELOG=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | head -n -1 | tail -n +2)
+            
+            if [ -z "$CHANGELOG" ]; then
+              # Try alternate format (## version without brackets)
+              CHANGELOG=$(sed -n "/^## $VERSION/,/^## /p" CHANGELOG.md | head -n -1 | tail -n +2)
+            fi
+            
+            if [ -n "$CHANGELOG" ]; then
+              echo "changelog<<EOF" >> $GITHUB_OUTPUT
+              echo "$CHANGELOG" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+            else
+              echo "changelog=No changelog entry found for version $VERSION" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "changelog=Changelog file not found" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
         with:
+          name: rtfkit ${{ needs.validate.outputs.version }}
+          body: |
+            ## rtfkit ${{ needs.validate.outputs.version }}
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## Installation
+            
+            Download the appropriate archive for your platform:
+            
+            | Platform | Architecture | Download |
+            |----------|-------------|----------|
+            | Linux | x86_64 | `rtfkit-x86_64-unknown-linux-gnu.tar.gz` |
+            | Linux | ARM64 | `rtfkit-aarch64-unknown-linux-gnu.tar.gz` |
+            | macOS | Intel | `rtfkit-x86_64-apple-darwin.tar.gz` |
+            | macOS | Apple Silicon | `rtfkit-aarch64-apple-darwin.tar.gz` |
+            | Windows | x86_64 | `rtfkit-x86_64-pc-windows-msvc.zip` |
+            
+            ### Verify Checksums
+            
+            After downloading, verify the checksum matches the corresponding `.sha256` file or check against `SHA256SUMS`.
+            
+            ```bash
+            # Linux/macOS
+            sha256sum rtfkit-*.tar.gz
+            
+            # macOS (alternatively)
+            shasum -a 256 rtfkit-*.tar.gz
+            
+            # Windows (PowerShell)
+            Get-FileHash rtfkit-*.zip -Algorithm SHA256
+            ```
+            
+            ## What's Changed
+            
+            See the [changelog](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for full details.
+          draft: false
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
           generate_release_notes: true
-          files: artifacts/*
+          files: |
+            release-assets/*
+          fail_on_unmatched_files: false
+
+      - name: Release Summary
+        run: |
+          echo "## 🎉 Release Created Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Prerelease:** ${{ needs.validate.outputs.prerelease }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          ls -la release-assets/ >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }})" >> $GITHUB_STEP_SUMMARY

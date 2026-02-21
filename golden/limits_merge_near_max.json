@@ -1,0 +1,39 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "% Limits test: Merge span near max_merge_span (1000)% This fixture has a small merge as a representative test% Tests that the parser handles merge spans correctlyMerged cell",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880,
+              "merge": {
+                "horizontal_start": {
+                  "span": 2
+                }
+              }
+            },
+            {
+              "width_twips": 2880,
+              "merge": "horizontal_continue"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

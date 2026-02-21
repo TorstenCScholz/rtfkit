@@ -1,0 +1,183 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "% Limits test: Row with cells near max_cells_per_row (1000)% This fixture has 10 cells as a representative test (actual near-limit would be 999)% Tests that the parser handles large cell counts correctlyC1",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 720
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "C2",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 720
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "C3",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 720
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "C4",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 720
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "C5",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 720
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "C6",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 720
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "C7",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 720
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "C8",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 720
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "C9",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 720
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "C10",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 720
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

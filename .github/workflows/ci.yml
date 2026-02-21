@@ -1,3 +1,7 @@
+# CI Pipeline for rtfkit
+# Runs on all pushes to main/master and all pull requests
+# Matrix: Ubuntu, macOS, Windows
+
 name: CI
 
 on:
@@ -8,30 +12,295 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
-  check:
-    name: ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-
+  # ============================================
+  # Format Check - Fast feedback, single platform
+  # ============================================
+  fmt:
+    name: Format Check
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
-          components: rustfmt, clippy
+          toolchain: stable
+          components: rustfmt
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
 
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Clippy
+  # ============================================
+  # Clippy Lint - Fast feedback, single platform
+  # ============================================
+  clippy:
+    name: Clippy Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          components: clippy
+
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
+
+      - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Tests
-        run: cargo test --all
+  # ============================================
+  # Test Suite - Cross-platform matrix
+  # ============================================
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [fmt, clippy]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Run tests
+        run: cargo test --all --all-features
+
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-failures-${{ matrix.os }}
+          path: |
+            target/debug/test-*.log
+            target/debug/**/*.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ============================================
+  # Build - Cross-platform matrix with artifacts
+  # ============================================
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    needs: [fmt, clippy]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact-name: rtfkit-x86_64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact-name: rtfkit-aarch64-unknown-linux-gnu
+          - target: x86_64-apple-darwin
+            os: macos-13
+            artifact-name: rtfkit-x86_64-apple-darwin
+          - target: aarch64-apple-darwin
+            os: macos-14
+            artifact-name: rtfkit-aarch64-apple-darwin
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact-name: rtfkit-x86_64-pc-windows-msvc
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Configure cross-compilation (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          mkdir -p ~/.cargo
+          echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config.toml
+          echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config.toml
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} -p rtfkit
+
+      - name: Package binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../${{ matrix.artifact-name }}.tar.gz rtfkit
+          cd ../../..
+          echo "Artifact created: ${{ matrix.artifact-name }}.tar.gz"
+
+      - name: Package binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a ../../../${{ matrix.artifact-name }}.zip rtfkit.exe
+          cd ../../..
+          echo "Artifact created: ${{ matrix.artifact-name }}.zip"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-name }}.*
+          retention-days: 7
+
+  # ============================================
+  # Smoke Test - Verify built binaries work
+  # ============================================
+  smoke-test:
+    name: Smoke Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact-name: rtfkit-x86_64-unknown-linux-gnu
+            binary-name: rtfkit
+            emulate_arm64: false
+          - os: ubuntu-latest
+            artifact-name: rtfkit-aarch64-unknown-linux-gnu
+            binary-name: rtfkit
+            emulate_arm64: true
+          - os: macos-13
+            artifact-name: rtfkit-x86_64-apple-darwin
+            binary-name: rtfkit
+            emulate_arm64: false
+          - os: macos-14
+            artifact-name: rtfkit-aarch64-apple-darwin
+            binary-name: rtfkit
+            emulate_arm64: false
+          - os: windows-latest
+            artifact-name: rtfkit-x86_64-pc-windows-msvc
+            binary-name: rtfkit.exe
+            emulate_arm64: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ./artifacts
+
+      - name: Extract binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd artifacts
+          tar xzf ${{ matrix.artifact-name }}.tar.gz
+          chmod +x rtfkit
+
+      - name: Extract binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd artifacts
+          7z x ${{ matrix.artifact-name }}.zip
+
+      - name: Install ARM64 emulation tools (Linux)
+        if: matrix.emulate_arm64 == true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user gcc-aarch64-linux-gnu
+
+      - name: Create ARM64 emulation wrapper (Linux)
+        if: matrix.emulate_arm64 == true
+        run: |
+          cat > ./artifacts/rtfkit-emulated <<'EOF'
+          #!/usr/bin/env bash
+          exec qemu-aarch64 -L /usr/aarch64-linux-gnu ./artifacts/rtfkit "$@"
+          EOF
+          chmod +x ./artifacts/rtfkit-emulated
+
+      - name: Run smoke test (Unix)
+        if: runner.os != 'Windows' && matrix.emulate_arm64 != true
+        run: |
+          chmod +x scripts/smoke_test.sh
+          ./scripts/smoke_test.sh ./artifacts/rtfkit
+
+      - name: Run smoke test (Linux ARM64 via emulation)
+        if: matrix.emulate_arm64 == true
+        run: |
+          chmod +x scripts/smoke_test.sh
+          ./scripts/smoke_test.sh ./artifacts/rtfkit-emulated
+
+      - name: Run smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/smoke_test.ps1 -BinaryPath ./artifacts/rtfkit.exe
+
+  # ============================================
+  # CI Summary - Final status check
+  # ============================================
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [fmt, clippy, test, build, smoke-test]
+    if: always()
+    steps:
+      - name: Check overall CI status
+        run: |
+          echo "## CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Format Check | ${{ needs.fmt.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Clippy Lint | ${{ needs.clippy.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ needs.build.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Smoke Test | ${{ needs.smoke-test.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Fail if any required job failed
+          if [[ "${{ needs.fmt.result }}" != "success" || "${{ needs.clippy.result }}" != "success" || "${{ needs.test.result }}" != "success" || "${{ needs.build.result }}" != "success" || "${{ needs.smoke-test.result }}" != "success" ]]; then
+            echo "❌ CI failed - one or more jobs did not succeed"
+            exit 1
+          fi
+          echo "✅ All CI jobs passed successfully"

@@ -1,0 +1,21 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Times New Roman;}}
+\viewkind4\uc1\pard\f0\fs24
+
+% Malformed RTF with deeply nested groups (valid but complex)
+% Tests parser's handling of deep nesting and group boundaries
+
+\par First paragraph.\par
+
+{\b This bold text is in a group}
+\par Normal text after group.\par
+
+{\i {\b Bold and italic}}
+\par Normal text.\par
+
+{{\ul Double nested underline}}
+\par Normal text.\par
+
+{\super {\i {\b Superscript bold italic}}}
+\par Final paragraph.\par
+}

@@ -1,0 +1,191 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "% Mixed content with nested structures: table with lists in multiple cells% Tests nested list inside table cells",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Document with nested list in table:",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "Simple cell",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "Item A",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                },
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "Item B",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                },
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "Item C",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "Another simple cell",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "Row 2 Cell 1",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "Nested item 1",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                },
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "Nested item 2",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "Row 2 Cell 3",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "runs": [
+        {
+          "text": "Paragraph after table.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}

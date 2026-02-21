@@ -123,7 +123,7 @@ fn golden_ir_output() {
 
 #[test]
 fn test_simple_paragraph_content() {
-    let input = include_str!("../../../fixtures/simple_paragraph.rtf");
+    let input = include_str!("../../../fixtures/text_simple_paragraph.rtf");
     let (doc, _report) = Interpreter::parse(input).unwrap();
 
     assert_eq!(doc.blocks.len(), 1, "Should have exactly one paragraph");
@@ -138,7 +138,7 @@ fn test_simple_paragraph_content() {
 
 #[test]
 fn test_bold_italic_formatting() {
-    let input = include_str!("../../../fixtures/bold_italic.rtf");
+    let input = include_str!("../../../fixtures/text_bold_italic.rtf");
     let (doc, _report) = Interpreter::parse(input).unwrap();
 
     assert!(!doc.blocks.is_empty(), "Document should have content");
@@ -162,7 +162,7 @@ fn test_bold_italic_formatting() {
 
 #[test]
 fn test_underline_formatting() {
-    let input = include_str!("../../../fixtures/underline.rtf");
+    let input = include_str!("../../../fixtures/text_underline.rtf");
     let (doc, _report) = Interpreter::parse(input).unwrap();
 
     let has_underline = doc.blocks.iter().any(|b| {
@@ -176,7 +176,7 @@ fn test_underline_formatting() {
 
 #[test]
 fn test_alignment() {
-    let input = include_str!("../../../fixtures/alignment.rtf");
+    let input = include_str!("../../../fixtures/text_alignment.rtf");
     let (doc, _report) = Interpreter::parse(input).unwrap();
 
     use rtfkit_core::Alignment;
@@ -200,7 +200,7 @@ fn test_alignment() {
 
 #[test]
 fn test_multiple_paragraphs() {
-    let input = include_str!("../../../fixtures/multiple_paragraphs.rtf");
+    let input = include_str!("../../../fixtures/text_multiple_paragraphs.rtf");
     let (doc, _report) = Interpreter::parse(input).unwrap();
 
     assert!(doc.blocks.len() >= 2, "Should have at least 2 paragraphs");
@@ -208,7 +208,7 @@ fn test_multiple_paragraphs() {
 
 #[test]
 fn test_empty_document() {
-    let input = include_str!("../../../fixtures/empty.rtf");
+    let input = include_str!("../../../fixtures/text_empty.rtf");
     let (doc, _report) = Interpreter::parse(input).unwrap();
 
     // Empty RTF should produce an empty document
@@ -225,7 +225,7 @@ fn test_empty_document() {
 
 #[test]
 fn test_nested_styles() {
-    let input = include_str!("../../../fixtures/nested_styles.rtf");
+    let input = include_str!("../../../fixtures/text_nested_styles.rtf");
     let (doc, _report) = Interpreter::parse(input).unwrap();
 
     // Nested styles should be handled correctly
@@ -253,7 +253,7 @@ fn test_nested_styles() {
 
 #[test]
 fn test_mixed_formatting() {
-    let input = include_str!("../../../fixtures/mixed_formatting.rtf");
+    let input = include_str!("../../../fixtures/text_mixed_formatting.rtf");
     let (doc, _report) = Interpreter::parse(input).unwrap();
 
     // Mixed formatting should produce multiple runs with different styles
@@ -268,7 +268,7 @@ fn test_mixed_formatting() {
 
 #[test]
 fn test_complex_document() {
-    let input = include_str!("../../../fixtures/complex.rtf");
+    let input = include_str!("../../../fixtures/mixed_complex.rtf");
     let (doc, report) = Interpreter::parse(input).unwrap();
 
     // Complex document should parse without errors
@@ -470,7 +470,7 @@ fn test_list_mixed_kinds() {
 
 #[test]
 fn test_list_malformed_fallback() {
-    let input = include_str!("../../../fixtures/list_malformed_fallback.rtf");
+    let input = include_str!("../../../fixtures/malformed_list_fallback.rtf");
     let (doc, _report) = Interpreter::parse(input).unwrap();
 
     // Malformed list references should still produce content

@@ -2,17 +2,21 @@
 
 RTF parsing toolkit with a CLI-first workflow.
 
-Current status (Phase 4):
-- Parses RTF into a deterministic intermediate representation (IR)
-- Converts RTF to DOCX via `-o/--output` flag
-- Supports bullet and decimal lists with nested levels (up to 8)
-- Supports basic tables with rows, cells, and content preservation
-- Emits conversion reports (`text` or `json`)
-- Supports `--emit-ir` for snapshot/debug workflows
-- Parser limits for safety (input size, depth, warnings)
-- See [RTF Feature Overview](docs/rtf-feature-overview.md) for supported vs. not-yet-supported features
-
 [![CI](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml/badge.svg)](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml)
+
+## Current Status (Phase 6)
+
+rtfkit provides a complete RTF-to-DOCX conversion pipeline with:
+
+- **Text extraction** with formatting preservation (bold, italic, underline, alignment)
+- **List support** - bullet and decimal lists with nested levels (up to 8)
+- **Table support** - rows, cells, horizontal/vertical merges, cell alignment
+- **Conversion reports** - JSON or text format with warnings and statistics
+- **IR emission** - `--emit-ir` for snapshot/debug workflows
+- **Parser limits** - safety limits for input size, depth, and warnings
+- **Strict mode** - fail on dropped content for quality assurance
+
+See [RTF Feature Overview](docs/rtf-feature-overview.md) for supported vs. not-yet-supported features.
 
 ## Install
 
@@ -34,16 +38,16 @@ rtfkit convert input.rtf -o output.docx
 rtfkit convert input.rtf -o output.docx --force
 
 # Human-readable report (stdout)
-rtfkit convert fixtures/simple_paragraph.rtf
+rtfkit convert fixtures/text_simple_paragraph.rtf
 
 # JSON report (stdout)
-rtfkit convert fixtures/simple_paragraph.rtf --format json
+rtfkit convert fixtures/text_simple_paragraph.rtf --format json
 
 # Emit IR JSON to file
-rtfkit convert fixtures/simple_paragraph.rtf --emit-ir out.json
+rtfkit convert fixtures/text_simple_paragraph.rtf --emit-ir out.json
 
 # Strict mode: fail when dropped content is reported
-rtfkit convert fixtures/complex.rtf --strict --format json
+rtfkit convert fixtures/mixed_complex.rtf --strict --format json
 ```
 
 ### Exit Codes
@@ -51,19 +55,24 @@ rtfkit convert fixtures/complex.rtf --strict --format json
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 2 | Parse/validation error (invalid RTF) |
+| 2 | Parse/validation error (invalid RTF or limit violation) |
 | 3 | Writer/IO failure (e.g., cannot write output file) |
 | 4 | Strict-mode violation (dropped content detected) |
 
 ### Parser Limits
 
-For safety, the parser enforces these limits:
+For safety, the parser enforces these limits (see [Limits Policy](docs/limits-policy.md)):
 
-- Maximum input size: 10 MB
-- Maximum group depth: 256 levels
-- Maximum warnings: 1000
+| Limit | Default | Purpose |
+|-------|---------|---------|
+| Maximum input size | 10 MB | Prevents memory exhaustion |
+| Maximum group depth | 256 levels | Prevents stack overflow |
+| Maximum warnings | 1000 | Prevents unbounded memory growth |
+| Maximum rows per table | 10,000 | Prevents resource exhaustion |
+| Maximum cells per row | 1,000 | Prevents resource exhaustion |
+| Maximum merge span | 1,000 cells | Limits merged regions |
 
-## Output contract
+## Output Contract
 
 ### Report JSON
 
@@ -79,17 +88,24 @@ For safety, the parser enforces these limits:
 }
 ```
 
-`warnings` can contain:
-- `unsupported_control_word`
-- `unknown_destination`
-- `dropped_content`
-- `unsupported_list_control`
-- `unresolved_list_override`
-- `unsupported_nesting_level`
-- `unsupported_table_control`
-- `malformed_table_structure`
-- `unclosed_table_cell`
-- `unclosed_table_row`
+### Warning Types
+
+| Type | Meaning | Strict Mode |
+|------|---------|-------------|
+| `unsupported_control_word` | RTF control not yet implemented | No failure |
+| `unknown_destination` | RTF destination skipped | No failure |
+| `dropped_content` | Content could not be represented | **Fails** |
+| `unsupported_list_control` | List control not fully supported | No failure |
+| `unresolved_list_override` | List reference not found | **Fails** |
+| `unsupported_nesting_level` | List level > 8 clamped | No failure |
+| `unsupported_table_control` | Table control not mapped | No failure |
+| `malformed_table_structure` | Table structure issue | May fail |
+| `unclosed_table_cell` | Missing `\cell` terminator | May fail |
+| `unclosed_table_row` | Missing `\row` terminator | May fail |
+| `merge_conflict` | Merge semantics conflict | **Fails** |
+| `table_geometry_conflict` | Invalid table geometry | **Fails** |
+
+See [Warning Reference](docs/warning-reference.md) for detailed documentation.
 
 ### IR JSON (`--emit-ir`)
 
@@ -138,6 +154,27 @@ List example:
 }
 ```
 
+Table example:
+```json
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [{"type": "paragraph", "alignment": "left", "runs": [{"text": "Cell 1"}]}],
+              "width_twips": 1440
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
 ## Development
 
 ```sh
@@ -154,14 +191,38 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --all
 ```
 
-## Limitations (v0.4)
+## Testing
 
-- Partial RTF coverage only (focused on common text/style cases)
-- No images as first-class IR blocks yet
-- DOCX output supports basic text formatting (bold, italic, underline, alignment), lists, and tables
+rtfkit has comprehensive test coverage:
+
+- **Contract tests** - Exit codes, strict mode, warning semantics
+- **Determinism tests** - IR/report/DOCX stability verification
+- **Limits tests** - Safety and resource protection
+- **Golden tests** - IR snapshot validation
+- **DOCX integration tests** - End-to-end conversion verification
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the fixture-first contribution workflow.
+
+## Limitations (v0.6)
+
+- Partial RTF coverage (focused on common text/style cases)
+- No images as first-class IR blocks
+- No hyperlinks/fields as first-class output
+- DOCX output supports basic text formatting, lists, and tables
 - List nesting limited to 8 levels (DOCX compatibility)
-- Table support is basic: no cell merging, complex borders, or nested tables
-- For up-to-date support details, see [RTF Feature Overview](docs/rtf-feature-overview.md)
+- Row alignment and indent not fully supported by docx-rs (cosmetic loss only)
+
+For up-to-date support details, see [RTF Feature Overview](docs/rtf-feature-overview.md) and [Feature Support Matrix](docs/feature-support.md).
+
+## Documentation
+
+- [Architecture Overview](docs/arch/README.md)
+- [RTF Feature Overview](docs/rtf-feature-overview.md)
+- [Feature Support Matrix](docs/feature-support.md)
+- [Warning Reference](docs/warning-reference.md)
+- [Limits Policy](docs/limits-policy.md)
+- [Contributing Guide](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
 
 ## License
 

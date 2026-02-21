@@ -1,0 +1,28 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Times New Roman;}}
+{\colortbl;\red0\green0\blue0;}
+\viewkind4\uc1\pard\f0\fs24
+
+% Mixed content document: prose, list, and table interleave
+% Tests the parser's ability to handle mixed block types in sequence
+
+\par Introduction paragraph before any structured content.\par
+
+\par \ls1\ilvl0 First list item\par
+\ls1\ilvl0 Second list item\par
+\ls1\ilvl0 Third list item\par
+
+\par Intermediate paragraph between list and table.\par
+
+\par \trowd\cellx2880\cellx5760\intbl Cell 1\cell Cell 2\cell\row
+\trowd\cellx2880\cellx5760\intbl Cell 3\cell Cell 4\cell\row
+
+\par Concluding paragraph after the table.\par
+
+{\listoverridetable
+{\listoverride\listid1\listoverridecount0\ls1}
+{\listtable\listtemplateid1\listhybrid
+{\listlevel\levelnfc23\levelnfcn23\leveljc0\levelfollow0\levelstartat1\levelspace0\levelindent0{\leveltext\'01\u8226?;}{\levelnumbers;}\fi-360\li720\lin720}
+{\listname;}\listid1}
+}
+}

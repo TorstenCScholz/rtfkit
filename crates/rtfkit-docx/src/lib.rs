@@ -1,7 +1,7 @@
 //! DOCX writer for rtfkit IR documents.
 //!
-//! This crate provides functionality to convert rtfkit IR [`Document`] instances
-//! to DOCX format using the `docx-rs` library.
+//! This crate provides functionality to convert rtfkit IR `Document` instances
+//! from `rtfkit_core` to DOCX format using the `docx-rs` library.
 //!
 //! # Overview
 //!

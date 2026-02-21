@@ -1,0 +1,30 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "% Limits test: Merge span exceeding max_merge_span (1000)% This fixture should cause a parse error (exit code 2)% Note: Actual exceed fixture would have 1001 merged cells - this is a placeholderMerged",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

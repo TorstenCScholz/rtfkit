@@ -5,6 +5,83 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - Unreleased
+
+### Added
+
+#### Fixture Taxonomy
+- 44 fixtures organized by category:
+  - `text_*` (9 fixtures) - Text and formatting tests
+  - `list_*` (4 fixtures) - List structure tests
+  - `table_*` (7 fixtures) - Table structure tests
+  - `mixed_*` (3 fixtures) - Combined content tests
+  - `malformed_*` (12 fixtures) - Error recovery tests
+  - `limits_*` (9 fixtures) - Limit boundary tests
+- Golden IR snapshots for all semantic fixtures
+
+#### Contract Tests
+- 83 CLI contract tests covering:
+  - Exit code 0 (success) paths for all content types
+  - Exit code 2 (parse/validation failure) for invalid RTF and limit violations
+  - Exit code 3 (writer/IO failure) for output file issues
+  - Exit code 4 (strict-mode violation) for dropped content detection
+- Warning semantics tests for stable warning types and reason strings
+- Recovery behavior tests for malformed inputs
+
+#### Determinism Tests
+- 35 determinism tests covering:
+  - Report JSON ordering and value stability
+  - IR JSON byte stability for same input
+  - `word/document.xml` stability (excluding ZIP metadata)
+- Tests for representative fixtures: simple text, nested lists, merge-heavy tables, degraded input
+
+#### Limits Tests
+- 34 limits tests covering:
+  - `max_input_bytes` (10 MB default)
+  - `max_group_depth` (256 levels)
+  - `max_warning_count` (1000 warnings)
+  - `max_rows_per_table` (10,000 rows)
+  - `max_cells_per_row` (1,000 cells)
+  - `max_merge_span` (1,000 cells)
+- Near-limit success tests and over-limit failure tests
+- No-partial-output verification after fatal limit failure
+
+#### CI/CD Improvements
+- Cross-platform CI matrix (Ubuntu, macOS, Windows)
+- Release automation with artifact verification
+- Smoke test scripts for release validation
+
+#### Documentation
+- Feature support matrix (`docs/feature-support.md`)
+- Warning reference documentation (`docs/warning-reference.md`)
+- Updated limits policy with table-specific limits
+- Updated architecture documentation for Phase 6
+- Fixture-first contribution workflow in CONTRIBUTING.md
+
+### Changed
+
+- Warning cap now preserves `DroppedContent` signal for strict mode
+- All limit violations now map consistently to exit code 2
+- Documentation synchronized with implemented behavior
+
+### Fixed
+
+- Deterministic output for all supported content types
+- Consistent exit code behavior across platforms
+- Warning reason string stability for key warning types
+
+### Test Summary
+
+| Category | Count |
+|----------|-------|
+| Contract tests | 83 |
+| Determinism tests | 35 |
+| Limits tests | 34 |
+| Golden fixtures | 44 |
+| DOCX integration tests | 30+ |
+| Core unit tests | 100+ |
+| **Total** | **300+** |
+
 ## [0.5.0] - Unreleased
 
 ### Added

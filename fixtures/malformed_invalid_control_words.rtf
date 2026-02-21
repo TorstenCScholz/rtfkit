@@ -1,0 +1,21 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Times New Roman;}}
+\viewkind4\uc1\pard\f0\fs24
+
+% Malformed RTF with invalid/unknown control words
+% Tests parser's handling of unknown control words with graceful degradation
+
+\par First normal paragraph.\par
+
+\par Text with \unknowncontrol unknown control word.\par
+
+\par Another \invalid123 invalid control.\par
+
+\par \bogusparam42 Text after bogus param.\par
+
+\par \customformat Custom formatted text.\par
+
+\par \zzzzz Z-control test.\par
+
+\par Final normal paragraph.\par
+}
