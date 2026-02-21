@@ -18,6 +18,52 @@ fn invalid_rtf_returns_parse_exit_code() {
 }
 
 #[test]
+fn table_cell_limit_violation_returns_parse_exit_code() {
+    let dir = tempdir().unwrap();
+    let input = dir.path().join("too_wide.rtf");
+
+    // Default max_cells_per_row is 1000; this row has 1001 cells.
+    let mut rtf = String::from("{\\rtf1\\ansi\\n\\trowd");
+    for i in 1..=1001 {
+        rtf.push_str(&format!("\\cellx{}", i * 1000));
+    }
+    rtf.push_str("\\n\\intbl ");
+    for i in 1..=1001 {
+        rtf.push_str(&format!("C{}\\cell ", i));
+    }
+    rtf.push_str("\\row\\n}");
+    fs::write(&input, rtf).unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args(["convert", input.to_str().unwrap(), "--format", "json"]);
+    cmd.assert()
+        .failure()
+        .code(2)
+        .stderr(contains("Parse error"));
+}
+
+#[test]
+fn table_row_limit_violation_returns_parse_exit_code() {
+    let dir = tempdir().unwrap();
+    let input = dir.path().join("too_many_rows.rtf");
+
+    // Default max_rows_per_table is 10000; generate one more.
+    let mut rtf = String::from("{\\rtf1\\ansi\\n");
+    for i in 1..=10001 {
+        rtf.push_str(&format!("\\trowd\\cellx1000\\intbl R{}\\cell\\row\\n", i));
+    }
+    rtf.push('}');
+    fs::write(&input, rtf).unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args(["convert", input.to_str().unwrap(), "--format", "json"]);
+    cmd.assert()
+        .failure()
+        .code(2)
+        .stderr(contains("Parse error"));
+}
+
+#[test]
 fn strict_mode_fails_on_dropped_destination_content() {
     let dir = tempdir().unwrap();
     let input = dir.path().join("destination.rtf");
@@ -416,4 +462,309 @@ fn test_table_missing_cell_terminator_non_strict_succeeds() {
     cmd.args(["convert", fixture.to_str().unwrap(), "--format", "json"]);
     // Should succeed (exit code 0) with warnings in output
     cmd.assert().success().stdout(contains("warnings"));
+}
+
+// =============================================================================
+// Merge Conflict Strict Mode Contract Tests (PHASE5)
+// =============================================================================
+
+#[test]
+fn test_merge_conflict_causes_strict_mode_failure() {
+    // Test that merge conflicts (orphan continuation) cause strict mode failure
+    // Use the orphan_merge_continuation fixture which has proper RTF syntax
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_orphan_merge_continuation.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert()
+        .failure()
+        .code(4)
+        .stderr(contains("Strict mode violated"));
+}
+
+#[test]
+fn test_table_geometry_conflict_causes_strict_mode_failure() {
+    // Test that table geometry conflicts (span exceeding bounds) cause strict mode failure
+    let dir = tempdir().unwrap();
+    let input = dir.path().join("geometry_conflict.rtf");
+
+    // Create RTF with merge span exceeding available cells
+    // This should trigger TableGeometryConflict + DroppedContent
+    // Note: clmrg must come before cellx in the row definition
+    let rtf = r#"{\rtf1\ansi
+\trowd\clmgf\cellx2880\clmrg\cellx5760\clmrg\cellx8640\clmrg\cellx11520
+\intbl Cell 1\cell \cell \cell\row
+}"#;
+    fs::write(&input, rtf).unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        input.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert()
+        .failure()
+        .code(4)
+        .stderr(contains("Strict mode violated"));
+}
+
+#[test]
+fn test_merge_conflict_non_strict_succeeds_with_warnings() {
+    // Test that merge conflicts succeed in non-strict mode with warnings
+    // Use the orphan_merge_continuation fixture which has proper RTF syntax
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_orphan_merge_continuation.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args(["convert", fixture.to_str().unwrap(), "--format", "json"]);
+    // Should succeed with warnings in output
+    cmd.assert()
+        .success()
+        .stdout(contains("merge_conflict"))
+        .stdout(contains("dropped_content"));
+}
+
+// =============================================================================
+// Determinism Contract Tests (PHASE5)
+// =============================================================================
+
+#[test]
+fn test_deterministic_output_for_merge_tables() {
+    // Run conversion twice on a table with merge, verify identical output
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_horizontal_merge_valid.rtf");
+
+    // First conversion - capture stdout for JSON format
+    let mut cmd1 = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd1.args(["convert", fixture.to_str().unwrap(), "--format", "json"]);
+    let output1 = cmd1.assert().success().get_output().stdout.clone();
+
+    // Second conversion
+    let mut cmd2 = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd2.args(["convert", fixture.to_str().unwrap(), "--format", "json"]);
+    let output2 = cmd2.assert().success().get_output().stdout.clone();
+
+    // Compare outputs
+    assert_eq!(
+        output1, output2,
+        "JSON output should be deterministic for merge tables"
+    );
+}
+
+#[test]
+fn test_deterministic_output_for_vertical_merge_tables() {
+    // Run conversion twice on a table with vertical merge, verify identical output
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_vertical_merge_valid.rtf");
+
+    // First conversion - capture stdout for JSON format
+    let mut cmd1 = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd1.args(["convert", fixture.to_str().unwrap(), "--format", "json"]);
+    let output1 = cmd1.assert().success().get_output().stdout.clone();
+
+    // Second conversion
+    let mut cmd2 = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd2.args(["convert", fixture.to_str().unwrap(), "--format", "json"]);
+    let output2 = cmd2.assert().success().get_output().stdout.clone();
+
+    // Compare outputs
+    assert_eq!(
+        output1, output2,
+        "JSON output should be deterministic for vertical merge tables"
+    );
+}
+
+// =============================================================================
+// Large Table Contract Tests (PHASE5)
+// =============================================================================
+
+#[test]
+fn test_large_table_within_limits() {
+    // Test that a large table (20 rows, 5 cells each) processes successfully
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_large_stress.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args(["convert", fixture.to_str().unwrap(), "--format", "json"]);
+    cmd.assert().success();
+}
+
+#[test]
+fn test_large_table_produces_correct_structure() {
+    // Test that a large table produces the correct number of rows and cells
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_large_stress.rtf");
+
+    let dir = tempdir().unwrap();
+    let ir_output = dir.path().join("ir.json");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--emit-ir",
+        ir_output.to_str().unwrap(),
+    ]);
+    cmd.assert().success();
+
+    // Parse IR JSON and verify structure
+    let json = fs::read_to_string(&ir_output).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+    // Check that we have a table block
+    let blocks = parsed.get("blocks").unwrap().as_array().unwrap();
+    assert_eq!(blocks.len(), 1, "Should have exactly one block");
+
+    let table = blocks[0].get("rows").unwrap().as_array().unwrap();
+    assert_eq!(table.len(), 20, "Should have 20 rows");
+
+    // Check first and last row have 5 cells each
+    let first_row = table[0].get("cells").unwrap().as_array().unwrap();
+    assert_eq!(first_row.len(), 5, "First row should have 5 cells");
+
+    let last_row = table[19].get("cells").unwrap().as_array().unwrap();
+    assert_eq!(last_row.len(), 5, "Last row should have 5 cells");
+}
+
+// =============================================================================
+// New Fixture Contract Tests (PHASE5)
+// =============================================================================
+
+#[test]
+fn test_horizontal_merge_valid_strict_succeeds() {
+    // Valid horizontal merge should succeed in strict mode
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_horizontal_merge_valid.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert().success();
+}
+
+#[test]
+fn test_vertical_merge_valid_strict_succeeds() {
+    // Valid vertical merge should succeed in strict mode
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_vertical_merge_valid.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert().success();
+}
+
+#[test]
+fn test_mixed_merge_strict_succeeds() {
+    // Mixed merge should succeed in strict mode
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_mixed_merge.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert().success();
+}
+
+#[test]
+fn test_orphan_merge_continuation_strict_fails() {
+    // Orphan merge continuation should fail in strict mode
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_orphan_merge_continuation.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert()
+        .failure()
+        .code(4)
+        .stderr(contains("Strict mode violated"));
+}
+
+#[test]
+fn test_conflicting_merge_strict_succeeds() {
+    // Conflicting merge chains should succeed (they are resolved deterministically)
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_conflicting_merge.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert().success();
+}
+
+#[test]
+fn test_non_monotonic_cellx_non_strict_succeeds() {
+    // Non-monotonic cellx should succeed in non-strict mode with warnings
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_non_monotonic_cellx.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args(["convert", fixture.to_str().unwrap(), "--format", "json"]);
+    cmd.assert().success().stdout(contains("warnings"));
+}
+
+#[test]
+fn test_prose_interleave_strict_succeeds() {
+    // Prose/table interleave should succeed in strict mode
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_prose_interleave.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert().success();
 }

@@ -7,12 +7,12 @@ use crate::DocxError;
 use docx_rs::{
     AbstractNumbering, AlignmentType, Docx, IndentLevel, Level, LevelJc, LevelText, NumberFormat,
     Numbering, NumberingId, Numberings, Paragraph as DocxParagraph, Run as DocxRun, Start, Table,
-    TableCell, TableRow, WidthType,
+    TableCell, TableRow, VAlignType, VMergeType, WidthType,
 };
 use indexmap::IndexMap;
 use rtfkit_core::{
-    Alignment, Block, Document, ListBlock, ListId, ListKind, Paragraph, Run, TableBlock,
-    TableCell as IrTableCell, TableRow as IrTableRow,
+    Alignment, Block, CellMerge, CellVerticalAlign, Document, ListBlock, ListId, ListKind,
+    Paragraph, Run, TableBlock, TableCell as IrTableCell, TableRow as IrTableRow,
 };
 use std::fs::File;
 use std::io::{Cursor, Write};
@@ -396,18 +396,58 @@ fn convert_table(table: &TableBlock, numbering: &NumberingAllocator) -> Table {
 }
 
 /// Converts an IR TableRow to a docx-rs TableRow.
+///
+/// Handles row properties and horizontal merge normalization.
+///
+/// Valid horizontal continuation cells are skipped because they are
+/// represented by the start cell's gridSpan. Orphan continuation cells
+/// are preserved as standalone cells to avoid silent text loss.
 fn convert_table_row(row: &IrTableRow, numbering: &NumberingAllocator) -> TableRow {
-    let cells: Vec<TableCell> = row
-        .cells
-        .iter()
-        .map(|cell| convert_table_cell(cell, numbering))
-        .collect();
+    let mut cells = Vec::with_capacity(row.cells.len());
+    let mut expected_continuations = 0usize;
+
+    for cell in &row.cells {
+        match cell.merge {
+            Some(CellMerge::HorizontalStart { span }) if span > 1 => {
+                cells.push(convert_table_cell(cell, numbering));
+                expected_continuations = span.saturating_sub(1) as usize;
+            }
+            Some(CellMerge::HorizontalStart { .. }) => {
+                // Defensive: span=0/1 is not a real merge, emit as standalone.
+                expected_continuations = 0;
+                let mut standalone = cell.clone();
+                standalone.merge = None;
+                cells.push(convert_table_cell(&standalone, numbering));
+            }
+            Some(CellMerge::HorizontalContinue) if expected_continuations > 0 => {
+                expected_continuations -= 1;
+            }
+            Some(CellMerge::HorizontalContinue) => {
+                // Orphan continuation: preserve content rather than silently dropping it.
+                let mut standalone = cell.clone();
+                standalone.merge = None;
+                cells.push(convert_table_cell(&standalone, numbering));
+            }
+            _ => {
+                expected_continuations = 0;
+                cells.push(convert_table_cell(cell, numbering));
+            }
+        }
+    }
+
+    // Note: docx-rs does not support row-level justification or left indent directly.
+    // These properties (row_props.alignment, row_props.left_indent) would require
+    // custom XML generation or a different DOCX library.
+    // The row properties are preserved in the IR for potential future use.
+
     TableRow::new(cells)
 }
 
 /// Converts an IR TableCell to a docx-rs TableCell.
 ///
-/// Handles cell content (paragraphs and lists) and width mapping.
+/// Handles cell content (paragraphs and lists), width mapping, merge semantics,
+/// and vertical alignment.
+///
 /// Width is stored in twips in the IR and mapped to DXA for DOCX (1:1 ratio).
 fn convert_table_cell(cell: &IrTableCell, numbering: &NumberingAllocator) -> TableCell {
     let mut docx_cell = TableCell::new();
@@ -417,6 +457,44 @@ fn convert_table_cell(cell: &IrTableCell, numbering: &NumberingAllocator) -> Tab
         // Ensure width is non-negative before casting to usize
         if width_twips >= 0 {
             docx_cell = docx_cell.width(width_twips as usize, WidthType::Dxa);
+        }
+    }
+
+    // Handle merge semantics
+    if let Some(merge) = &cell.merge {
+        match merge {
+            CellMerge::HorizontalStart { span } => {
+                // Set gridSpan for horizontal merge
+                docx_cell = docx_cell.grid_span(*span as usize);
+            }
+            CellMerge::HorizontalContinue => {
+                // This cell is merged with previous - should not appear as separate cell
+                // These cells are filtered out in convert_table_row()
+            }
+            CellMerge::VerticalStart => {
+                // Set vMerge="restart"
+                docx_cell = docx_cell.vertical_merge(VMergeType::Restart);
+            }
+            CellMerge::VerticalContinue => {
+                // Set vMerge="continue"
+                docx_cell = docx_cell.vertical_merge(VMergeType::Continue);
+            }
+            CellMerge::None => {}
+        }
+    }
+
+    // Handle vertical alignment
+    if let Some(v_align) = cell.v_align {
+        match v_align {
+            CellVerticalAlign::Top => {
+                docx_cell = docx_cell.vertical_align(VAlignType::Top);
+            }
+            CellVerticalAlign::Center => {
+                docx_cell = docx_cell.vertical_align(VAlignType::Center);
+            }
+            CellVerticalAlign::Bottom => {
+                docx_cell = docx_cell.vertical_align(VAlignType::Bottom);
+            }
         }
     }
 
@@ -1184,6 +1262,186 @@ mod tests {
         ])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(outer_table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    // =========================================================================
+    // Table Merge Tests
+    // =========================================================================
+
+    #[test]
+    fn test_table_cell_horizontal_merge_start() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Merged")]));
+        cell.merge = Some(CellMerge::HorizontalStart { span: 2 });
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_table_cell_horizontal_merge_continue_filtered() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        // Create a row with a start cell and continuation cell
+        let mut start_cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Start")]));
+        start_cell.merge = Some(CellMerge::HorizontalStart { span: 2 });
+
+        let mut continue_cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Continue")]));
+        continue_cell.merge = Some(CellMerge::HorizontalContinue);
+
+        let row = TableRow::from_cells(vec![start_cell, continue_cell]);
+
+        let table = TableBlock::from_rows(vec![row]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+
+        // Verify it's a valid DOCX
+        let reader = Cursor::new(&bytes);
+        let mut archive = zip::ZipArchive::new(reader).expect("Should be valid ZIP");
+        assert!(archive.by_name("word/document.xml").is_ok());
+    }
+
+    #[test]
+    fn test_orphan_horizontal_continue_preserves_text() {
+        use rtfkit_core::{TableCell, TableRow};
+        use std::io::Read;
+
+        // Middle cell is an orphan continuation (no horizontal start before it).
+        let start = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Alpha")]));
+
+        let mut orphan = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Bravo")]));
+        orphan.merge = Some(CellMerge::HorizontalContinue);
+
+        let end = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Charlie")]));
+
+        let row = TableRow::from_cells(vec![start, orphan, end]);
+        let table = TableBlock::from_rows(vec![row]);
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let reader = Cursor::new(&bytes);
+        let mut archive = zip::ZipArchive::new(reader).expect("Should be valid ZIP");
+        let mut document_xml = String::new();
+        archive
+            .by_name("word/document.xml")
+            .unwrap()
+            .read_to_string(&mut document_xml)
+            .unwrap();
+
+        assert!(document_xml.contains("Alpha"));
+        assert!(document_xml.contains("Bravo"));
+        assert!(document_xml.contains("Charlie"));
+    }
+
+    #[test]
+    fn test_table_cell_vertical_merge_start() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Top")]));
+        cell.merge = Some(CellMerge::VerticalStart);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_table_cell_vertical_merge_continue() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Below")]));
+        cell.merge = Some(CellMerge::VerticalContinue);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_table_cell_vertical_align_top() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Top aligned")]));
+        cell.v_align = Some(CellVerticalAlign::Top);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_table_cell_vertical_align_center() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Center aligned")]));
+        cell.v_align = Some(CellVerticalAlign::Center);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_table_cell_vertical_align_bottom() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Bottom aligned")]));
+        cell.v_align = Some(CellVerticalAlign::Bottom);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_table_cell_merge_none() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Normal")]));
+        cell.merge = Some(CellMerge::None);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_table_combined_merge_and_alignment() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        // Cell with both merge and vertical alignment
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Combined")]));
+        cell.merge = Some(CellMerge::HorizontalStart { span: 3 });
+        cell.v_align = Some(CellVerticalAlign::Center);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
         let bytes = write_docx_to_bytes(&doc).unwrap();
         assert!(!bytes.is_empty());
     }

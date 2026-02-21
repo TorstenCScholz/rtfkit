@@ -1,0 +1,65 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "First merge",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880,
+              "merge": {
+                "horizontal_start": {
+                  "span": 2
+                }
+              }
+            },
+            {
+              "width_twips": 2880,
+              "merge": "horizontal_continue"
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "Second merge",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880,
+              "merge": {
+                "horizontal_start": {
+                  "span": 2
+                }
+              }
+            },
+            {
+              "width_twips": 2880,
+              "merge": "horizontal_continue"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

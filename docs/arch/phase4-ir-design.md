@@ -619,3 +619,15 @@ TableCell {
 - [ ] Add `ReportBuilder` methods for table warnings
 - [ ] Update re-exports in `lib.rs` if needed
 - [ ] Regenerate golden test files after IR changes
+
+---
+
+## Phase 5 Extensions
+
+Phase 5 extends the table IR defined here with merge semantics. See [phase5-ir-design.md](phase5-ir-design.md) for details on:
+
+- `CellMerge` enum for horizontal and vertical merge semantics
+- `CellVerticalAlign` enum for cell content alignment
+- `RowAlignment` and `RowProps` for row-level formatting
+- Merge normalization algorithm and conflict resolution
+- DOCX merge mapping (`w:gridSpan`, `w:vMerge`, `w:vAlign`)

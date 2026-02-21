@@ -28,8 +28,8 @@ use crate::error::{ConversionError, ParseError};
 use crate::limits::ParserLimits;
 use crate::report::ReportBuilder;
 use crate::{
-    Alignment, Block, Document, ListBlock, ListId, ListItem, ListKind, Paragraph, Report, Run,
-    TableBlock, TableCell, TableRow,
+    Alignment, Block, CellMerge, CellVerticalAlign, Document, ListBlock, ListId, ListItem,
+    ListKind, Paragraph, Report, RowAlignment, RowProps, Run, TableBlock, TableCell, TableRow,
 };
 use nom::{
     IResult,
@@ -305,11 +305,29 @@ pub struct Interpreter {
     current_cell: Option<TableCell>,
     /// Cell boundaries encountered in current row (from \cellxN)
     pending_cellx: Vec<i32>,
+    /// Merge state per cell boundary (from \clmgf, \clmrg, etc. before each \cellx)
+    pending_cell_merges: Vec<Option<CellMerge>>,
+    /// Vertical alignment per cell boundary (from \clvertalt, etc. before each \cellx)
+    pending_cell_v_aligns: Vec<Option<CellVerticalAlign>>,
     /// Whether the current paragraph saw \intbl.
     ///
     /// This flag is scoped to the current paragraph and reset at paragraph boundaries.
     /// Table membership itself is derived from active row/cell state.
     seen_intbl_in_paragraph: bool,
+    // =============================================================================
+    // Table Merge/Property State (Phase 5)
+    // =============================================================================
+    /// Pending cell merge state (reset per cell)
+    pending_cell_merge: Option<CellMerge>,
+    /// Pending cell vertical alignment (reset per cell)
+    pending_cell_v_align: Option<CellVerticalAlign>,
+    /// Pending row properties (reset per row)
+    pending_row_props: RowProps,
+    /// Fatal parser failure encountered mid-parse.
+    ///
+    /// Used for hard-limit violations discovered in helper methods that
+    /// don't return `Result` directly.
+    hard_failure: Option<ParseError>,
 }
 
 impl Interpreter {
@@ -353,7 +371,14 @@ impl Interpreter {
             current_row: None,
             current_cell: None,
             pending_cellx: Vec::new(),
+            pending_cell_merges: Vec::new(),
+            pending_cell_v_aligns: Vec::new(),
             seen_intbl_in_paragraph: false,
+            // Table merge/property state (Phase 5)
+            pending_cell_merge: None,
+            pending_cell_v_align: None,
+            pending_row_props: RowProps::default(),
+            hard_failure: None,
         }
     }
 
@@ -428,6 +453,10 @@ impl Interpreter {
             interpreter.finalize_current_table();
         }
 
+        if let Some(err) = interpreter.hard_failure.take() {
+            return Err(ConversionError::Parse(err));
+        }
+
         // Build the final report
         let report = interpreter.report_builder.build();
 
@@ -436,6 +465,10 @@ impl Interpreter {
 
     /// Process a single RTF event.
     fn process_event(&mut self, event: RtfEvent) -> Result<(), ConversionError> {
+        if let Some(err) = self.hard_failure.take() {
+            return Err(ConversionError::Parse(err));
+        }
+
         if self.skip_destination_depth > 0 {
             return self.process_skipped_destination_event(event);
         }
@@ -478,6 +511,11 @@ impl Interpreter {
                     .dropped_content("Dropped unsupported binary RTF data", Some(data.len()));
             }
         }
+
+        if let Some(err) = self.hard_failure.take() {
+            return Err(ConversionError::Parse(err));
+        }
+
         Ok(())
     }
 
@@ -485,6 +523,10 @@ impl Interpreter {
         &mut self,
         event: RtfEvent,
     ) -> Result<(), ConversionError> {
+        if let Some(err) = self.hard_failure.take() {
+            return Err(ConversionError::Parse(err));
+        }
+
         match event {
             RtfEvent::GroupStart => {
                 self.current_depth += 1;
@@ -550,7 +592,18 @@ impl Interpreter {
             }
             RtfEvent::ControlSymbol(_) | RtfEvent::Text(_) | RtfEvent::BinaryData(_) => {}
         }
+
+        if let Some(err) = self.hard_failure.take() {
+            return Err(ConversionError::Parse(err));
+        }
+
         Ok(())
+    }
+
+    fn set_hard_failure(&mut self, err: ParseError) {
+        if self.hard_failure.is_none() {
+            self.hard_failure = Some(err);
+        }
     }
 
     /// Handle control words within list table/override table destinations.
@@ -881,6 +934,11 @@ impl Interpreter {
             "cellx" => {
                 if let Some(boundary) = parameter {
                     self.pending_cellx.push(boundary);
+                    // Store the current merge state and vertical alignment for this cell
+                    self.pending_cell_merges
+                        .push(self.pending_cell_merge.take());
+                    self.pending_cell_v_aligns
+                        .push(self.pending_cell_v_align.take());
                 }
             }
             // \intbl - Paragraph is inside a table
@@ -895,17 +953,61 @@ impl Interpreter {
             "row" => {
                 self.handle_row();
             }
+            // =============================================================================
+            // Row Property Controls (Phase 5)
+            // =============================================================================
+            // Row alignment
+            "trql" => {
+                self.pending_row_props.alignment = Some(RowAlignment::Left);
+            }
+            "trqc" => {
+                self.pending_row_props.alignment = Some(RowAlignment::Center);
+            }
+            "trqr" => {
+                self.pending_row_props.alignment = Some(RowAlignment::Right);
+            }
+            // Row left indent (in twips)
+            "trleft" => {
+                if let Some(value) = parameter {
+                    self.pending_row_props.left_indent = Some(value);
+                }
+            }
             // Row formatting controls - recognized but not fully supported
-            "trgaph" | "trleft" | "trql" | "trqr" | "trqc" => {
+            "trgaph" => {
                 self.report_builder.unsupported_table_control(word);
             }
-            // Cell vertical alignment controls - recognized but not fully supported
-            "clvertalt" | "clvertalc" | "clvertalb" => {
-                self.report_builder.unsupported_table_control(word);
+            // =============================================================================
+            // Cell Vertical Alignment Controls (Phase 5)
+            // =============================================================================
+            "clvertalt" => {
+                self.pending_cell_v_align = Some(CellVerticalAlign::Top);
             }
-            // Cell merge markers - recognized but not fully supported (degraded path)
-            "clmgf" | "clmrg" => {
-                self.report_builder.unsupported_table_control(word);
+            "clvertalc" => {
+                self.pending_cell_v_align = Some(CellVerticalAlign::Center);
+            }
+            "clvertalb" => {
+                self.pending_cell_v_align = Some(CellVerticalAlign::Bottom);
+            }
+            // =============================================================================
+            // Cell Merge Controls (Phase 5)
+            // =============================================================================
+            // Horizontal merge start - this cell starts a merge
+            "clmgf" => {
+                // Mark this cell as merge start
+                // Span will be calculated when we see continuation markers
+                self.pending_cell_merge = Some(CellMerge::HorizontalStart { span: 1 });
+            }
+            // Horizontal merge continuation - this cell is merged with previous
+            "clmrg" => {
+                self.pending_cell_merge = Some(CellMerge::HorizontalContinue);
+            }
+            // Vertical merge start - this cell starts a vertical merge
+            "clvmgf" => {
+                self.pending_cell_merge = Some(CellMerge::VerticalStart);
+            }
+            // Vertical merge continuation - this cell continues vertical merge
+            "clvmrg" => {
+                self.pending_cell_merge = Some(CellMerge::VerticalContinue);
             }
             // RTF header control words - silently ignored (not user-facing)
             "rtf" | "ansi" | "ansicpg" | "deff" | "deflang" | "deflangfe" | "adeflang"
@@ -1177,7 +1279,16 @@ impl Interpreter {
 
         // Start fresh row context
         self.pending_cellx.clear();
+        self.pending_cell_merges.clear();
+        self.pending_cell_v_aligns.clear();
         self.current_row = Some(TableRow::new());
+
+        // Reset pending row properties for new row
+        self.pending_row_props = RowProps::default();
+
+        // Reset pending cell properties
+        self.pending_cell_merge = None;
+        self.pending_cell_v_align = None;
 
         // Ensure we have a table context
         if self.current_table.is_none() {
@@ -1231,13 +1342,20 @@ impl Interpreter {
         // Finalize the current row
         self.finalize_current_row();
 
-        // Clear pending cellx for next row
+        // Clear pending cellx and merge states for next row
         self.pending_cellx.clear();
+        self.pending_cell_merges.clear();
+        self.pending_cell_v_aligns.clear();
         self.seen_intbl_in_paragraph = false;
     }
 
     /// Finalize the current cell and attach it to the current row.
     fn finalize_current_cell(&mut self) {
+        // Create cell if needed (for empty cells or cells with content)
+        if self.current_cell.is_none() {
+            self.current_cell = Some(TableCell::new());
+        }
+
         if let Some(cell) = self.current_cell.take() {
             // Convert \cellx right-boundary positions to actual cell widths.
             let cell_index = self
@@ -1259,10 +1377,12 @@ impl Interpreter {
                     }
                 });
 
-            let mut cell_with_width = cell;
+            let mut cell_with_props = cell;
+
+            // Apply width
             if let Some(w) = width {
                 if w > 0 {
-                    cell_with_width.width_twips = Some(w);
+                    cell_with_props.width_twips = Some(w);
                 } else {
                     self.report_builder.malformed_table_structure(&format!(
                         "Non-increasing \\cellx boundaries at cell {}",
@@ -1271,15 +1391,29 @@ impl Interpreter {
                 }
             }
 
+            // Apply merge state from stored per-cellx state
+            cell_with_props.merge = self.pending_cell_merges.get(cell_index).cloned().flatten();
+
+            // Apply vertical alignment from stored per-cellx state
+            cell_with_props.v_align = self
+                .pending_cell_v_aligns
+                .get(cell_index)
+                .copied()
+                .flatten();
+
             if let Some(ref mut row) = self.current_row {
-                row.cells.push(cell_with_width);
+                row.cells.push(cell_with_props);
             }
         }
+
+        // Reset pending cell state for next cell
+        self.pending_cell_merge = None;
+        self.pending_cell_v_align = None;
     }
 
     /// Finalize the current row and attach it to the current table.
     fn finalize_current_row(&mut self) {
-        if let Some(row) = self.current_row.take() {
+        if let Some(mut row) = self.current_row.take() {
             // Check for cellx count mismatch
             if !self.pending_cellx.is_empty() && row.cells.len() != self.pending_cellx.len() {
                 let reason = format!(
@@ -1292,10 +1426,183 @@ impl Interpreter {
                     .dropped_content("Table cell count mismatch", None);
             }
 
+            // Apply pending row properties
+            if self.pending_row_props != RowProps::default() {
+                row.row_props = Some(self.pending_row_props.clone());
+            }
+
+            // Normalize merge semantics
+            self.normalize_row_merges(&mut row);
+
+            // Resolve conflicts
+            self.resolve_merge_conflicts(&mut row);
+
+            // Check table limits
+            if let Err(e) = self.check_table_limits(&row) {
+                self.set_hard_failure(e);
+                return;
+            }
+
+            if let Some(existing_row_count) = self.current_table.as_ref().map(|t| t.rows.len()) {
+                if existing_row_count >= self.limits.max_rows_per_table {
+                    self.set_hard_failure(ParseError::InvalidStructure(format!(
+                        "Table has {} rows, maximum is {}",
+                        existing_row_count + 1,
+                        self.limits.max_rows_per_table
+                    )));
+                    return;
+                }
+            }
+
             if let Some(ref mut table) = self.current_table {
                 table.rows.push(row);
             }
+
+            // Reset pending row state
+            self.pending_row_props = RowProps::default();
         }
+    }
+
+    /// Normalize merge semantics in a row.
+    ///
+    /// This calculates the span for horizontal merge start cells based on
+    /// the number of continuation cells that follow.
+    fn normalize_row_merges(&mut self, row: &mut TableRow) {
+        // First, collect merge information
+        let merge_info: Vec<Option<CellMerge>> =
+            row.cells.iter().map(|c| c.merge.clone()).collect();
+
+        let mut span_count: u16 = 0;
+        let mut merge_start_idx: Option<usize> = None;
+
+        // Process merge chains and calculate spans
+        for (idx, merge) in merge_info.iter().enumerate() {
+            match merge {
+                Some(CellMerge::HorizontalStart { .. }) => {
+                    // Close out any previous merge chain
+                    if let Some(start_idx) = merge_start_idx {
+                        if span_count > 1 {
+                            row.cells[start_idx].merge =
+                                Some(CellMerge::HorizontalStart { span: span_count });
+                        } else {
+                            // Single cell "merge" - clear it
+                            row.cells[start_idx].merge = None;
+                        }
+                    }
+                    merge_start_idx = Some(idx);
+                    span_count = 1;
+                }
+                Some(CellMerge::HorizontalContinue) => {
+                    span_count += 1;
+                }
+                _ => {
+                    // Not in a merge chain - close out previous if any
+                    if let Some(start_idx) = merge_start_idx {
+                        if span_count > 1 {
+                            row.cells[start_idx].merge =
+                                Some(CellMerge::HorizontalStart { span: span_count });
+                        } else {
+                            // Single cell "merge" - clear it
+                            row.cells[start_idx].merge = None;
+                        }
+                    }
+                    merge_start_idx = None;
+                    span_count = 0;
+                }
+            }
+        }
+
+        // Close out any trailing merge
+        if let Some(start_idx) = merge_start_idx {
+            if span_count > 1 {
+                row.cells[start_idx].merge = Some(CellMerge::HorizontalStart { span: span_count });
+            } else {
+                row.cells[start_idx].merge = None;
+            }
+        }
+    }
+
+    /// Resolve merge conflicts with deterministic degradation.
+    ///
+    /// This handles:
+    /// - Orphan continuations (continuation without start)
+    /// - Spans exceeding row bounds
+    fn resolve_merge_conflicts(&mut self, row: &mut TableRow) {
+        // Track expected continuation cells from the most recent horizontal start.
+        let mut expected_continuations: usize = 0;
+
+        // Detect orphan continuations regardless of column position.
+        for idx in 0..row.cells.len() {
+            let merge = row.cells[idx].merge.clone();
+            match merge {
+                Some(CellMerge::HorizontalStart { span }) => {
+                    expected_continuations = span.saturating_sub(1) as usize;
+                }
+                Some(CellMerge::HorizontalContinue) => {
+                    if expected_continuations == 0 {
+                        row.cells[idx].merge = None;
+                        self.report_builder.merge_conflict(
+                            "Orphan merge continuation without start - treating as standalone cell",
+                        );
+                        self.report_builder.dropped_content("merge_semantics", None);
+                    } else {
+                        expected_continuations -= 1;
+                    }
+                }
+                _ => {
+                    expected_continuations = 0;
+                }
+            }
+        }
+
+        // Collect merge info after orphan cleanup to avoid borrow issues.
+        let merge_info: Vec<Option<CellMerge>> =
+            row.cells.iter().map(|c| c.merge.clone()).collect();
+
+        // Check for span exceeding row bounds.
+        for (idx, merge) in merge_info.iter().enumerate() {
+            if let Some(CellMerge::HorizontalStart { span }) = merge {
+                let span_val = *span;
+                let available_cells = row.cells.len() - idx;
+                if span_val as usize > available_cells {
+                    // Clamp span to available cells
+                    row.cells[idx].merge = Some(CellMerge::HorizontalStart {
+                        span: available_cells as u16,
+                    });
+                    self.report_builder.table_geometry_conflict(&format!(
+                        "Merge span {} exceeds available cells {} - clamped",
+                        span_val, available_cells
+                    ));
+                    self.report_builder.dropped_content("merge_semantics", None);
+                }
+            }
+        }
+    }
+
+    /// Check table limits for a row.
+    fn check_table_limits(&self, row: &TableRow) -> Result<(), ParseError> {
+        // Check cells per row limit
+        if row.cells.len() > self.limits.max_cells_per_row {
+            return Err(ParseError::InvalidStructure(format!(
+                "Row has {} cells, maximum is {}",
+                row.cells.len(),
+                self.limits.max_cells_per_row
+            )));
+        }
+
+        // Check merge spans
+        for cell in &row.cells {
+            if let Some(CellMerge::HorizontalStart { span }) = cell.merge {
+                if span > self.limits.max_merge_span {
+                    return Err(ParseError::InvalidStructure(format!(
+                        "Merge span {} exceeds maximum {}",
+                        span, self.limits.max_merge_span
+                    )));
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Finalize the current table and add it to the document.
@@ -1319,6 +1626,8 @@ impl Interpreter {
         // Reset table state
         self.current_cell = None;
         self.pending_cellx.clear();
+        self.pending_cell_merges.clear();
+        self.pending_cell_v_aligns.clear();
         self.seen_intbl_in_paragraph = false;
     }
 
@@ -2419,5 +2728,82 @@ After table text.\par
             .expect("Expected list block in table cell");
 
         assert_eq!(list_block.items.len(), 2);
+    }
+
+    #[test]
+    fn test_orphan_merge_continuation_mid_row_is_degraded() {
+        let input = r#"{\rtf1\ansi
+\trowd\cellx2880\clmrg\cellx5760\cellx8640
+\intbl A\cell B\cell C\cell\row
+}"#;
+
+        let (doc, report) = Interpreter::parse(input).unwrap();
+        let table = match &doc.blocks[0] {
+            Block::TableBlock(table) => table,
+            _ => panic!("Expected table block"),
+        };
+
+        assert_eq!(table.rows.len(), 1);
+        assert_eq!(table.rows[0].cells.len(), 3);
+        assert_eq!(table.rows[0].cells[1].merge, None);
+
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::report::Warning::MergeConflict { .. }))
+        );
+        assert!(report.warnings.iter().any(|w| matches!(
+            w,
+            crate::report::Warning::DroppedContent { reason, .. } if reason == "merge_semantics"
+        )));
+    }
+
+    #[test]
+    fn test_max_cells_per_row_violation_is_hard_failure() {
+        let input = r#"{\rtf1\ansi
+\trowd\cellx1000\cellx2000
+\intbl A\cell B\cell\row
+}"#;
+
+        let limits = ParserLimits::new().with_max_cells_per_row(1);
+        let result = Interpreter::parse_with_limits(input, limits);
+
+        assert!(matches!(
+            result,
+            Err(ConversionError::Parse(ParseError::InvalidStructure(_)))
+        ));
+    }
+
+    #[test]
+    fn test_max_rows_per_table_violation_is_hard_failure() {
+        let input = r#"{\rtf1\ansi
+\trowd\cellx1000\intbl A\cell\row
+\trowd\cellx1000\intbl B\cell\row
+}"#;
+
+        let limits = ParserLimits::new().with_max_rows_per_table(1);
+        let result = Interpreter::parse_with_limits(input, limits);
+
+        assert!(matches!(
+            result,
+            Err(ConversionError::Parse(ParseError::InvalidStructure(_)))
+        ));
+    }
+
+    #[test]
+    fn test_max_merge_span_violation_is_hard_failure() {
+        let input = r#"{\rtf1\ansi
+\trowd\clmgf\cellx2880\clmrg\cellx5760
+\intbl A\cell\cell\row
+}"#;
+
+        let limits = ParserLimits::new().with_max_merge_span(1);
+        let result = Interpreter::parse_with_limits(input, limits);
+
+        assert!(matches!(
+            result,
+            Err(ConversionError::Parse(ParseError::InvalidStructure(_)))
+        ));
     }
 }

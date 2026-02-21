@@ -12,7 +12,7 @@
                   "alignment": "left",
                   "runs": [
                     {
-                      "text": "Merged start",
+                      "text": "Merged",
                       "bold": false,
                       "italic": false,
                       "underline": false
@@ -38,28 +38,7 @@
                   "alignment": "left",
                   "runs": [
                     {
-                      "text": "Third cell",
-                      "bold": false,
-                      "italic": false,
-                      "underline": false
-                    }
-                  ]
-                }
-              ],
-              "width_twips": 2880
-            }
-          ]
-        },
-        {
-          "cells": [
-            {
-              "blocks": [
-                {
-                  "type": "paragraph",
-                  "alignment": "left",
-                  "runs": [
-                    {
-                      "text": "Regular A",
+                      "text": "Normal",
                       "bold": false,
                       "italic": false,
                       "underline": false
@@ -76,24 +55,7 @@
                   "alignment": "left",
                   "runs": [
                     {
-                      "text": "Regular B",
-                      "bold": false,
-                      "italic": false,
-                      "underline": false
-                    }
-                  ]
-                }
-              ],
-              "width_twips": 2880
-            },
-            {
-              "blocks": [
-                {
-                  "type": "paragraph",
-                  "alignment": "left",
-                  "runs": [
-                    {
-                      "text": "Regular C",
+                      "text": "Fourth",
                       "bold": false,
                       "italic": false,
                       "underline": false

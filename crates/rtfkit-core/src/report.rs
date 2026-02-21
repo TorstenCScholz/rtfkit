@@ -52,6 +52,12 @@ pub enum Warning {
     ///
     /// This indicates a control word that is recognized but not
     /// yet implemented in the interpreter.
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This is a **cosmetic loss** warning and does NOT cause strict mode to fail.
+    /// It indicates that a formatting control word was not applied, but the text
+    /// content is still preserved in the output.
     UnsupportedControlWord {
         /// The control word that was encountered (without the leading backslash)
         word: String,
@@ -65,6 +71,13 @@ pub enum Warning {
     ///
     /// Destinations are special RTF groups that contain content
     /// not part of the main document flow (e.g., headers, footers).
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This is an **informational** warning and does NOT cause strict mode to fail
+    /// on its own. However, unknown destinations typically result in their content
+    /// being dropped, which will emit a separate `DroppedContent` warning that
+    /// WILL trigger strict mode failure.
     UnknownDestination {
         /// The name of the destination
         destination: String,
@@ -76,6 +89,28 @@ pub enum Warning {
     ///
     /// This indicates that some content could not be represented
     /// in the output format and was discarded.
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This warning **always** causes strict mode to fail (exit code 4).
+    /// It represents semantic loss where content or structure could not
+    /// be faithfully represented in the output.
+    ///
+    /// # Warning Cap Behavior
+    ///
+    /// When the warning count limit is reached, `DroppedContent` warnings
+    /// are specially preserved to ensure the strict-mode signal is not lost.
+    /// If a `DroppedContent` warning arrives after the cap, it will replace
+    /// the last non-`DroppedContent` warning to maintain the strict-mode signal.
+    ///
+    /// # Stable Reason Strings
+    ///
+    /// The following reason strings are part of the stable API contract:
+    /// - `"merge_semantics"` - Merge semantics were lost or degraded
+    /// - `"Dropped unsupported RTF destination content"` - Unknown destination
+    /// - `"Dropped unsupported binary RTF data"` - Binary data
+    /// - `"Dropped legacy paragraph numbering content"` - Legacy \\pn controls
+    /// - `"Unresolved list override ls_id=N"` - List reference could not be resolved
     DroppedContent {
         /// Description of what was dropped
         reason: String,
@@ -88,6 +123,12 @@ pub enum Warning {
     /// A list-related control word was encountered but not fully supported.
     ///
     /// This indicates list functionality that is recognized but partially implemented.
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This is a **cosmetic loss** warning and does NOT cause strict mode to fail
+    /// on its own. However, if the unsupported control leads to content being dropped,
+    /// a separate `DroppedContent` warning will be emitted which will trigger strict mode.
     UnsupportedListControl {
         /// The control word that was encountered
         control_word: String,
@@ -98,6 +139,12 @@ pub enum Warning {
     /// A list override could not be resolved.
     ///
     /// This indicates a reference to a list definition that doesn't exist or is malformed.
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This warning indicates semantic loss. The interpreter always emits
+    /// `DroppedContent("Unresolved list override ls_id=N")` alongside this warning,
+    /// which will cause strict mode to fail (exit code 4).
     UnresolvedListOverride {
         /// The \ls index that couldn't be resolved
         ls_id: i32,
@@ -108,6 +155,12 @@ pub enum Warning {
     /// List nesting level exceeds supported range.
     ///
     /// DOCX supports levels 0-8; levels beyond this are clamped.
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This is a **cosmetic loss** warning and does NOT cause strict mode to fail.
+    /// The level is clamped to the maximum supported value (8), and the list content
+    /// is still rendered at the clamped level.
     UnsupportedNestingLevel {
         /// The level that was encountered
         level: u8,
@@ -121,6 +174,12 @@ pub enum Warning {
     ///
     /// This indicates table functionality that is recognized but partially implemented
     /// or intentionally deferred to a later phase.
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This is a **cosmetic loss** warning and does NOT cause strict mode to fail.
+    /// It indicates that a table control word was not mapped to output, but the
+    /// table structure and content are still preserved.
     UnsupportedTableControl {
         /// The control word that was encountered (without leading backslash)
         control_word: String,
@@ -132,6 +191,13 @@ pub enum Warning {
     ///
     /// This indicates structural issues like mismatched cell counts,
     /// missing terminators, or invalid nesting.
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This warning indicates structural issues with the table. When accompanied
+    /// by `DroppedContent`, it will cause strict mode to fail (exit code 4).
+    /// The interpreter emits `DroppedContent` for cases where content or structure
+    /// is lost (e.g., cell count mismatch, orphan controls).
     MalformedTableStructure {
         /// Human-readable description of the issue
         reason: String,
@@ -141,8 +207,14 @@ pub enum Warning {
 
     /// A table cell was not properly closed before row/document end.
     ///
-    /// This indicates a missing \cell control word. The interpreter
+    /// This indicates a missing `\cell` control word. The interpreter
     /// auto-closes the cell to preserve content.
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This warning indicates a structural issue. When accompanied by `DroppedContent`,
+    /// it will cause strict mode to fail (exit code 4). The interpreter emits
+    /// `DroppedContent` for unclosed cells to signal potential content reordering.
     UnclosedTableCell {
         /// Severity of this warning
         severity: WarningSeverity,
@@ -150,9 +222,61 @@ pub enum Warning {
 
     /// A table row was not properly closed before next row/document end.
     ///
-    /// This indicates a missing \row control word. The interpreter
+    /// This indicates a missing `\row` control word. The interpreter
     /// auto-closes the row to preserve content.
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This warning indicates a structural issue. When accompanied by `DroppedContent`,
+    /// it will cause strict mode to fail (exit code 4). The interpreter emits
+    /// `DroppedContent` for unclosed rows to signal potential content reordering.
     UnclosedTableRow {
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
+
+    /// Merge semantics conflict or invalid merge structure.
+    ///
+    /// This indicates issues like orphan merge continuations,
+    /// conflicting merge directions, or invalid merge chains.
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This warning indicates potential semantic loss and will cause
+    /// strict mode to fail (exit code 4) when accompanied by `DroppedContent`.
+    /// The interpreter always emits `DroppedContent("merge_semantics")` alongside
+    /// this warning to ensure strict-mode compliance.
+    ///
+    /// # Stable Reason Strings
+    ///
+    /// The following reason strings are part of the stable API contract:
+    /// - `"Orphan merge continuation without start - treating as standalone cell"`
+    MergeConflict {
+        /// Human-readable description of the issue
+        reason: String,
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
+
+    /// Table geometry conflict (e.g., non-monotonic cellx, impossible spans).
+    ///
+    /// This indicates structural issues with table geometry that
+    /// required adjustment or clamping.
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This warning indicates structural changes to the table and will cause
+    /// strict mode to fail (exit code 4) when accompanied by `DroppedContent`.
+    /// The interpreter always emits `DroppedContent("merge_semantics")` alongside
+    /// this warning for span-related conflicts.
+    ///
+    /// # Stable Reason Strings
+    ///
+    /// The following reason strings are part of the stable API contract:
+    /// - `"Merge span N exceeds available cells M - clamped"`
+    TableGeometryConflict {
+        /// Human-readable description of the issue
+        reason: String,
         /// Severity of this warning
         severity: WarningSeverity,
     },
@@ -240,6 +364,22 @@ impl Warning {
         }
     }
 
+    /// Creates a new `MergeConflict` warning.
+    pub fn merge_conflict(reason: impl Into<String>) -> Self {
+        Warning::MergeConflict {
+            reason: reason.into(),
+            severity: WarningSeverity::Warning,
+        }
+    }
+
+    /// Creates a new `TableGeometryConflict` warning.
+    pub fn table_geometry_conflict(reason: impl Into<String>) -> Self {
+        Warning::TableGeometryConflict {
+            reason: reason.into(),
+            severity: WarningSeverity::Warning,
+        }
+    }
+
     /// Returns the severity of this warning.
     pub fn severity(&self) -> WarningSeverity {
         match self {
@@ -253,6 +393,8 @@ impl Warning {
             Warning::MalformedTableStructure { severity, .. } => *severity,
             Warning::UnclosedTableCell { severity } => *severity,
             Warning::UnclosedTableRow { severity } => *severity,
+            Warning::MergeConflict { severity, .. } => *severity,
+            Warning::TableGeometryConflict { severity, .. } => *severity,
         }
     }
 }
@@ -510,6 +652,24 @@ impl ReportBuilder {
     pub fn unclosed_table_row(&mut self) {
         if self.can_add_warning() {
             self.warnings.push(Warning::unclosed_table_row());
+        }
+    }
+
+    /// Records a merge conflict warning.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn merge_conflict(&mut self, reason: &str) {
+        if self.can_add_warning() {
+            self.warnings.push(Warning::merge_conflict(reason));
+        }
+    }
+
+    /// Records a table geometry conflict warning.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn table_geometry_conflict(&mut self, reason: &str) {
+        if self.can_add_warning() {
+            self.warnings.push(Warning::table_geometry_conflict(reason));
         }
     }
 

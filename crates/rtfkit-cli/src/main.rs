@@ -342,6 +342,12 @@ fn print_report_text(report: &Report) {
                 Warning::UnclosedTableRow { .. } => {
                     println!("  - Unclosed table row");
                 }
+                Warning::MergeConflict { reason, .. } => {
+                    println!("  - Merge conflict: {}", reason);
+                }
+                Warning::TableGeometryConflict { reason, .. } => {
+                    println!("  - Table geometry conflict: {}", reason);
+                }
             }
         }
     }

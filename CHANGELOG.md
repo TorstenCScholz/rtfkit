@@ -5,6 +5,58 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - Unreleased
+
+### Added
+
+#### IR Extensions
+- `CellMerge` enum for horizontal and vertical merge semantics
+- `CellVerticalAlign` enum for cell content alignment (top/center/bottom)
+- `RowAlignment` enum for row-level alignment (left/center/right)
+- `RowProps` struct for row-level formatting properties
+- `TableProps` struct for table-level properties (placeholder)
+- Extended `TableCell` with `merge` and `v_align` fields
+- Extended `TableRow` with `row_props` field
+- Extended `TableBlock` with `table_props` field
+
+#### Parser Support
+- Horizontal merge controls: `\clmgf` (merge start), `\clmrg` (merge continuation)
+- Vertical merge controls: `\clvmgf` (vertical start), `\clvmrg` (vertical continuation)
+- Row alignment controls: `\trql`, `\trqc`, `\trqr`
+- Row indent control: `\trleft`
+- Cell vertical alignment: `\clvertalt`, `\clvertalc`, `\clvertalb`
+
+#### DOCX Writer
+- Horizontal merge output as `w:gridSpan`
+- Vertical merge output as `w:vMerge` (restart/continue)
+- Cell vertical alignment output as `w:vAlign`
+
+#### Warning Categories
+- `MergeConflict` warning for merge semantics conflicts
+- `TableGeometryConflict` warning for geometry issues (span exceeding bounds)
+
+#### Limits
+- `max_rows_per_table` limit (default: 10000)
+- `max_cells_per_row` limit (default: 1000)
+- `max_merge_span` limit (default: 1000)
+
+#### Test Coverage
+- 8 new RTF fixtures for merge scenarios
+- 10 new DOCX integration tests
+- 11 new contract tests
+- Total: 236 tests passing
+
+### Changed
+
+- Merge controls are now properly handled instead of degraded
+- Strict mode fails on merge semantic loss (exit code 4)
+- Warning cap preserves `DroppedContent` signal for strict mode
+- Table defensive-limit violations (`max_rows_per_table`, `max_cells_per_row`, `max_merge_span`) now fail as parse errors (exit code 2) instead of warning-only degradation
+
+### Fixed
+
+- Per-cell merge state tracking for correct multi-cell merge handling
+
 ## [0.4.0] - Unreleased
 
 ### Added

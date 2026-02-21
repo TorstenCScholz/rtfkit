@@ -89,6 +89,99 @@ pub enum Alignment {
     Justify,
 }
 
+// =============================================================================
+// Table Cell Merge and Alignment Types for Phase 5
+// =============================================================================
+
+/// Cell merge semantics for horizontal and vertical merges.
+///
+/// RTF uses `\clmgf` (merge start) and `\clmrg` (merge continuation) for horizontal merges,
+/// and `\clvmgf`/`\clvmrg` for vertical merges.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CellMerge {
+    /// No merge applied (default)
+    None,
+    /// Start of a horizontal merge spanning N cells (including this one)
+    HorizontalStart { span: u16 },
+    /// Continuation of a horizontal merge (content belongs to previous cell)
+    HorizontalContinue,
+    /// Start of a vertical merge (top cell of merged region)
+    VerticalStart,
+    /// Continuation of a vertical merge (content belongs to cell above)
+    VerticalContinue,
+}
+
+impl Default for CellMerge {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+/// Vertical alignment of content within a table cell.
+///
+/// RTF controls: `\clvertalt` (top), `\clvertalc` (center), `\clvertalb` (bottom).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CellVerticalAlign {
+    /// Align content to top of cell
+    Top,
+    /// Center content vertically in cell
+    Center,
+    /// Align content to bottom of cell
+    Bottom,
+}
+
+impl Default for CellVerticalAlign {
+    fn default() -> Self {
+        Self::Top
+    }
+}
+
+/// Row-level alignment for table rows.
+///
+/// RTF controls: `\trql` (left), `\trqc` (center), `\trqr` (right).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RowAlignment {
+    /// Left-aligned row
+    Left,
+    /// Centered row
+    Center,
+    /// Right-aligned row
+    Right,
+}
+
+impl Default for RowAlignment {
+    fn default() -> Self {
+        Self::Left
+    }
+}
+
+/// Table row properties.
+///
+/// Captures row-level formatting from RTF controls like `\trql`, `\trqr`, `\trqc`, `\trleft`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RowProps {
+    /// Row alignment (left/center/right)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alignment: Option<RowAlignment>,
+    /// Left indent in twips (from `\trleft`)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub left_indent: Option<i32>,
+}
+
+/// Table-level properties.
+///
+/// Placeholder for future table-level formatting (borders, spacing, etc.)
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct TableProps {
+    // Future: borders, spacing, width preferences, etc.
+    // Keeping sparse for now per PHASE5.md guidelines
+}
+
 /// A contiguous run of text with uniform formatting.
 ///
 /// A `Run` represents a segment of text within a paragraph that shares
@@ -294,10 +387,14 @@ impl ListBlock {
 ///                 TableCell {
 ///                     blocks: vec![Block::Paragraph(Paragraph::from_runs(vec![Run::new("Cell 1")]))],
 ///                     width_twips: Some(1440), // 1 inch
+///                     merge: None,
+///                     v_align: None,
 ///                 },
 ///             ],
+///             row_props: None,
 ///         },
 ///     ],
+///     table_props: None,
 /// };
 /// ```
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -305,6 +402,10 @@ pub struct TableBlock {
     /// The rows that make up this table
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rows: Vec<TableRow>,
+
+    /// Table-level properties
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub table_props: Option<TableProps>,
 }
 
 impl TableBlock {
@@ -315,7 +416,10 @@ impl TableBlock {
 
     /// Creates a table from a vector of rows.
     pub fn from_rows(rows: Vec<TableRow>) -> Self {
-        Self { rows }
+        Self {
+            rows,
+            table_props: None,
+        }
     }
 
     /// Adds a row to the table.
@@ -344,6 +448,10 @@ pub struct TableRow {
     /// The cells in this row
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cells: Vec<TableCell>,
+
+    /// Row-level properties
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub row_props: Option<RowProps>,
 }
 
 impl TableRow {
@@ -354,7 +462,10 @@ impl TableRow {
 
     /// Creates a row from a vector of cells.
     pub fn from_cells(cells: Vec<TableCell>) -> Self {
-        Self { cells }
+        Self {
+            cells,
+            row_props: None,
+        }
     }
 
     /// Adds a cell to the row.
@@ -388,6 +499,14 @@ pub struct TableCell {
     /// None if width not specified or determinable
     #[serde(skip_serializing_if = "Option::is_none")]
     pub width_twips: Option<i32>,
+
+    /// Merge semantics for this cell
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge: Option<CellMerge>,
+
+    /// Vertical alignment of cell content
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub v_align: Option<CellVerticalAlign>,
 }
 
 impl TableCell {
@@ -401,6 +520,8 @@ impl TableCell {
         Self {
             blocks,
             width_twips,
+            merge: None,
+            v_align: None,
         }
     }
 
@@ -409,6 +530,8 @@ impl TableCell {
         Self {
             blocks: vec![Block::Paragraph(paragraph)],
             width_twips: None,
+            merge: None,
+            v_align: None,
         }
     }
 
@@ -417,6 +540,8 @@ impl TableCell {
         Self {
             blocks: vec![Block::Paragraph(paragraph)],
             width_twips: Some(width_twips),
+            merge: None,
+            v_align: None,
         }
     }
 

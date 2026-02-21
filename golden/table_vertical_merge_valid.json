@@ -12,7 +12,7 @@
                   "alignment": "left",
                   "runs": [
                     {
-                      "text": "Merged start",
+                      "text": "Top cell",
                       "bold": false,
                       "italic": false,
                       "underline": false
@@ -21,15 +21,7 @@
                 }
               ],
               "width_twips": 2880,
-              "merge": {
-                "horizontal_start": {
-                  "span": 2
-                }
-              }
-            },
-            {
-              "width_twips": 2880,
-              "merge": "horizontal_continue"
+              "merge": "vertical_start"
             },
             {
               "blocks": [
@@ -38,7 +30,7 @@
                   "alignment": "left",
                   "runs": [
                     {
-                      "text": "Third cell",
+                      "text": "Second",
                       "bold": false,
                       "italic": false,
                       "underline": false
@@ -53,21 +45,8 @@
         {
           "cells": [
             {
-              "blocks": [
-                {
-                  "type": "paragraph",
-                  "alignment": "left",
-                  "runs": [
-                    {
-                      "text": "Regular A",
-                      "bold": false,
-                      "italic": false,
-                      "underline": false
-                    }
-                  ]
-                }
-              ],
-              "width_twips": 2880
+              "width_twips": 2880,
+              "merge": "vertical_continue"
             },
             {
               "blocks": [
@@ -76,24 +55,7 @@
                   "alignment": "left",
                   "runs": [
                     {
-                      "text": "Regular B",
-                      "bold": false,
-                      "italic": false,
-                      "underline": false
-                    }
-                  ]
-                }
-              ],
-              "width_twips": 2880
-            },
-            {
-              "blocks": [
-                {
-                  "type": "paragraph",
-                  "alignment": "left",
-                  "runs": [
-                    {
-                      "text": "Regular C",
+                      "text": "Second row second",
                       "bold": false,
                       "italic": false,
                       "underline": false
