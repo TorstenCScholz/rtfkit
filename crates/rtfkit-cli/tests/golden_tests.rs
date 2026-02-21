@@ -9,6 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use rtfkit_core::Interpreter;
+use rtfkit_html::{document_to_html, HtmlWriterOptions};
 use similar::{ChangeTag, TextDiff};
 
 fn project_root() -> PathBuf {
@@ -26,6 +27,10 @@ fn fixture_dir() -> PathBuf {
 
 fn golden_dir() -> PathBuf {
     project_root().join("golden")
+}
+
+fn golden_html_dir() -> PathBuf {
+    project_root().join("golden_html")
 }
 
 fn update_golden() -> bool {
@@ -530,4 +535,79 @@ fn test_list_malformed_fallback() {
         all_text.contains("Another invalid reference"),
         "Should contain 'Another invalid reference'"
     );
+}
+
+// =============================================================================
+// HTML Snapshot Tests
+// =============================================================================
+
+/// Test that generates HTML from all RTF fixtures and compares against golden files.
+///
+/// This test ensures HTML output remains deterministic and consistent across runs.
+/// It covers all fixture categories: text, list, table, mixed, and selected malformed.
+///
+/// To update golden files, run: `UPDATE_GOLDEN=1 cargo test -p rtfkit`
+#[test]
+fn html_snapshots() {
+    let fixtures = fixture_dir();
+    let golden_html = golden_html_dir();
+
+    let mut entries: Vec<_> = fs::read_dir(&fixtures)
+        .expect("Failed to read fixtures directory")
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "rtf"))
+        .collect();
+    entries.sort_by_key(|e| e.file_name());
+
+    assert!(
+        !entries.is_empty(),
+        "No fixture files found in {fixtures:?}"
+    );
+
+    for entry in entries {
+        let fixture_path = entry.path();
+        let stem = fixture_path.file_stem().unwrap().to_str().unwrap();
+        let golden_path = golden_html.join(format!("{stem}.html"));
+
+        // Read RTF content
+        let rtf_content = fs::read_to_string(&fixture_path)
+            .unwrap_or_else(|e| panic!("Failed to read fixture {fixture_path:?}: {e}"));
+
+        // Parse RTF to IR
+        let (document, _report) = Interpreter::parse(&rtf_content)
+            .unwrap_or_else(|e| panic!("Failed to parse RTF fixture {fixture_path:?}: {e}"));
+
+        // Generate HTML
+        let options = HtmlWriterOptions::default();
+        let actual = document_to_html(&document, &options)
+            .unwrap_or_else(|e| panic!("Failed to generate HTML for {fixture_path:?}: {e}"));
+
+        if update_golden() {
+            fs::create_dir_all(&golden_html).ok();
+            // Normalize to LF for consistency across platforms
+            let actual_normalized = normalize_line_endings(&actual);
+            fs::write(&golden_path, &actual_normalized)
+                .unwrap_or_else(|e| panic!("Failed to write golden HTML file {golden_path:?}: {e}"));
+            eprintln!("Updated golden HTML file: {golden_path:?}");
+            continue;
+        }
+
+        let expected = fs::read_to_string(&golden_path).unwrap_or_else(|e| {
+            panic!(
+                "Golden HTML file {golden_path:?} not found: {e}\n\
+                 Hint: Run with UPDATE_GOLDEN=1 to generate golden files"
+            )
+        });
+        // Normalize line endings for cross-platform comparison
+        let expected = normalize_line_endings(&expected);
+
+        if normalize_line_endings(&actual) != expected {
+            let diff = diff_strings(&expected, &normalize_line_endings(&actual));
+            panic!(
+                "HTML golden test mismatch for {stem}:\n\n\
+                 {diff}\n\n\
+                 Run with UPDATE_GOLDEN=1 to refresh snapshots"
+            );
+        }
+    }
 }

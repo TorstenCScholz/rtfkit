@@ -4,7 +4,7 @@ This document reflects the current implementation in `main` (v0.6, Phase 6).
 
 ## Overview
 
-`rtfkit` provides a complete RTF-to-DOCX conversion pipeline with an intermediate representation (IR), conversion reporting, and comprehensive test coverage.
+`rtfkit` provides a complete RTF-to-DOCX and RTF-to-HTML conversion pipeline with an intermediate representation (IR), conversion reporting, and comprehensive test coverage.
 
 ```mermaid
 flowchart LR
@@ -15,6 +15,8 @@ flowchart LR
     Interpreter --> Report[Report]
     IR --> DOCXWriter[DOCX Writer]
     DOCXWriter --> DOCXFile[.docx File]
+    IR --> HTMLWriter[HTML Writer]
+    HTMLWriter --> HTMLFile[.html File]
     IR --> CLI[--emit-ir JSON]
     Report --> CLIOut[stdout text/json]
 ```
@@ -26,9 +28,11 @@ rtfkit/
 ├── crates/
 │   ├── rtfkit-core/   # Parser, interpreter, IR, reporting, limits
 │   ├── rtfkit-docx/   # DOCX writer implementation
+│   ├── rtfkit-html/   # HTML writer implementation
 │   └── rtfkit-cli/    # CLI entrypoint, tests, IO/report rendering
 ├── fixtures/          # RTF inputs for tests (44 fixtures organized by category)
 ├── golden/            # Golden IR snapshots
+├── golden_html/       # Golden HTML snapshots
 └── docs/
     ├── adr/           # Architecture Decision Records
     ├── arch/          # Architecture documentation
@@ -158,6 +162,43 @@ Responsibilities:
 | `CellMerge::VerticalContinue` | `<w:vMerge w:val="continue"/>` |
 | `CellVerticalAlign` | `<w:vAlign w:val="..."/>` |
 
+## `rtfkit-html`
+
+Responsibilities:
+- Convert IR `Document` to HTML5 format
+- Apply semantic mapping rules (not pixel-perfect)
+- Perform HTML escaping and normalization
+- Ensure deterministic output for snapshot testing
+
+### IR → HTML Mapping
+
+| IR Element | HTML Element |
+|------------|--------------|
+| `Document` | `<!doctype html><html>...` (with wrapper) |
+| `Block::Paragraph` | `<p>` |
+| `Block::ListBlock` (bullet) | `<ul>` |
+| `Block::ListBlock` (ordered) | `<ol>` |
+| `Block::ListBlock` (mixed) | `<ul class="rtf-list-mixed">` |
+| `Block::TableBlock` | `<table class="rtf-table">` |
+| `Run` | text node |
+| `Run.bold = true` | `<strong>` |
+| `Run.italic = true` | `<em>` |
+| `Run.underline = true` | `<span class="rtf-u">` |
+| `Paragraph.alignment` | CSS class (e.g., `rtf-align-center`) |
+| `ListItem` | `<li>` |
+| `TableRow` | `<tr>` |
+| `TableCell` | `<td>` |
+| `CellMerge::HorizontalStart` | `colspan="N"` |
+| `CellMerge::VerticalStart` | `rowspan="N"` |
+| `CellVerticalAlign` | CSS class (e.g., `rtf-valign-middle`) |
+
+### HTML Output Characteristics
+
+- **Semantic-first**: No font sizes, colors, or borders
+- **Deterministic**: Same IR always produces byte-identical HTML
+- **Well-formed**: Valid HTML5 with proper escaping
+- **Minimal CSS**: Optional default stylesheet for basic styling
+
 ## `rtfkit` CLI
 
 Binary name: `rtfkit`
@@ -169,10 +210,11 @@ rtfkit convert [OPTIONS] <INPUT>
 ```
 
 Options:
+- `--to <docx|html>`: output format (default `docx`)
 - `--format <text|json>`: report output format (default `text`)
 - `--emit-ir <FILE>`: write IR as pretty JSON
 - `--strict`: exit non-zero if `DroppedContent` warnings exist
-- `-o, --output <FILE>`: write DOCX output to file
+- `-o, --output <FILE>`: write output to file
 - `--force`: overwrite existing output file
 - `--verbose`: debug logging
 
@@ -258,6 +300,7 @@ Fixtures are organized by category:
 - Limited RTF feature coverage (no images as IR blocks)
 - No hyperlinks/fields as first-class output
 - DOCX output supports basic text formatting, lists, and tables
+- HTML output is semantic-first (no font sizes, colors, or borders)
 - Row alignment and indent not fully supported by docx-rs (cosmetic loss only)
 - No full RTF spec compliance target
 
@@ -274,6 +317,7 @@ Fixtures are organized by category:
 - [Phase 5 Specification](../specs/PHASE5.md)
 - [Phase 5 IR Design](phase5-ir-design.md)
 - [Phase 6 Specification](../specs/PHASE6.md)
+- [HTML Output Specification](../specs/PHASE_HTML.md)
 - [Initial Description](../specs/INITIAL_DESCRIPTION.md)
 - [Limits Policy](../limits-policy.md)
 - [Warning Reference](../warning-reference.md)

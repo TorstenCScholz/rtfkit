@@ -959,6 +959,7 @@ dependencies = [
  "quick-xml",
  "rtfkit-core",
  "rtfkit-docx",
+ "rtfkit-html",
  "serde_json",
  "similar",
  "tempfile",
@@ -987,6 +988,14 @@ dependencies = [
  "tempfile",
  "thiserror",
  "zip 0.6.6",
+]
+
+[[package]]
+name = "rtfkit-html"
+version = "0.1.0"
+dependencies = [
+ "rtfkit-core",
+ "thiserror",
 ]
 
 [[package]]

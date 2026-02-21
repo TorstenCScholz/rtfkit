@@ -6,11 +6,12 @@ RTF parsing toolkit with a CLI-first workflow.
 
 ## Current Status (Phase 6)
 
-rtfkit provides a complete RTF-to-DOCX conversion pipeline with:
+rtfkit provides a complete RTF-to-DOCX and RTF-to-HTML conversion pipeline with:
 
 - **Text extraction** with formatting preservation (bold, italic, underline, alignment)
 - **List support** - bullet and decimal lists with nested levels (up to 8)
 - **Table support** - rows, cells, horizontal/vertical merges, cell alignment
+- **HTML output** - semantic-first HTML5 output with `--to html`
 - **Conversion reports** - JSON or text format with warnings and statistics
 - **IR emission** - `--emit-ir` for snapshot/debug workflows
 - **Parser limits** - safety limits for input size, depth, and warnings
@@ -31,8 +32,11 @@ Or download a pre-built binary from [Releases](https://github.com/TorstenCScholz
 ## Usage
 
 ```sh
-# Convert RTF to DOCX
+# Convert RTF to DOCX (default output format)
 rtfkit convert input.rtf -o output.docx
+
+# Convert RTF to HTML
+rtfkit convert input.rtf --to html -o output.html
 
 # Convert and overwrite existing output file
 rtfkit convert input.rtf -o output.docx --force
@@ -209,6 +213,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the fixture-first contribution workfl
 - No images as first-class IR blocks
 - No hyperlinks/fields as first-class output
 - DOCX output supports basic text formatting, lists, and tables
+- HTML output is semantic-first, not pixel-perfect (no font sizes, colors, or borders)
 - List nesting limited to 8 levels (DOCX compatibility)
 - Row alignment and indent not fully supported by docx-rs (cosmetic loss only)
 

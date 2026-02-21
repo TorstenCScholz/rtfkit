@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/rtfkit-core", "crates/rtfkit-cli", "crates/rtfkit-docx"]
+members = ["crates/rtfkit-core", "crates/rtfkit-cli", "crates/rtfkit-docx", "crates/rtfkit-html"]
 resolver = "2"
 
 [workspace.package]

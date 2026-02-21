@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use rtfkit_core::{Document, Interpreter, Report, Warning};
 use rtfkit_docx::write_docx;
+use rtfkit_html::{document_to_html_with_warnings, HtmlWriterOptions};
 use tracing::debug;
 
 /// RTF conversion toolkit - convert RTF files to various formats.
@@ -32,8 +33,8 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
 
-        /// Output target (currently only docx is accepted)
-        #[arg(long, default_value = "docx", value_parser = ["docx"])]
+        /// Output target format (docx or html)
+        #[arg(long, default_value = "docx", value_parser = ["docx", "html"])]
         to: String,
 
         /// Output format for conversion report
@@ -88,6 +89,7 @@ fn run() -> Result<ExitCode> {
             emit_ir.as_ref(),
             strict,
             force,
+            cli.verbose,
         ),
     }
 }
@@ -100,6 +102,7 @@ fn handle_convert(
     emit_ir: Option<&PathBuf>,
     strict: bool,
     force: bool,
+    verbose: bool,
 ) -> Result<ExitCode> {
     debug!("Target format requested: {to}");
 
@@ -119,36 +122,27 @@ fn handle_convert(
     debug!("Parsed document with {} blocks", document.blocks.len());
     debug!("Report: {} warnings", report.warnings.len());
 
-    // Check for strict mode violations
-    if strict {
-        let dropped_content: Vec<&Warning> = report
-            .warnings
-            .iter()
-            .filter(|w| matches!(w, Warning::DroppedContent { .. }))
-            .collect();
-
-        if !dropped_content.is_empty() {
-            eprintln!(
-                "Strict mode violated: {} dropped content warning(s)",
-                dropped_content.len()
-            );
-            for warning in &dropped_content {
-                if let Warning::DroppedContent { reason, .. } = warning {
-                    eprintln!("  - {reason}");
-                }
-            }
-            return Ok(ExitCode::from(EXIT_STRICT_MODE));
-        }
-    }
-
     // Emit IR if requested
     if let Some(ir_path) = emit_ir {
         emit_ir_to_file(&document, ir_path)?;
     }
 
-    // Handle DOCX output if --output is specified
+    // Strict mode for parser/interpreter warnings.
+    if strict {
+        let dropped_reasons = dropped_content_reasons(&report.warnings);
+        if !dropped_reasons.is_empty() {
+            print_strict_mode_violation(&dropped_reasons);
+            return Ok(ExitCode::from(EXIT_STRICT_MODE));
+        }
+    }
+
+    // Handle output if --output is specified
     if let Some(output_path) = output {
-        return handle_docx_output(&document, output_path, force);
+        return match to {
+            "docx" => handle_docx_output(&document, output_path, force, verbose),
+            "html" => handle_html_output(&document, output_path, force, verbose, strict),
+            _ => unreachable!("clap validates --to"),
+        };
     }
 
     // Output report to stdout (when no --output specified)
@@ -162,7 +156,7 @@ fn handle_convert(
 }
 
 /// Handle writing DOCX output with validation and error handling
-fn handle_docx_output(document: &Document, output_path: &Path, force: bool) -> Result<ExitCode> {
+fn handle_docx_output(document: &Document, output_path: &Path, force: bool, verbose: bool) -> Result<ExitCode> {
     // Validate .docx extension
     let extension = output_path
         .extension()
@@ -171,14 +165,18 @@ fn handle_docx_output(document: &Document, output_path: &Path, force: bool) -> R
     match extension.as_deref() {
         Some("docx") => {}
         Some(other) => {
-            eprintln!(
-                "Warning: Output file has '.{other}' extension, but DOCX format will be written."
-            );
-            eprintln!("         Consider using '.docx' extension for clarity.");
+            if verbose {
+                eprintln!(
+                    "Warning: Output file has '.{other}' extension, but DOCX format will be written."
+                );
+                eprintln!("         Consider using '.docx' extension for clarity.");
+            }
         }
         None => {
-            eprintln!("Warning: Output file has no extension. DOCX format will be written.");
-            eprintln!("         Consider using '.docx' extension for clarity.");
+            if verbose {
+                eprintln!("Warning: Output file has no extension. DOCX format will be written.");
+                eprintln!("         Consider using '.docx' extension for clarity.");
+            }
         }
     }
 
@@ -226,6 +224,127 @@ fn handle_docx_output(document: &Document, output_path: &Path, force: bool) -> R
 
     eprintln!("DOCX written to: {}", output_path.display());
     Ok(ExitCode::from(EXIT_SUCCESS))
+}
+
+/// Handle writing HTML output with validation and error handling
+fn handle_html_output(
+    document: &Document,
+    output_path: &Path,
+    force: bool,
+    verbose: bool,
+    strict: bool,
+) -> Result<ExitCode> {
+    // Validate HTML extension (warn only in verbose mode)
+    let extension = output_path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase());
+
+    match extension.as_deref() {
+        Some("html") | Some("htm") => {}
+        Some(other) => {
+            if verbose {
+                eprintln!(
+                    "Warning: Output file has '.{other}' extension, but HTML format will be written."
+                );
+                eprintln!("         Consider using '.html' extension for clarity.");
+            }
+        }
+        None => {
+            if verbose {
+                eprintln!("Warning: Output file has no extension. HTML format will be written.");
+                eprintln!("         Consider using '.html' extension for clarity.");
+            }
+        }
+    }
+
+    // Check if output directory exists and is writable
+    if let Some(parent) = output_path.parent() {
+        if !parent.exists() {
+            eprintln!(
+                "Error: Output directory does not exist: {}",
+                parent.display()
+            );
+            return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+        }
+
+        // Check directory writability using a unique probe filename.
+        match check_directory_writable(parent) {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!(
+                    "Error: Output directory is not writable: {}",
+                    parent.display()
+                );
+                eprintln!("  {e}");
+                return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+            }
+        }
+    }
+
+    // Check if file exists and --force is not set
+    if output_path.exists() && !force {
+        eprintln!(
+            "Error: Output file already exists: {}",
+            output_path.display()
+        );
+        eprintln!("       Use --force to overwrite existing files.");
+        return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+    }
+
+    // Generate HTML
+    debug!("Writing HTML to: {}", output_path.display());
+    let options = HtmlWriterOptions::default();
+    let output = match document_to_html_with_warnings(document, &options) {
+        Ok(output) => output,
+        Err(e) => {
+            eprintln!("Error generating HTML: {}", output_path.display());
+            eprintln!("  {e}");
+            return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+        }
+    };
+
+    // Strict mode for HTML includes writer-level drops.
+    // Parser/interpreter drops are checked in handle_convert.
+    if strict {
+        let dropped_reasons = output.dropped_content_reasons.clone();
+        if !dropped_reasons.is_empty() {
+            print_strict_mode_violation(&dropped_reasons);
+            return Ok(ExitCode::from(EXIT_STRICT_MODE));
+        }
+    }
+
+    // Write HTML file
+    if let Err(e) = fs::write(output_path, output.html) {
+        eprintln!("Error writing HTML file: {}", output_path.display());
+        eprintln!("  {e}");
+        return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+    }
+
+    eprintln!("HTML written to: {}", output_path.display());
+    Ok(ExitCode::from(EXIT_SUCCESS))
+}
+
+fn dropped_content_reasons(warnings: &[Warning]) -> Vec<String> {
+    warnings
+        .iter()
+        .filter_map(|warning| {
+            if let Warning::DroppedContent { reason, .. } = warning {
+                Some(reason.clone())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn print_strict_mode_violation(dropped_reasons: &[String]) {
+    eprintln!(
+        "Strict mode violated: {} dropped content warning(s)",
+        dropped_reasons.len()
+    );
+    for reason in dropped_reasons {
+        eprintln!("  - {reason}");
+    }
 }
 
 fn check_directory_writable(dir: &Path) -> std::io::Result<()> {

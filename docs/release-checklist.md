@@ -60,11 +60,24 @@ This document provides a comprehensive checklist for releasing rtfkit. Follow th
   ./scripts/smoke_test.ps1 -BinaryPath ./target/release/rtfkit.exe
   ```
 
+- [ ] **Test HTML output**
+  ```bash
+  # Test HTML conversion
+  ./target/release/rtfkit convert fixtures/text_simple_paragraph.rtf --to html -o test.html
+  
+  # Verify HTML is well-formed
+  cat test.html  # Should show valid HTML5
+  
+  # Test HTML with tables
+  ./target/release/rtfkit convert fixtures/table_simple_2x2.rtf --to html -o table.html
+  ```
+
 - [ ] **Test with real-world RTF files**
   - Test with complex documents containing tables
   - Test with documents containing lists
   - Test with documents containing Unicode content
   - Test with malformed RTF files (error handling)
+  - Test both DOCX and HTML output formats
 
 ### 4. Dependency Audit
 
@@ -272,6 +285,49 @@ For each artifact:
    
    # Verify output
    unzip -l test.docx  # Should show word/document.xml
+   
+   # Convert to HTML
+   ./rtfkit convert test.rtf --to html --output test.html
+   
+   # Verify HTML output
+   cat test.html  # Should show valid HTML5 with Hello World
+   ```
+
+### HTML-Specific Verification
+
+For HTML output testing:
+
+1. **Test HTML output determinism**
+   ```bash
+   # Run conversion twice and compare
+   ./rtfkit convert fixtures/text_simple_paragraph.rtf --to html -o test1.html
+   ./rtfkit convert fixtures/text_simple_paragraph.rtf --to html -o test2.html
+   diff test1.html test2.html  # Should be identical
+   ```
+
+2. **Test HTML snapshot tests**
+   ```bash
+   # Update HTML golden snapshots if needed
+   UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests -- html
+   
+   # Verify HTML snapshots are valid
+   for f in golden_html/*.html; do
+     # Basic well-formedness check
+     grep -q "<!doctype html>" "$f" && echo "$f: OK"
+   done
+   ```
+
+3. **Test HTML with complex content**
+   ```bash
+   # Test tables with merges
+   ./rtfkit convert fixtures/table_mixed_merge.rtf --to html -o merge.html
+   
+   # Test nested lists
+   ./rtfkit convert fixtures/list_nested_two_levels.rtf --to html -o nested.html
+   
+   # Verify structure
+   grep -q "<table" merge.html
+   grep -q "<ul>" nested.html
    ```
 
 ### Windows-Specific Verification
@@ -408,6 +464,7 @@ Copy this for each release:
 - [ ] Code formatted
 - [ ] CI passes on main
 - [ ] Smoke tests pass locally
+- [ ] HTML output tests pass
 - [ ] Security audit clean
 
 ### Version Bump
@@ -425,4 +482,5 @@ Copy this for each release:
 - [ ] GitHub release verified
 - [ ] Artifacts downloaded and tested
 - [ ] Checksums verified
+- [ ] HTML output verified on all platforms
 ```

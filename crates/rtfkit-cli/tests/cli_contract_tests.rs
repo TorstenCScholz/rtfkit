@@ -132,6 +132,31 @@ mod exit_code_tests {
         assert_eq!(bytes[1], 0x4B, "DOCX should be a ZIP file (PK signature)");
     }
 
+    #[test]
+    fn html_output_returns_success() {
+        // HTML output should succeed with exit code 0
+        let dir = tempdir().unwrap();
+        let input = dir.path().join("input.rtf");
+        let output = dir.path().join("out.html");
+        fs::write(&input, r#"{\rtf1\ansi Hello\par}"#).unwrap();
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            input.to_str().unwrap(),
+            "--to",
+            "html",
+            "-o",
+            output.to_str().unwrap(),
+        ]);
+        cmd.assert().success().code(0);
+
+        assert!(output.exists(), "Output HTML file should be created");
+        let html = fs::read_to_string(&output).unwrap();
+        assert!(html.contains("<!doctype html>"));
+        assert!(html.contains("<p>Hello</p>"));
+    }
+
     // -------------------------------------------------------------------------
     // Exit Code 2: Parse/Validation Failure Tests
     // -------------------------------------------------------------------------
@@ -314,6 +339,55 @@ mod exit_code_tests {
             "--force",
         ]);
         cmd.assert().success().stderr(contains("DOCX written to"));
+    }
+
+    #[test]
+    fn html_output_refuses_overwrite_without_force() {
+        // Attempting to overwrite existing HTML file without --force should fail with exit code 3
+        let dir = tempdir().unwrap();
+        let input = dir.path().join("input.rtf");
+        let output = dir.path().join("out.html");
+        fs::write(&input, r#"{\rtf1\ansi Hello\par}"#).unwrap();
+
+        // First conversion should succeed.
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            input.to_str().unwrap(),
+            "--to",
+            "html",
+            "-o",
+            output.to_str().unwrap(),
+        ]);
+        cmd.assert().success();
+
+        // Second conversion should fail without --force.
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            input.to_str().unwrap(),
+            "--to",
+            "html",
+            "-o",
+            output.to_str().unwrap(),
+        ]);
+        cmd.assert()
+            .failure()
+            .code(3)
+            .stderr(contains("Output file already exists"));
+
+        // With --force, it should succeed.
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            input.to_str().unwrap(),
+            "--to",
+            "html",
+            "-o",
+            output.to_str().unwrap(),
+            "--force",
+        ]);
+        cmd.assert().success().stderr(contains("HTML written to"));
     }
 
     #[test]

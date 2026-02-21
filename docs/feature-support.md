@@ -89,12 +89,35 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 
 | Format | Support | Notes |
 |--------|---------|-------|
-| DOCX | ✅ Supported | Primary output format |
+| DOCX | ✅ Supported | Primary output format (default) |
+| HTML | ✅ Supported | Via `--to html` flag; semantic-first output |
 | IR JSON | ✅ Supported | Via `--emit-ir` flag |
 | Report JSON | ✅ Supported | Via `--format json` |
 | Report Text | ✅ Supported | Default output |
-| HTML | ❌ Not Supported | Planned for future phase |
 | PDF | ❌ Not Supported | Planned for future phase |
+
+### HTML Output Details
+
+HTML output is selected with `--to html` and produces semantic HTML5:
+
+| Feature | HTML Support | Notes |
+|---------|--------------|-------|
+| Paragraphs | ✅ Supported | `<p>` elements |
+| Bold text | ✅ Supported | `<strong>` elements |
+| Italic text | ✅ Supported | `<em>` elements |
+| Underline text | ✅ Supported | `<span class="rtf-u">` |
+| Text alignment | ✅ Supported | CSS classes (e.g., `rtf-align-center`) |
+| Bullet lists | ✅ Supported | `<ul>` elements |
+| Ordered lists | ✅ Supported | `<ol>` elements |
+| Nested lists | ✅ Supported | Nested `<ul>`/`<ol>` |
+| Tables | ✅ Supported | `<table>` with proper structure |
+| Horizontal merges | ✅ Supported | `colspan` attribute |
+| Vertical merges | ✅ Supported | `rowspan` attribute |
+| Cell alignment | ✅ Supported | CSS classes |
+| Font family/size | ❌ Not Supported | Semantic-first design |
+| Colors | ❌ Not Supported | Semantic-first design |
+| Borders | ❌ Not Supported | Semantic-first design |
+| Images | ❌ Not Supported | No IR image blocks |
 
 ## Safety Features
 
@@ -128,12 +151,13 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 4. **Row alignment cosmetic loss** - Row alignment is parsed but not fully emitted by docx-rs
 5. **List nesting limit** - Maximum 8 levels due to DOCX compatibility
 6. **No nested tables** - Tables inside cells are not supported
+7. **HTML is semantic-first** - No font sizes, colors, or borders in HTML output
 
 ## Version History
 
 | Version | Changes |
 |---------|---------|
-| 0.6.0 | Added feature support matrix documentation |
+| 0.6.0 | Added HTML output support, feature support matrix documentation |
 | 0.5.0 | Added table merge and alignment support |
 | 0.4.0 | Added basic table support |
 | 0.3.0 | Added list support |

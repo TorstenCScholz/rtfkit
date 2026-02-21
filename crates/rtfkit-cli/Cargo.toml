@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 rtfkit-core = { path = "../rtfkit-core" }
 rtfkit-docx = { path = "../rtfkit-docx" }
+rtfkit-html = { path = "../rtfkit-html" }
 clap = { version = "4", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"

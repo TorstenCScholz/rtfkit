@@ -1,0 +1,13 @@
+[package]
+name = "rtfkit-html"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "HTML writer for rtfkit IR documents"
+
+[dependencies]
+rtfkit-core = { path = "../rtfkit-core" }
+thiserror = "2.0"
+
+[dev-dependencies]
