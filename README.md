@@ -10,6 +10,7 @@ Current status (Phase 4):
 - Emits conversion reports (`text` or `json`)
 - Supports `--emit-ir` for snapshot/debug workflows
 - Parser limits for safety (input size, depth, warnings)
+- See [RTF Feature Overview](docs/rtf-feature-overview.md) for supported vs. not-yet-supported features
 
 [![CI](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml/badge.svg)](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml)
 
@@ -160,6 +161,7 @@ cargo fmt --all
 - DOCX output supports basic text formatting (bold, italic, underline, alignment), lists, and tables
 - List nesting limited to 8 levels (DOCX compatibility)
 - Table support is basic: no cell merging, complex borders, or nested tables
+- For up-to-date support details, see [RTF Feature Overview](docs/rtf-feature-overview.md)
 
 ## License
 
