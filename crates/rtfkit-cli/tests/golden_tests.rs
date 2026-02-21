@@ -46,6 +46,13 @@ fn diff_strings(expected: &str, actual: &str) -> String {
     out
 }
 
+/// Normalize line endings to LF for cross-platform comparison.
+/// This ensures tests pass on Windows where Git may checkout files with CRLF
+/// due to `core.autocrlf`, while `serde_json::to_string_pretty()` always produces LF.
+fn normalize_line_endings(s: &str) -> String {
+    s.replace("\r\n", "\n")
+}
+
 /// Helper to extract paragraph from block.
 /// Returns None for ListBlock and TableBlock variants (which contain paragraphs inside items).
 fn as_paragraph(block: &rtfkit_core::Block) -> Option<&rtfkit_core::Paragraph> {
@@ -93,7 +100,9 @@ fn golden_ir_output() {
 
         if update_golden() {
             fs::create_dir_all(&golden).ok();
-            fs::write(&golden_path, &actual)
+            // Normalize to LF for consistency across platforms
+            let actual_normalized = normalize_line_endings(&actual);
+            fs::write(&golden_path, &actual_normalized)
                 .unwrap_or_else(|e| panic!("Failed to write golden file {golden_path:?}: {e}"));
             eprintln!("Updated golden file: {golden_path:?}");
             continue;
@@ -105,9 +114,11 @@ fn golden_ir_output() {
                  Hint: Run with UPDATE_GOLDEN=1 to generate golden files"
             )
         });
+        // Normalize line endings for cross-platform comparison
+        let expected = normalize_line_endings(&expected);
 
-        if actual != expected {
-            let diff = diff_strings(&expected, &actual);
+        if normalize_line_endings(&actual) != expected {
+            let diff = diff_strings(&expected, &normalize_line_endings(&actual));
             panic!(
                 "Golden test mismatch for {stem}:\n\n\
                  {diff}\n\n\

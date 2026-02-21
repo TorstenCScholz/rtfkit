@@ -1,0 +1,2 @@
+# Golden test files must always use LF line endings for cross-platform consistency
+golden/*.json text eol=lf
