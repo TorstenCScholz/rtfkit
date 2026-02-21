@@ -306,3 +306,114 @@ fn dropped_content_always_causes_strict_failure() {
         .code(4)
         .stderr(contains("Strict mode violated"));
 }
+
+// =============================================================================
+// Table Strict Mode Contract Tests (PHASE4 section 7.4)
+// =============================================================================
+
+#[test]
+fn test_table_simple_2x2_strict_succeeds() {
+    // Well-formed table should succeed in strict mode (no semantic loss)
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_simple_2x2.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert().success();
+}
+
+#[test]
+fn test_table_missing_cell_terminator_strict_fails() {
+    // Missing cell terminator should fail in strict mode due to UnclosedTableCell warning
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_missing_cell_terminator.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert()
+        .failure()
+        .code(4)
+        .stderr(contains("Strict mode violated"));
+}
+
+#[test]
+fn test_table_missing_row_terminator_strict_fails() {
+    // Missing row terminator should fail in strict mode due to UnclosedTableRow warning
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_missing_row_terminator.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert()
+        .failure()
+        .code(4)
+        .stderr(contains("Strict mode violated"));
+}
+
+#[test]
+fn test_table_orphan_controls_strict_fails() {
+    // Orphan table controls should fail in strict mode due to MalformedTableStructure warning
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_orphan_controls.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert()
+        .failure()
+        .code(4)
+        .stderr(contains("Strict mode violated"));
+}
+
+#[test]
+fn test_table_merge_controls_non_strict_succeeds() {
+    // Degraded merge controls should succeed in non-strict mode with warnings
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_merge_controls_degraded.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args(["convert", fixture.to_str().unwrap(), "--format", "json"]);
+    // Should succeed (exit code 0) with warnings in output
+    cmd.assert().success().stdout(contains("warnings"));
+}
+
+#[test]
+fn test_table_missing_cell_terminator_non_strict_succeeds() {
+    // Missing cell terminator should succeed in non-strict mode with warnings
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/table_missing_cell_terminator.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args(["convert", fixture.to_str().unwrap(), "--format", "json"]);
+    // Should succeed (exit code 0) with warnings in output
+    cmd.assert().success().stdout(contains("warnings"));
+}

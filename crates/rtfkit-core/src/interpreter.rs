@@ -29,6 +29,7 @@ use crate::limits::ParserLimits;
 use crate::report::ReportBuilder;
 use crate::{
     Alignment, Block, Document, ListBlock, ListId, ListItem, ListKind, Paragraph, Report, Run,
+    TableBlock, TableCell, TableRow,
 };
 use nom::{
     IResult,
@@ -293,6 +294,22 @@ pub struct Interpreter {
     current_list_level: Option<ParsedListLevel>,
     /// Current list override being parsed (for listoverridetable)
     current_list_override: Option<ParsedListOverride>,
+    // =============================================================================
+    // Table Parsing State (Phase 4)
+    // =============================================================================
+    /// Current table being built
+    current_table: Option<TableBlock>,
+    /// Current row being built
+    current_row: Option<TableRow>,
+    /// Current cell being built
+    current_cell: Option<TableCell>,
+    /// Cell boundaries encountered in current row (from \cellxN)
+    pending_cellx: Vec<i32>,
+    /// Whether the current paragraph saw \intbl.
+    ///
+    /// This flag is scoped to the current paragraph and reset at paragraph boundaries.
+    /// Table membership itself is derived from active row/cell state.
+    seen_intbl_in_paragraph: bool,
 }
 
 impl Interpreter {
@@ -331,6 +348,12 @@ impl Interpreter {
             current_list_def: None,
             current_list_level: None,
             current_list_override: None,
+            // Table parsing state
+            current_table: None,
+            current_row: None,
+            current_cell: None,
+            pending_cellx: Vec::new(),
+            seen_intbl_in_paragraph: false,
         }
     }
 
@@ -399,6 +422,11 @@ impl Interpreter {
 
         // Finalize any remaining content
         interpreter.finalize_paragraph();
+
+        // Finalize any remaining table context at document end
+        if interpreter.current_table.is_some() {
+            interpreter.finalize_current_table();
+        }
 
         // Build the final report
         let report = interpreter.report_builder.build();
@@ -771,6 +799,8 @@ impl Interpreter {
                     self.current_list_ref = None;
                     self.pending_ls_id = None;
                     self.pending_level = 0;
+                    // Reset paragraph-local table marker.
+                    self.seen_intbl_in_paragraph = false;
                 } else {
                     self.finalize_paragraph();
                 }
@@ -840,6 +870,43 @@ impl Interpreter {
                 self.report_builder
                     .dropped_content("Dropped legacy paragraph numbering content", None);
             }
+            // =============================================================================
+            // Table Control Words (Phase 4)
+            // =============================================================================
+            // \trowd - Start of a new table row definition
+            "trowd" => {
+                self.handle_trowd();
+            }
+            // \cellxN - Cell boundary position in twips
+            "cellx" => {
+                if let Some(boundary) = parameter {
+                    self.pending_cellx.push(boundary);
+                }
+            }
+            // \intbl - Paragraph is inside a table
+            "intbl" => {
+                self.seen_intbl_in_paragraph = true;
+            }
+            // \cell - End of a table cell
+            "cell" => {
+                self.handle_cell();
+            }
+            // \row - End of a table row
+            "row" => {
+                self.handle_row();
+            }
+            // Row formatting controls - recognized but not fully supported
+            "trgaph" | "trleft" | "trql" | "trqr" | "trqc" => {
+                self.report_builder.unsupported_table_control(word);
+            }
+            // Cell vertical alignment controls - recognized but not fully supported
+            "clvertalt" | "clvertalc" | "clvertalb" => {
+                self.report_builder.unsupported_table_control(word);
+            }
+            // Cell merge markers - recognized but not fully supported (degraded path)
+            "clmgf" | "clmrg" => {
+                self.report_builder.unsupported_table_control(word);
+            }
             // RTF header control words - silently ignored (not user-facing)
             "rtf" | "ansi" | "ansicpg" | "deff" | "deflang" | "deflangfe" | "adeflang"
             | "result" | "hwid" | "emdash" | "endash" | "emspace" | "enspace" | "qmspace"
@@ -879,6 +946,16 @@ impl Interpreter {
 
     /// Internal text handling (after skip logic)
     fn handle_text_internal(&mut self, text: String) {
+        // If we already completed table rows and prose starts, close table first.
+        if self.current_paragraph.runs.is_empty()
+            && self.current_text.is_empty()
+            && self.current_table.is_some()
+            && self.current_row.is_none()
+            && !self.seen_intbl_in_paragraph
+        {
+            self.finalize_current_table();
+        }
+
         // If this is the first text in the paragraph, capture the alignment
         if self.current_paragraph.runs.is_empty() && self.current_text.is_empty() {
             self.paragraph_alignment = self.current_style.alignment;
@@ -918,14 +995,51 @@ impl Interpreter {
         }
     }
 
-    /// Finalize the current paragraph and add it to the document.
-    fn finalize_paragraph(&mut self) {
-        // Flush any remaining text as a run
+    fn flush_current_text_as_run(&mut self) {
         if !self.current_text.is_empty() {
             let run = self.create_run();
             self.current_paragraph.runs.push(run);
             self.current_text.clear();
         }
+    }
+
+    fn has_pending_paragraph_content(&self) -> bool {
+        !self.current_text.is_empty() || !self.current_paragraph.runs.is_empty()
+    }
+
+    fn reset_paragraph_state(&mut self) {
+        self.current_paragraph = Paragraph::new();
+        self.current_run_style = self.current_style.snapshot();
+        self.paragraph_alignment = self.current_style.alignment;
+        self.current_list_ref = None;
+        self.pending_ls_id = None;
+        self.pending_level = 0;
+        self.seen_intbl_in_paragraph = false;
+    }
+
+    /// Finalize the current paragraph and add it to the document.
+    fn finalize_paragraph(&mut self) {
+        // Active row context always wins over \intbl marker state.
+        if self.current_row.is_some() {
+            self.finalize_paragraph_for_table();
+            return;
+        }
+
+        // \intbl without an active row is malformed. Keep text as normal paragraph.
+        if self.seen_intbl_in_paragraph && self.has_pending_paragraph_content() {
+            self.report_builder
+                .malformed_table_structure("\\intbl content without table row context");
+            self.report_builder
+                .dropped_content("Table paragraph without row context", None);
+            self.seen_intbl_in_paragraph = false;
+        }
+
+        // If a completed table is pending, close it before adding prose blocks.
+        if self.current_table.is_some() {
+            self.finalize_current_table();
+        }
+
+        self.flush_current_text_as_run();
 
         // Add paragraph to document if it has content
         if !self.current_paragraph.runs.is_empty() {
@@ -956,16 +1070,7 @@ impl Interpreter {
                 .add_runs(self.current_paragraph.runs.len());
         }
 
-        // Reset current paragraph
-        self.current_paragraph = Paragraph::new();
-        self.current_run_style = self.current_style.snapshot();
-        // Reset paragraph alignment for the next paragraph
-        self.paragraph_alignment = self.current_style.alignment;
-
-        // Clear list state for next paragraph
-        self.current_list_ref = None;
-        self.pending_ls_id = None;
-        self.pending_level = 0;
+        self.reset_paragraph_state();
     }
 
     /// Resolve list reference from pending state.
@@ -1013,6 +1118,246 @@ impl Interpreter {
         let mut list_block = ListBlock::new(list_id, kind);
         list_block.add_item(ListItem::from_paragraph(level, paragraph));
         self.document.blocks.push(Block::ListBlock(list_block));
+    }
+
+    fn add_list_item_to_current_cell(
+        &mut self,
+        list_id: ListId,
+        level: u8,
+        kind: ListKind,
+        paragraph: Paragraph,
+    ) {
+        if self.current_cell.is_none() {
+            self.current_cell = Some(TableCell::new());
+        }
+
+        if let Some(ref mut cell) = self.current_cell {
+            if let Some(Block::ListBlock(last_list)) = cell.blocks.last_mut() {
+                if last_list.list_id == list_id && last_list.kind == kind {
+                    last_list.add_item(ListItem::from_paragraph(level, paragraph));
+                    return;
+                }
+            }
+
+            let mut list_block = ListBlock::new(list_id, kind);
+            list_block.add_item(ListItem::from_paragraph(level, paragraph));
+            cell.blocks.push(Block::ListBlock(list_block));
+        }
+    }
+
+    fn has_open_or_pending_table_cell_content(&self) -> bool {
+        self.current_cell.is_some() || self.has_pending_paragraph_content()
+    }
+
+    fn auto_close_table_cell_if_needed(&mut self, dropped_reason: &str) {
+        if self.current_row.is_none() || !self.has_open_or_pending_table_cell_content() {
+            return;
+        }
+
+        self.report_builder.unclosed_table_cell();
+        self.report_builder.dropped_content(dropped_reason, None);
+        self.finalize_paragraph_for_table();
+        self.finalize_current_cell();
+    }
+
+    // =============================================================================
+    // Table Parsing Methods (Phase 4)
+    // =============================================================================
+
+    /// Handle \trowd - start of a new table row definition.
+    fn handle_trowd(&mut self) {
+        // Finalize any dangling row/cell with warning.
+        if self.current_row.is_some() {
+            self.auto_close_table_cell_if_needed("Unclosed table cell at row boundary");
+            self.report_builder.unclosed_table_row();
+            self.report_builder
+                .dropped_content("Unclosed table row at new row definition", None);
+            self.finalize_current_row();
+        }
+
+        // Start fresh row context
+        self.pending_cellx.clear();
+        self.current_row = Some(TableRow::new());
+
+        // Ensure we have a table context
+        if self.current_table.is_none() {
+            self.current_table = Some(TableBlock::new());
+        }
+
+        self.seen_intbl_in_paragraph = false;
+    }
+
+    /// Handle \cell - end of a table cell.
+    fn handle_cell(&mut self) {
+        // Check if we're in a table context
+        if self.current_table.is_none() || self.current_row.is_none() {
+            // Orphan \cell outside table context
+            self.report_builder
+                .malformed_table_structure("\\cell encountered outside table context");
+            self.report_builder
+                .dropped_content("Table cell control outside table context", None);
+            // Preserve any text content as regular paragraph
+            self.finalize_paragraph();
+            return;
+        }
+
+        // Finalize any current paragraph into the cell first
+        self.finalize_paragraph_for_table();
+
+        // Preserve explicit empty cells.
+        if self.current_cell.is_none() {
+            self.current_cell = Some(TableCell::new());
+        }
+
+        // Finalize the current cell
+        self.finalize_current_cell();
+    }
+
+    /// Handle \row - end of a table row.
+    fn handle_row(&mut self) {
+        // Check if we're in a table context
+        if self.current_table.is_none() || self.current_row.is_none() {
+            // Orphan \row outside table context
+            self.report_builder
+                .malformed_table_structure("\\row encountered outside table context");
+            self.report_builder
+                .dropped_content("Table row control outside table context", None);
+            return;
+        }
+
+        // Finalize current cell if not closed.
+        self.auto_close_table_cell_if_needed("Unclosed table cell at row end");
+
+        // Finalize the current row
+        self.finalize_current_row();
+
+        // Clear pending cellx for next row
+        self.pending_cellx.clear();
+        self.seen_intbl_in_paragraph = false;
+    }
+
+    /// Finalize the current cell and attach it to the current row.
+    fn finalize_current_cell(&mut self) {
+        if let Some(cell) = self.current_cell.take() {
+            // Convert \cellx right-boundary positions to actual cell widths.
+            let cell_index = self
+                .current_row
+                .as_ref()
+                .map(|r| r.cells.len())
+                .unwrap_or(0);
+            let width = self
+                .pending_cellx
+                .get(cell_index)
+                .copied()
+                .and_then(|right_boundary| {
+                    if cell_index == 0 {
+                        Some(right_boundary)
+                    } else {
+                        self.pending_cellx
+                            .get(cell_index - 1)
+                            .map(|left_boundary| right_boundary - *left_boundary)
+                    }
+                });
+
+            let mut cell_with_width = cell;
+            if let Some(w) = width {
+                if w > 0 {
+                    cell_with_width.width_twips = Some(w);
+                } else {
+                    self.report_builder.malformed_table_structure(&format!(
+                        "Non-increasing \\cellx boundaries at cell {}",
+                        cell_index
+                    ));
+                }
+            }
+
+            if let Some(ref mut row) = self.current_row {
+                row.cells.push(cell_with_width);
+            }
+        }
+    }
+
+    /// Finalize the current row and attach it to the current table.
+    fn finalize_current_row(&mut self) {
+        if let Some(row) = self.current_row.take() {
+            // Check for cellx count mismatch
+            if !self.pending_cellx.is_empty() && row.cells.len() != self.pending_cellx.len() {
+                let reason = format!(
+                    "Cell count ({}) does not match \\cellx count ({})",
+                    row.cells.len(),
+                    self.pending_cellx.len()
+                );
+                self.report_builder.malformed_table_structure(&reason);
+                self.report_builder
+                    .dropped_content("Table cell count mismatch", None);
+            }
+
+            if let Some(ref mut table) = self.current_table {
+                table.rows.push(row);
+            }
+        }
+    }
+
+    /// Finalize the current table and add it to the document.
+    fn finalize_current_table(&mut self) {
+        // Finalize any dangling row/cell.
+        if self.current_row.is_some() {
+            self.auto_close_table_cell_if_needed("Unclosed table cell at document end");
+            self.report_builder.unclosed_table_row();
+            self.report_builder
+                .dropped_content("Unclosed table row at document end", None);
+            self.finalize_current_row();
+        }
+
+        // Add the table to the document if it has content
+        if let Some(table) = self.current_table.take() {
+            if !table.is_empty() {
+                self.document.blocks.push(Block::TableBlock(table));
+            }
+        }
+
+        // Reset table state
+        self.current_cell = None;
+        self.pending_cellx.clear();
+        self.seen_intbl_in_paragraph = false;
+    }
+
+    /// Finalize paragraph for table context (routes to current cell instead of document).
+    fn finalize_paragraph_for_table(&mut self) {
+        self.flush_current_text_as_run();
+
+        // Add paragraph to current cell if it has content
+        if !self.current_paragraph.runs.is_empty() {
+            self.current_paragraph.alignment = self.paragraph_alignment;
+            self.resolve_list_reference();
+
+            let paragraph = self.current_paragraph.clone();
+
+            if let Some(list_ref) = self.current_list_ref.clone() {
+                self.add_list_item_to_current_cell(
+                    list_ref.list_id,
+                    list_ref.level,
+                    list_ref.kind,
+                    paragraph,
+                );
+            } else {
+                // Create cell if needed.
+                if self.current_cell.is_none() {
+                    self.current_cell = Some(TableCell::new());
+                }
+
+                if let Some(ref mut cell) = self.current_cell {
+                    cell.blocks.push(Block::Paragraph(paragraph));
+                }
+            }
+
+            // Track stats
+            self.report_builder.increment_paragraph_count();
+            self.report_builder
+                .add_runs(self.current_paragraph.runs.len());
+        }
+
+        self.reset_paragraph_state();
     }
 }
 
@@ -1955,5 +2300,124 @@ This is a \b bold\b0  test.\par
         } else {
             panic!("Expected ListBlock");
         }
+    }
+
+    #[test]
+    fn test_table_followed_by_prose_without_pard_is_preserved() {
+        let input = r#"{\rtf1\ansi
+\trowd\cellx2880\cellx5760
+\intbl Cell 1\cell Cell 2\cell\row
+After table text.\par
+}"#;
+
+        let (doc, report) = Interpreter::parse(input).unwrap();
+        assert_eq!(doc.blocks.len(), 2);
+
+        assert!(matches!(doc.blocks[0], Block::TableBlock(_)));
+        if let Block::Paragraph(para) = &doc.blocks[1] {
+            let text: String = para.runs.iter().map(|r| r.text.as_str()).collect();
+            assert!(text.contains("After table text."));
+        } else {
+            panic!("Expected paragraph after table");
+        }
+
+        assert!(
+            !report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::report::Warning::UnclosedTableCell { .. }))
+        );
+    }
+
+    #[test]
+    fn test_missing_cell_terminator_before_row_auto_closes_cell() {
+        let input = r#"{\rtf1\ansi
+\trowd\cellx2880\cellx5760
+\intbl Cell 1\cell Cell 2\row
+}"#;
+
+        let (doc, report) = Interpreter::parse(input).unwrap();
+
+        let table = match &doc.blocks[0] {
+            Block::TableBlock(table) => table,
+            _ => panic!("Expected table block"),
+        };
+
+        assert_eq!(table.rows.len(), 1);
+        assert_eq!(table.rows[0].cells.len(), 2);
+
+        let first: String = table.rows[0].cells[0]
+            .blocks
+            .iter()
+            .flat_map(|b| match b {
+                Block::Paragraph(p) => p.runs.iter().map(|r| r.text.clone()).collect::<Vec<_>>(),
+                _ => Vec::new(),
+            })
+            .collect();
+        let second: String = table.rows[0].cells[1]
+            .blocks
+            .iter()
+            .flat_map(|b| match b {
+                Block::Paragraph(p) => p.runs.iter().map(|r| r.text.clone()).collect::<Vec<_>>(),
+                _ => Vec::new(),
+            })
+            .collect();
+
+        assert_eq!(first, "Cell 1");
+        assert_eq!(second, "Cell 2");
+
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::report::Warning::UnclosedTableCell { .. }))
+        );
+    }
+
+    #[test]
+    fn test_table_cell_width_uses_cellx_deltas() {
+        let input = r#"{\rtf1\ansi
+\trowd\cellx2880\cellx5760
+\intbl A\cell B\cell\row
+}"#;
+
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+        let table = match &doc.blocks[0] {
+            Block::TableBlock(table) => table,
+            _ => panic!("Expected table block"),
+        };
+
+        assert_eq!(table.rows[0].cells[0].width_twips, Some(2880));
+        assert_eq!(table.rows[0].cells[1].width_twips, Some(2880));
+    }
+
+    #[test]
+    fn test_table_cell_list_is_preserved_as_list_block() {
+        let input = r#"{\rtf1\ansi
+{\listtable{\list\listid1{\listlevel\levelnfc23}}}
+{\listoverridetable{\listoverride\listid1\ls1}}
+\trowd\cellx2880\cellx5760
+\intbl Regular\cell {\ls1\ilvl0 Item A\par}{\ls1\ilvl0 Item B\par}\cell\row
+}"#;
+
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+        let table = match &doc.blocks[0] {
+            Block::TableBlock(table) => table,
+            _ => panic!("Expected table block"),
+        };
+
+        assert_eq!(table.rows.len(), 1);
+        assert_eq!(table.rows[0].cells.len(), 2);
+
+        let list_block = table.rows[0].cells[1]
+            .blocks
+            .iter()
+            .find_map(|b| match b {
+                Block::ListBlock(list) => Some(list),
+                _ => None,
+            })
+            .expect("Expected list block in table cell");
+
+        assert_eq!(list_block.items.len(), 2);
     }
 }

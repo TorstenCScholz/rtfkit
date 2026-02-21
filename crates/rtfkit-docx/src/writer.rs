@@ -6,10 +6,14 @@
 use crate::DocxError;
 use docx_rs::{
     AbstractNumbering, AlignmentType, Docx, IndentLevel, Level, LevelJc, LevelText, NumberFormat,
-    Numbering, NumberingId, Numberings, Paragraph as DocxParagraph, Run as DocxRun, Start,
+    Numbering, NumberingId, Numberings, Paragraph as DocxParagraph, Run as DocxRun, Start, Table,
+    TableCell, TableRow, WidthType,
 };
 use indexmap::IndexMap;
-use rtfkit_core::{Alignment, Block, Document, ListBlock, ListId, ListKind, Paragraph, Run};
+use rtfkit_core::{
+    Alignment, Block, Document, ListBlock, ListId, ListKind, Paragraph, Run, TableBlock,
+    TableCell as IrTableCell, TableRow as IrTableRow,
+};
 use std::fs::File;
 use std::io::{Cursor, Write};
 use std::path::Path;
@@ -81,6 +85,11 @@ impl NumberingAllocator {
             .insert(list.list_id, (num_id, abstract_num_id));
 
         num_id
+    }
+
+    /// Returns the assigned numId for a given ListId, if registered.
+    pub fn num_id_for(&self, list_id: ListId) -> Option<u32> {
+        self.list_to_num.get(&list_id).map(|(num_id, _)| *num_id)
     }
 
     /// Extracts the unique levels used in a list.
@@ -245,11 +254,10 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
     let mut doc = Docx::new();
     let mut numbering = NumberingAllocator::new();
 
-    // First pass: collect all list blocks and register them
+    // First pass: collect all list blocks (including nested table-cell lists)
+    // and register them for deterministic numbering allocation.
     for block in &document.blocks {
-        if let Block::ListBlock(list) = block {
-            numbering.register_list(list);
-        }
+        register_lists_in_block(block, &mut numbering);
     }
 
     // Second pass: convert blocks
@@ -270,6 +278,10 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
                     }
                 }
             }
+            Block::TableBlock(table) => {
+                let docx_table = convert_table(table, &numbering);
+                doc = doc.add_table(docx_table);
+            }
         }
     }
 
@@ -279,6 +291,29 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
     }
 
     Ok(doc.build())
+}
+
+fn register_lists_in_block(block: &Block, numbering: &mut NumberingAllocator) {
+    match block {
+        Block::Paragraph(_) => {}
+        Block::ListBlock(list) => {
+            numbering.register_list(list);
+            for item in &list.items {
+                for item_block in &item.blocks {
+                    register_lists_in_block(item_block, numbering);
+                }
+            }
+        }
+        Block::TableBlock(table) => {
+            for row in &table.rows {
+                for cell in &row.cells {
+                    for cell_block in &cell.blocks {
+                        register_lists_in_block(cell_block, numbering);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Converts an IR paragraph to a docx-rs paragraph without numbering.
@@ -337,6 +372,90 @@ fn convert_run(run: &Run) -> DocxRun {
     }
 
     r
+}
+
+// =============================================================================
+// Table Conversion Functions
+// =============================================================================
+
+/// Converts an IR TableBlock to a docx-rs Table.
+///
+/// Maps the IR table structure to DOCX elements:
+/// - `TableBlock` -> `w:tbl`
+/// - `TableRow` -> `w:tr`
+/// - `TableCell` -> `w:tc`
+///
+/// Cell widths are mapped from twips to DXA (1:1 ratio since both are 1/20th point).
+fn convert_table(table: &TableBlock, numbering: &NumberingAllocator) -> Table {
+    let rows: Vec<TableRow> = table
+        .rows
+        .iter()
+        .map(|row| convert_table_row(row, numbering))
+        .collect();
+    Table::new(rows)
+}
+
+/// Converts an IR TableRow to a docx-rs TableRow.
+fn convert_table_row(row: &IrTableRow, numbering: &NumberingAllocator) -> TableRow {
+    let cells: Vec<TableCell> = row
+        .cells
+        .iter()
+        .map(|cell| convert_table_cell(cell, numbering))
+        .collect();
+    TableRow::new(cells)
+}
+
+/// Converts an IR TableCell to a docx-rs TableCell.
+///
+/// Handles cell content (paragraphs and lists) and width mapping.
+/// Width is stored in twips in the IR and mapped to DXA for DOCX (1:1 ratio).
+fn convert_table_cell(cell: &IrTableCell, numbering: &NumberingAllocator) -> TableCell {
+    let mut docx_cell = TableCell::new();
+
+    // Apply width if specified
+    if let Some(width_twips) = cell.width_twips {
+        // Ensure width is non-negative before casting to usize
+        if width_twips >= 0 {
+            docx_cell = docx_cell.width(width_twips as usize, WidthType::Dxa);
+        }
+    }
+
+    // Convert cell content
+    for block in &cell.blocks {
+        match block {
+            Block::Paragraph(para) => {
+                docx_cell = docx_cell.add_paragraph(convert_paragraph(para));
+            }
+            Block::ListBlock(list) => {
+                if let Some(num_id) = numbering.num_id_for(list.list_id) {
+                    for item in &list.items {
+                        for item_block in &item.blocks {
+                            if let Block::Paragraph(para) = item_block {
+                                let paragraph =
+                                    convert_paragraph_with_numbering(para, num_id, item.level);
+                                docx_cell = docx_cell.add_paragraph(paragraph);
+                            }
+                        }
+                    }
+                } else {
+                    // Fallback for malformed IR without registered numbering.
+                    for item in &list.items {
+                        for item_block in &item.blocks {
+                            if let Block::Paragraph(para) = item_block {
+                                docx_cell = docx_cell.add_paragraph(convert_paragraph(para));
+                            }
+                        }
+                    }
+                }
+            }
+            Block::TableBlock(nested_table) => {
+                // Support for nested tables
+                docx_cell = docx_cell.add_table(convert_table(nested_table, numbering));
+            }
+        }
+    }
+
+    docx_cell
 }
 
 #[cfg(test)]
@@ -928,5 +1047,144 @@ mod tests {
         let numbering = &numberings.numberings[0];
         assert_eq!(numbering.id, 2); // numId starts at 2
         assert_eq!(numbering.abstract_num_id, 0);
+    }
+
+    // =========================================================================
+    // Table Block Tests
+    // =========================================================================
+
+    #[test]
+    fn test_simple_table() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Cell 1")])),
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Cell 2")])),
+        ])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+
+        // Verify it's a valid ZIP
+        let reader = Cursor::new(&bytes);
+        let mut archive = zip::ZipArchive::new(reader).expect("Should be valid ZIP");
+        assert!(archive.by_name("word/document.xml").is_ok());
+    }
+
+    #[test]
+    fn test_table_multiple_rows() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let table = TableBlock::from_rows(vec![
+            TableRow::from_cells(vec![
+                TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("R1C1")])),
+                TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("R1C2")])),
+            ]),
+            TableRow::from_cells(vec![
+                TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("R2C1")])),
+                TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("R2C2")])),
+            ]),
+        ]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_table_with_width() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![
+            TableCell::from_paragraph_with_width(
+                Paragraph::from_runs(vec![Run::new("Cell with width")]),
+                2880, // 2 inches in twips (1440 twips = 1 inch)
+            ),
+        ])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_table_with_formatted_content() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut bold_run = Run::new("bold");
+        bold_run.bold = true;
+
+        let table =
+            TableBlock::from_rows(vec![TableRow::from_cells(vec![TableCell::from_paragraph(
+                Paragraph::from_runs(vec![bold_run]),
+            )])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_table_mixed_with_paragraphs() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let table =
+            TableBlock::from_rows(vec![TableRow::from_cells(vec![TableCell::from_paragraph(
+                Paragraph::from_runs(vec![Run::new("Table cell")]),
+            )])]);
+
+        let doc = Document::from_blocks(vec![
+            Block::Paragraph(Paragraph::from_runs(vec![Run::new("Before table")])),
+            Block::TableBlock(table),
+            Block::Paragraph(Paragraph::from_runs(vec![Run::new("After table")])),
+        ]);
+
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_empty_table() {
+        let table = TableBlock::new();
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_table_empty_cell() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![
+            TableCell::new(),
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Content")])),
+        ])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_nested_table() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        // Create inner table
+        let inner_table =
+            TableBlock::from_rows(vec![TableRow::from_cells(vec![TableCell::from_paragraph(
+                Paragraph::from_runs(vec![Run::new("Inner cell")]),
+            )])]);
+
+        // Create outer table with nested table
+        let outer_table = TableBlock::from_rows(vec![TableRow::from_cells(vec![
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Outer cell")])),
+            TableCell::from_blocks(vec![Block::TableBlock(inner_table)], None),
+        ])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(outer_table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+        assert!(!bytes.is_empty());
     }
 }

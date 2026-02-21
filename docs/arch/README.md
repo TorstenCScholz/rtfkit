@@ -1,6 +1,6 @@
 # rtfkit Architecture
 
-This document reflects the current implementation in `main` (v0.3, Phase 3).
+This document reflects the current implementation in `main` (v0.4, Phase 4).
 
 ## Overview
 
@@ -52,19 +52,24 @@ Not in scope:
 ### IR model
 
 - `Document { blocks: Vec<Block> }`
-- `Block::Paragraph(Paragraph)` or `Block::ListBlock(ListBlock)`
+- `Block::Paragraph(Paragraph)`, `Block::ListBlock(ListBlock)`, or `Block::TableBlock(TableBlock)`
 - `Paragraph { alignment, runs }`
 - `Run { text, bold, italic, underline, font_size?, color? }`
 - `ListBlock { list_id, kind, items }` — list container (Phase 3)
 - `ListKind` — Bullet, OrderedDecimal, or Mixed
 - `ListItem { level, blocks }` — item with nesting level (0-8)
+- `TableBlock { rows }` — table container (Phase 4)
+- `TableRow { cells }` — table row
+- `TableCell { blocks }` — table cell with nested blocks
 
 See [Phase 3 IR Design](phase3-ir-design.md) for list model details.
+See [Phase 4 IR Design](phase4-ir-design.md) for table model details.
 
 ### Parser/interpreter notes
 
 - Control words handled for MVP: `\b`, `\i`, `\ul`, `\ulnone`, `\par`, `\line`, `\ql`, `\qc`, `\qr`, `\qj`, `\uN`, `\ucN`
 - List control words (Phase 3): `\lsN`, `\ilvlN`
+- Table control words (Phase 4): `\trowd`, `\cellxN`, `\intbl`, `\cell`, `\row`
 - Legacy paragraph-numbering controls (`\pn...`, `\pnlvl*`, `\pntext`) are currently dropped with warnings
 - Destination groups are skipped at group start (e.g. `fonttbl`, `colortbl`, unknown `\*` destinations)
 - `\listtable` and `\listoverridetable` are parsed for list definitions (Phase 3)
@@ -92,6 +97,7 @@ Responsibilities:
 | `Document` | `<w:document>` |
 | `Block::Paragraph` | `<w:p>` |
 | `Block::ListBlock` | `<w:p>` with `<w:numPr>` |
+| `Block::TableBlock` | `<w:tbl>` with `<w:tr>` and `<w:tc>` |
 | `Run` | `<w:r>` |
 | `Run.text` | `<w:t>` |
 | `Run.bold = true` | `<w:b/>` in `<w:rPr>` |
@@ -99,6 +105,7 @@ Responsibilities:
 | `Run.underline = true` | `<w:u w:val="single"/>` |
 | `Paragraph.alignment` | `<w:jc w:val="..."/>` |
 | `ListBlock` | `numbering.xml` with `<w:abstractNum>` and `<w:num>` |
+| `TableBlock` | `<w:tbl>` with grid columns |
 
 ## `rtfkit` CLI
 
@@ -133,6 +140,10 @@ Warnings:
 - `UnsupportedListControl` (Phase 3)
 - `UnresolvedListOverride` (Phase 3)
 - `UnsupportedNestingLevel` (Phase 3)
+- `UnsupportedTableControl` (Phase 4)
+- `MalformedTableStructure` (Phase 4)
+- `UnclosedTableCell` (Phase 4)
+- `UnclosedTableRow` (Phase 4)
 
 Stats:
 - `paragraph_count`
@@ -159,8 +170,9 @@ UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests
 
 ## Known gaps
 
-- Limited RTF feature coverage (no tables/images as IR blocks)
-- DOCX output supports basic text formatting and lists only
+- Limited RTF feature coverage (no images as IR blocks)
+- DOCX output supports basic text formatting, lists, and tables
+- Table support is basic: no cell merging, complex borders, or nested tables
 - No full RTF spec compliance target
 
 ## References
@@ -171,4 +183,6 @@ UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests
 - [Phase 2 Specification](../specs/PHASE2.md)
 - [Phase 3 Specification](../specs/PHASE3.md)
 - [Phase 3 IR Design](phase3-ir-design.md)
+- [Phase 4 Specification](../specs/PHASE4.md)
+- [Phase 4 IR Design](phase4-ir-design.md)
 - [Initial Description](../specs/INITIAL_DESCRIPTION.md)

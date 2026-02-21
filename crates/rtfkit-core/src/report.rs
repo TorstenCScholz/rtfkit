@@ -116,6 +116,46 @@ pub enum Warning {
         /// Severity of this warning
         severity: WarningSeverity,
     },
+
+    /// A table-related control word was encountered but not fully supported.
+    ///
+    /// This indicates table functionality that is recognized but partially implemented
+    /// or intentionally deferred to a later phase.
+    UnsupportedTableControl {
+        /// The control word that was encountered (without leading backslash)
+        control_word: String,
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
+
+    /// The table structure is malformed or incomplete.
+    ///
+    /// This indicates structural issues like mismatched cell counts,
+    /// missing terminators, or invalid nesting.
+    MalformedTableStructure {
+        /// Human-readable description of the issue
+        reason: String,
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
+
+    /// A table cell was not properly closed before row/document end.
+    ///
+    /// This indicates a missing \cell control word. The interpreter
+    /// auto-closes the cell to preserve content.
+    UnclosedTableCell {
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
+
+    /// A table row was not properly closed before next row/document end.
+    ///
+    /// This indicates a missing \row control word. The interpreter
+    /// auto-closes the row to preserve content.
+    UnclosedTableRow {
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
 }
 
 impl Warning {
@@ -170,6 +210,36 @@ impl Warning {
         }
     }
 
+    /// Creates a new `UnsupportedTableControl` warning.
+    pub fn unsupported_table_control(control_word: impl Into<String>) -> Self {
+        Warning::UnsupportedTableControl {
+            control_word: control_word.into(),
+            severity: WarningSeverity::Warning,
+        }
+    }
+
+    /// Creates a new `MalformedTableStructure` warning.
+    pub fn malformed_table_structure(reason: impl Into<String>) -> Self {
+        Warning::MalformedTableStructure {
+            reason: reason.into(),
+            severity: WarningSeverity::Warning,
+        }
+    }
+
+    /// Creates a new `UnclosedTableCell` warning.
+    pub fn unclosed_table_cell() -> Self {
+        Warning::UnclosedTableCell {
+            severity: WarningSeverity::Warning,
+        }
+    }
+
+    /// Creates a new `UnclosedTableRow` warning.
+    pub fn unclosed_table_row() -> Self {
+        Warning::UnclosedTableRow {
+            severity: WarningSeverity::Warning,
+        }
+    }
+
     /// Returns the severity of this warning.
     pub fn severity(&self) -> WarningSeverity {
         match self {
@@ -179,6 +249,10 @@ impl Warning {
             Warning::UnsupportedListControl { severity, .. } => *severity,
             Warning::UnresolvedListOverride { severity, .. } => *severity,
             Warning::UnsupportedNestingLevel { severity, .. } => *severity,
+            Warning::UnsupportedTableControl { severity, .. } => *severity,
+            Warning::MalformedTableStructure { severity, .. } => *severity,
+            Warning::UnclosedTableCell { severity } => *severity,
+            Warning::UnclosedTableRow { severity } => *severity,
         }
     }
 }
@@ -398,6 +472,44 @@ impl ReportBuilder {
         if self.can_add_warning() {
             self.warnings
                 .push(Warning::unsupported_nesting_level(level, max));
+        }
+    }
+
+    /// Records an unsupported table control word.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn unsupported_table_control(&mut self, control_word: &str) {
+        if self.can_add_warning() {
+            self.warnings
+                .push(Warning::unsupported_table_control(control_word));
+        }
+    }
+
+    /// Records a malformed table structure issue.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn malformed_table_structure(&mut self, reason: &str) {
+        if self.can_add_warning() {
+            self.warnings
+                .push(Warning::malformed_table_structure(reason));
+        }
+    }
+
+    /// Records an unclosed table cell warning.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn unclosed_table_cell(&mut self) {
+        if self.can_add_warning() {
+            self.warnings.push(Warning::unclosed_table_cell());
+        }
+    }
+
+    /// Records an unclosed table row warning.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn unclosed_table_row(&mut self) {
+        if self.can_add_warning() {
+            self.warnings.push(Warning::unclosed_table_row());
         }
     }
 

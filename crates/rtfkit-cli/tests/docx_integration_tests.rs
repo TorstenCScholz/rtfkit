@@ -1170,3 +1170,282 @@ fn test_list_determinism_decimal_simple() {
         "numbering.xml should be byte-identical across conversions"
     );
 }
+
+// =============================================================================
+// Table Integration Tests
+// =============================================================================
+
+#[test]
+fn test_table_simple_2x2_docx() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("table_simple_2x2.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    // Verify table element exists
+    assert!(
+        xml.contains("<w:tbl") || xml.contains("<w:tbl>"),
+        "Should contain w:tbl element"
+    );
+
+    // Verify 2 row elements exist
+    let row_count = count_elements(&xml, "w:tr");
+    assert!(
+        row_count >= 2,
+        "Should have at least 2 w:tr elements, found {}",
+        row_count
+    );
+
+    // Verify 4 cell elements exist
+    let cell_count = count_elements(&xml, "w:tc");
+    assert!(
+        cell_count >= 4,
+        "Should have at least 4 w:tc elements, found {}",
+        cell_count
+    );
+
+    // Verify computed widths are serialized deterministically (2880 + 2880).
+    assert!(
+        xml.contains("w:tcW w:w=\"2880\" w:type=\"dxa\""),
+        "Should contain explicit 2880 dxa table cell widths"
+    );
+
+    // Verify cell content is preserved
+    assert!(
+        contains_text(&xml, "Cell 1"),
+        "Should contain 'Cell 1' text"
+    );
+    assert!(
+        contains_text(&xml, "Cell 2"),
+        "Should contain 'Cell 2' text"
+    );
+    assert!(
+        contains_text(&xml, "Cell 3"),
+        "Should contain 'Cell 3' text"
+    );
+    assert!(
+        contains_text(&xml, "Cell 4"),
+        "Should contain 'Cell 4' text"
+    );
+}
+
+#[test]
+fn test_table_multirow_uneven_content_docx() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("table_multirow_uneven_content.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    // Verify table structure
+    assert!(xml.contains("<w:tbl"), "Should contain w:tbl element");
+
+    // Verify 3 row elements exist
+    let row_count = count_elements(&xml, "w:tr");
+    assert!(
+        row_count >= 3,
+        "Should have at least 3 w:tr elements, found {}",
+        row_count
+    );
+
+    // Verify all text content is preserved
+    assert!(contains_text(&xml, "Short"), "Should contain 'Short' text");
+    assert!(contains_text(&xml, "Tiny"), "Should contain 'Tiny' text");
+    assert!(
+        contains_text(&xml, "Another cell"),
+        "Should contain 'Another cell' text"
+    );
+    assert!(
+        contains_text(&xml, "content preservation"),
+        "Should contain 'content preservation' text"
+    );
+}
+
+#[test]
+fn test_table_with_list_in_cell_docx() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("table_with_list_in_cell.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    // Verify table structure
+    assert!(xml.contains("<w:tbl"), "Should contain w:tbl element");
+
+    // Verify 2 row elements exist
+    let row_count = count_elements(&xml, "w:tr");
+    assert!(
+        row_count >= 2,
+        "Should have at least 2 w:tr elements, found {}",
+        row_count
+    );
+
+    // Verify table cell content
+    assert!(
+        contains_text(&xml, "Regular cell"),
+        "Should contain 'Regular cell' text"
+    );
+    assert!(
+        contains_text(&xml, "Another cell"),
+        "Should contain 'Another cell' text"
+    );
+    assert!(
+        contains_text(&xml, "Last cell"),
+        "Should contain 'Last cell' text"
+    );
+
+    // Verify list content inside cell
+    assert!(
+        contains_text(&xml, "Item A"),
+        "Should contain 'Item A' list item"
+    );
+    assert!(
+        contains_text(&xml, "Item B"),
+        "Should contain 'Item B' list item"
+    );
+
+    // Verify multiple paragraphs exist in the cell with list content
+    // (either as list items with w:numPr or as regular paragraphs)
+    let paragraph_count = count_elements(&xml, "w:p");
+    assert!(
+        paragraph_count >= 4,
+        "Should have at least 4 paragraphs (table cells + list items), found {}",
+        paragraph_count
+    );
+
+    // Lists in cells should keep numbering semantics.
+    assert!(
+        xml.contains("<w:numPr>"),
+        "List paragraphs inside table cells should include w:numPr"
+    );
+}
+
+#[test]
+fn test_table_missing_cell_terminator_docx() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("table_missing_cell_terminator.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    // Verify text is preserved despite malformed input
+    assert!(
+        contains_text(&xml, "Cell 1"),
+        "Should contain 'Cell 1' text"
+    );
+    assert!(
+        contains_text(&xml, "Cell 2"),
+        "Should contain 'Cell 2' text"
+    );
+    assert!(
+        contains_text(&xml, "Cell 3"),
+        "Should contain 'Cell 3' text"
+    );
+    assert!(
+        contains_text(&xml, "Cell 4"),
+        "Should contain 'Cell 4' text"
+    );
+
+    // Verify table structure is still created
+    assert!(xml.contains("<w:tbl"), "Should contain w:tbl element");
+}
+
+#[test]
+fn test_table_missing_row_terminator_docx() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("table_missing_row_terminator.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    // Verify text is preserved despite malformed input
+    assert!(
+        contains_text(&xml, "Cell 1"),
+        "Should contain 'Cell 1' text"
+    );
+    assert!(
+        contains_text(&xml, "Cell 2"),
+        "Should contain 'Cell 2' text"
+    );
+    assert!(
+        contains_text(&xml, "Cell 3"),
+        "Should contain 'Cell 3' text"
+    );
+    assert!(
+        contains_text(&xml, "Cell 4"),
+        "Should contain 'Cell 4' text"
+    );
+
+    // Verify table structure is still created
+    assert!(xml.contains("<w:tbl"), "Should contain w:tbl element");
+}
+
+#[test]
+fn test_table_orphan_controls_docx() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("table_orphan_controls.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    // Verify text is preserved as paragraphs (not table)
+    // The orphan cell/row controls should not create a table
+    assert!(
+        contains_text(&xml, "Regular paragraph"),
+        "Should contain 'Regular paragraph' text"
+    );
+    assert!(
+        contains_text(&xml, "Orphan cell"),
+        "Should contain 'Orphan cell' text"
+    );
+    assert!(
+        contains_text(&xml, "outside table"),
+        "Should contain 'outside table' text"
+    );
+    assert!(
+        contains_text(&xml, "Another orphan"),
+        "Should contain 'Another orphan' text"
+    );
+    assert!(
+        contains_text(&xml, "Normal text"),
+        "Should contain 'Normal text' text"
+    );
+
+    // Verify no table is created for orphan controls
+    // The document should have paragraphs instead
+    let paragraph_count = count_elements(&xml, "w:p");
+    assert!(
+        paragraph_count >= 3,
+        "Should have at least 3 paragraphs for orphan controls, found {}",
+        paragraph_count
+    );
+}
+
+#[test]
+fn test_table_merge_controls_degraded_docx() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("table_merge_controls_degraded.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    // Verify table structure is created
+    assert!(xml.contains("<w:tbl"), "Should contain w:tbl element");
+
+    // Verify 2 row elements exist
+    let row_count = count_elements(&xml, "w:tr");
+    assert!(
+        row_count >= 2,
+        "Should have at least 2 w:tr elements, found {}",
+        row_count
+    );
+
+    // Verify text content is preserved
+    assert!(
+        contains_text(&xml, "Merged start"),
+        "Should contain 'Merged start' text"
+    );
+    assert!(
+        contains_text(&xml, "Third cell"),
+        "Should contain 'Third cell' text"
+    );
+    assert!(
+        contains_text(&xml, "Regular A"),
+        "Should contain 'Regular A' text"
+    );
+    assert!(
+        contains_text(&xml, "Regular B"),
+        "Should contain 'Regular B' text"
+    );
+    assert!(
+        contains_text(&xml, "Regular C"),
+        "Should contain 'Regular C' text"
+    );
+}

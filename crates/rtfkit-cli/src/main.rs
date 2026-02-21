@@ -330,6 +330,18 @@ fn print_report_text(report: &Report) {
                         level, max
                     );
                 }
+                Warning::UnsupportedTableControl { control_word, .. } => {
+                    println!("  - Unsupported table control: \\{}", control_word);
+                }
+                Warning::MalformedTableStructure { reason, .. } => {
+                    println!("  - Malformed table structure: {}", reason);
+                }
+                Warning::UnclosedTableCell { .. } => {
+                    println!("  - Unclosed table cell");
+                }
+                Warning::UnclosedTableRow { .. } => {
+                    println!("  - Unclosed table row");
+                }
             }
         }
     }

@@ -275,10 +275,172 @@ impl ListBlock {
     }
 }
 
+// =============================================================================
+// Table Types for Phase 4
+// =============================================================================
+
+/// A table containing one or more rows.
+///
+/// Tables are block-level elements that contain rows of cells.
+/// Each row contains cells that can hold block content.
+///
+/// # Example
+/// ```
+/// use rtfkit_core::{TableBlock, TableRow, TableCell, Paragraph, Run, Block};
+/// let table = TableBlock {
+///     rows: vec![
+///         TableRow {
+///             cells: vec![
+///                 TableCell {
+///                     blocks: vec![Block::Paragraph(Paragraph::from_runs(vec![Run::new("Cell 1")]))],
+///                     width_twips: Some(1440), // 1 inch
+///                 },
+///             ],
+///         },
+///     ],
+/// };
+/// ```
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct TableBlock {
+    /// The rows that make up this table
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rows: Vec<TableRow>,
+}
+
+impl TableBlock {
+    /// Creates a new empty table.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Creates a table from a vector of rows.
+    pub fn from_rows(rows: Vec<TableRow>) -> Self {
+        Self { rows }
+    }
+
+    /// Adds a row to the table.
+    pub fn add_row(&mut self, row: TableRow) {
+        self.rows.push(row);
+    }
+
+    /// Returns true if the table has no rows.
+    pub fn is_empty(&self) -> bool {
+        self.rows.is_empty()
+    }
+
+    /// Returns the number of rows in the table.
+    pub fn row_count(&self) -> usize {
+        self.rows.len()
+    }
+}
+
+/// A row within a table.
+///
+/// Each row contains a sequence of cells. The number of cells
+/// may vary between rows in malformed RTF, though well-formed
+/// tables have consistent column counts.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct TableRow {
+    /// The cells in this row
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cells: Vec<TableCell>,
+}
+
+impl TableRow {
+    /// Creates a new empty row.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Creates a row from a vector of cells.
+    pub fn from_cells(cells: Vec<TableCell>) -> Self {
+        Self { cells }
+    }
+
+    /// Adds a cell to the row.
+    pub fn add_cell(&mut self, cell: TableCell) {
+        self.cells.push(cell);
+    }
+
+    /// Returns true if the row has no cells.
+    pub fn is_empty(&self) -> bool {
+        self.cells.is_empty()
+    }
+
+    /// Returns the number of cells in this row.
+    pub fn cell_count(&self) -> usize {
+        self.cells.len()
+    }
+}
+
+/// A cell within a table row.
+///
+/// Cells contain block-level content (paragraphs and lists in Phase 4).
+/// Width is stored as computed cell width in twips (1/20th of a point).
+/// A `None` value indicates width was not specified or could not be determined.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct TableCell {
+    /// Block content within this cell (Paragraph and ListBlock in Phase 4)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocks: Vec<Block>,
+
+    /// Computed cell width in twips (1/20th point)
+    /// None if width not specified or determinable
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width_twips: Option<i32>,
+}
+
+impl TableCell {
+    /// Creates a new empty cell.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Creates a cell from blocks with optional width.
+    pub fn from_blocks(blocks: Vec<Block>, width_twips: Option<i32>) -> Self {
+        Self {
+            blocks,
+            width_twips,
+        }
+    }
+
+    /// Creates a cell from a single paragraph.
+    pub fn from_paragraph(paragraph: Paragraph) -> Self {
+        Self {
+            blocks: vec![Block::Paragraph(paragraph)],
+            width_twips: None,
+        }
+    }
+
+    /// Creates a cell from a paragraph with width.
+    pub fn from_paragraph_with_width(paragraph: Paragraph, width_twips: i32) -> Self {
+        Self {
+            blocks: vec![Block::Paragraph(paragraph)],
+            width_twips: Some(width_twips),
+        }
+    }
+
+    /// Adds a block to the cell.
+    pub fn add_block(&mut self, block: Block) {
+        self.blocks.push(block);
+    }
+
+    /// Returns true if the cell has no content.
+    pub fn is_empty(&self) -> bool {
+        self.blocks.is_empty()
+    }
+
+    /// Sets the cell width in twips.
+    pub fn with_width(mut self, width_twips: i32) -> Self {
+        self.width_twips = Some(width_twips);
+        self
+    }
+}
+
 /// A block-level element in the document.
 ///
 /// `Block` represents the top-level structural elements of a document.
-/// Currently supports paragraphs and lists.
+/// Currently supports paragraphs, lists, and tables.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Block {
@@ -286,6 +448,8 @@ pub enum Block {
     Paragraph(Paragraph),
     /// A list block containing items
     ListBlock(ListBlock),
+    /// A table block containing rows and cells
+    TableBlock(TableBlock),
 }
 
 /// The root document structure containing all content.

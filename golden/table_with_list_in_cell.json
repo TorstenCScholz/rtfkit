@@ -1,0 +1,114 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "Regular cell",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            },
+            {
+              "blocks": [
+                {
+                  "type": "listblock",
+                  "list_id": 1,
+                  "kind": "bullet",
+                  "items": [
+                    {
+                      "level": 0,
+                      "blocks": [
+                        {
+                          "type": "paragraph",
+                          "alignment": "left",
+                          "runs": [
+                            {
+                              "text": "Item A",
+                              "bold": false,
+                              "italic": false,
+                              "underline": false
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "level": 0,
+                      "blocks": [
+                        {
+                          "type": "paragraph",
+                          "alignment": "left",
+                          "runs": [
+                            {
+                              "text": "Item B",
+                              "bold": false,
+                              "italic": false,
+                              "underline": false
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "Another cell",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "runs": [
+                    {
+                      "text": "Last cell",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

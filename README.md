@@ -2,10 +2,11 @@
 
 RTF parsing toolkit with a CLI-first workflow.
 
-Current status (Phase 3):
+Current status (Phase 4):
 - Parses RTF into a deterministic intermediate representation (IR)
 - Converts RTF to DOCX via `-o/--output` flag
 - Supports bullet and decimal lists with nested levels (up to 8)
+- Supports basic tables with rows, cells, and content preservation
 - Emits conversion reports (`text` or `json`)
 - Supports `--emit-ir` for snapshot/debug workflows
 - Parser limits for safety (input size, depth, warnings)
@@ -84,6 +85,10 @@ For safety, the parser enforces these limits:
 - `unsupported_list_control`
 - `unresolved_list_override`
 - `unsupported_nesting_level`
+- `unsupported_table_control`
+- `malformed_table_structure`
+- `unclosed_table_cell`
+- `unclosed_table_row`
 
 ### IR JSON (`--emit-ir`)
 
@@ -112,7 +117,7 @@ List example:
 {
   "blocks": [
     {
-      "type": "list_block",
+      "type": "listblock",
       "list_id": 1,
       "kind": "bullet",
       "items": [
@@ -148,12 +153,13 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --all
 ```
 
-## Limitations (v0.3)
+## Limitations (v0.4)
 
 - Partial RTF coverage only (focused on common text/style cases)
-- No tables/images as first-class IR blocks yet
-- DOCX output supports basic text formatting (bold, italic, underline, alignment) and lists
+- No images as first-class IR blocks yet
+- DOCX output supports basic text formatting (bold, italic, underline, alignment), lists, and tables
 - List nesting limited to 8 levels (DOCX compatibility)
+- Table support is basic: no cell merging, complex borders, or nested tables
 
 ## License
 

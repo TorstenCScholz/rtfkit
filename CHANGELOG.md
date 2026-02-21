@@ -5,6 +5,34 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - Unreleased
+
+### Added
+
+- Table support (Phase 4):
+  - RTF tables are now converted to DOCX tables
+  - New IR types: `TableBlock`, `TableRow`, `TableCell`
+  - New warning variants: `UnsupportedTableControl`, `MalformedTableStructure`, `UnclosedTableCell`, `UnclosedTableRow`
+  - Table control word support: `\trowd`, `\cellxN`, `\intbl`, `\cell`, `\row`
+  - Graceful degradation for malformed table structures
+  - 7 new table test fixtures
+
+### Changed
+
+- `Block` enum now includes `TableBlock` variant (breaking change to IR JSON format)
+- Paragraph finalization now routes content to table cells when `\intbl` is active
+- IR schema extended with table-related types
+
+### Fixed
+
+- Deterministic handling of malformed table input
+
+### Migration Notes
+
+- IR JSON format has changed: `blocks` array can now contain `{"type": "tableblock", ...}` objects
+- External consumers of IR JSON should handle the new `tableblock` type
+- Golden IR snapshots need regeneration: `UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests`
+
 ## [0.3.0] - Unreleased
 
 ### Added
@@ -27,8 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Migration Notes
 
-- IR JSON format has changed: `blocks` array can now contain `{"type": "list_block", ...}` objects
-- External consumers of IR JSON should handle the new `list_block` type
+- IR JSON format has changed: `blocks` array can now contain `{"type": "listblock", ...}` objects
+- External consumers of IR JSON should handle the new `listblock` type
 - Golden IR snapshots need regeneration: `UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests`
 
 ## [0.2.0] - Unreleased

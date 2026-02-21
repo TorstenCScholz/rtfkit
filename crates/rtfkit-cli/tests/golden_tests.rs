@@ -47,11 +47,12 @@ fn diff_strings(expected: &str, actual: &str) -> String {
 }
 
 /// Helper to extract paragraph from block.
-/// Returns None for ListBlock variants (which contain paragraphs inside items).
+/// Returns None for ListBlock and TableBlock variants (which contain paragraphs inside items).
 fn as_paragraph(block: &rtfkit_core::Block) -> Option<&rtfkit_core::Paragraph> {
     match block {
         rtfkit_core::Block::Paragraph(p) => Some(p),
         rtfkit_core::Block::ListBlock(_) => None,
+        rtfkit_core::Block::TableBlock(_) => None,
     }
 }
 
@@ -294,11 +295,12 @@ fn test_complex_document() {
 // =============================================================================
 
 /// Helper to extract list block from a Block.
-/// Returns None for Paragraph variants.
+/// Returns None for Paragraph and TableBlock variants.
 fn as_list_block(block: &rtfkit_core::Block) -> Option<&rtfkit_core::ListBlock> {
     match block {
         rtfkit_core::Block::ListBlock(list) => Some(list),
         rtfkit_core::Block::Paragraph(_) => None,
+        rtfkit_core::Block::TableBlock(_) => None,
     }
 }
 
