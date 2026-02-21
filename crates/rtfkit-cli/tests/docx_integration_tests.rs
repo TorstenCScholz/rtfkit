@@ -3,6 +3,7 @@
 //! These tests verify that the generated DOCX files contain correct XML structure.
 //! They run the CLI to generate .docx from fixtures, unzip the result, and parse/assert
 //! the word/document.xml content.
+#![allow(clippy::collapsible_if)]
 
 use std::fs::File;
 use std::io::Read;
@@ -1489,36 +1490,6 @@ fn has_grid_span_with_value(xml: &str, span: u16) -> bool {
 /// Check if a <w:vMerge> element exists in the document.
 fn has_vmerge_element(xml: &str) -> bool {
     has_formatting_element(xml, "w:vMerge")
-}
-
-/// Check if a <w:vAlign> element exists with the specified alignment value.
-fn has_valign_with_value(xml: &str, alignment: &str) -> bool {
-    let mut reader = Reader::from_str(xml);
-    let mut buf = Vec::new();
-
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
-                if e.name().as_ref() == b"w:vAlign" {
-                    for attr in e.attributes().flatten() {
-                        if attr.key.as_ref() == b"w:val" {
-                            if let Ok(value) = std::str::from_utf8(&attr.value) {
-                                if value == alignment {
-                                    return true;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Ok(Event::Eof) => break,
-            Err(_) => break,
-            _ => {}
-        }
-        buf.clear();
-    }
-
-    false
 }
 
 #[test]

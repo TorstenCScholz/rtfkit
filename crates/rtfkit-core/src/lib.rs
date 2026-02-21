@@ -97,10 +97,11 @@ pub enum Alignment {
 ///
 /// RTF uses `\clmgf` (merge start) and `\clmrg` (merge continuation) for horizontal merges,
 /// and `\clvmgf`/`\clvmrg` for vertical merges.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CellMerge {
     /// No merge applied (default)
+    #[default]
     None,
     /// Start of a horizontal merge spanning N cells (including this one)
     HorizontalStart { span: u16 },
@@ -112,19 +113,14 @@ pub enum CellMerge {
     VerticalContinue,
 }
 
-impl Default for CellMerge {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
 /// Vertical alignment of content within a table cell.
 ///
 /// RTF controls: `\clvertalt` (top), `\clvertalc` (center), `\clvertalb` (bottom).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CellVerticalAlign {
     /// Align content to top of cell
+    #[default]
     Top,
     /// Center content vertically in cell
     Center,
@@ -132,30 +128,19 @@ pub enum CellVerticalAlign {
     Bottom,
 }
 
-impl Default for CellVerticalAlign {
-    fn default() -> Self {
-        Self::Top
-    }
-}
-
 /// Row-level alignment for table rows.
 ///
 /// RTF controls: `\trql` (left), `\trqc` (center), `\trqr` (right).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RowAlignment {
     /// Left-aligned row
+    #[default]
     Left,
     /// Centered row
     Center,
     /// Right-aligned row
     Right,
-}
-
-impl Default for RowAlignment {
-    fn default() -> Self {
-        Self::Left
-    }
 }
 
 /// Table row properties.

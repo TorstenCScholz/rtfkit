@@ -581,10 +581,9 @@ impl ReportBuilder {
             .warnings
             .iter()
             .any(|w| matches!(w, Warning::DroppedContent { .. }))
+            && let Some(last) = self.warnings.last_mut()
         {
-            if let Some(last) = self.warnings.last_mut() {
-                *last = Warning::dropped_content(reason, size_hint);
-            }
+            *last = Warning::dropped_content(reason, size_hint);
         }
     }
 
@@ -679,11 +678,11 @@ impl ReportBuilder {
             return false;
         }
 
-        if let Some(ref limits) = self.limits {
-            if self.warnings.len() >= limits.max_warning_count {
-                self.warning_limit_reached = true;
-                return false;
-            }
+        if let Some(ref limits) = self.limits
+            && self.warnings.len() >= limits.max_warning_count
+        {
+            self.warning_limit_reached = true;
+            return false;
         }
         true
     }

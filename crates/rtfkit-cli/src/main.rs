@@ -162,7 +162,7 @@ fn handle_convert(
 }
 
 /// Handle writing DOCX output with validation and error handling
-fn handle_docx_output(document: &Document, output_path: &PathBuf, force: bool) -> Result<ExitCode> {
+fn handle_docx_output(document: &Document, output_path: &Path, force: bool) -> Result<ExitCode> {
     // Validate .docx extension
     let extension = output_path
         .extension()

@@ -551,27 +551,29 @@ impl Interpreter {
             }
             RtfEvent::GroupEnd => {
                 // Finalize list definition when closing a \list group
-                if self.parsing_list_table && self.skip_destination_depth == 2 {
-                    if let Some(list_def) = self.current_list_def.take() {
-                        self.list_table.insert(list_def.list_id, list_def);
-                    }
+                if self.parsing_list_table
+                    && self.skip_destination_depth == 2
+                    && let Some(list_def) = self.current_list_def.take()
+                {
+                    self.list_table.insert(list_def.list_id, list_def);
                 }
 
                 // Finalize list override when closing a \listoverride group
-                if self.parsing_list_override_table && self.skip_destination_depth == 2 {
-                    if let Some(list_override) = self.current_list_override.take() {
-                        self.list_overrides
-                            .insert(list_override.ls_id, list_override);
-                    }
+                if self.parsing_list_override_table
+                    && self.skip_destination_depth == 2
+                    && let Some(list_override) = self.current_list_override.take()
+                {
+                    self.list_overrides
+                        .insert(list_override.ls_id, list_override);
                 }
 
                 // Finalize list level when closing a \listlevel group
-                if self.parsing_list_table && self.skip_destination_depth == 3 {
-                    if let Some(level) = self.current_list_level.take() {
-                        if let Some(ref mut list_def) = self.current_list_def {
-                            list_def.levels.push(level);
-                        }
-                    }
+                if self.parsing_list_table
+                    && self.skip_destination_depth == 3
+                    && let Some(level) = self.current_list_level.take()
+                    && let Some(ref mut list_def) = self.current_list_def
+                {
+                    list_def.levels.push(level);
                 }
 
                 if let Some(previous_style) = self.group_stack.pop() {
@@ -661,12 +663,11 @@ impl Interpreter {
             }
             "ls" => {
                 // In override table, this sets the ls_id
-                if let Some(id) = parameter {
-                    if self.parsing_list_override_table {
-                        if let Some(ref mut list_override) = self.current_list_override {
-                            list_override.ls_id = id;
-                        }
-                    }
+                if let Some(id) = parameter
+                    && self.parsing_list_override_table
+                    && let Some(ref mut list_override) = self.current_list_override
+                {
+                    list_override.ls_id = id;
                 }
             }
             "listoverridepad" => {
@@ -1209,11 +1210,12 @@ impl Interpreter {
     /// Add a list item to the document, creating or appending to a list block.
     fn add_list_item(&mut self, list_id: ListId, level: u8, kind: ListKind, paragraph: Paragraph) {
         // Check if we can append to the last block if it's a list with the same ID
-        if let Some(Block::ListBlock(last_list)) = self.document.blocks.last_mut() {
-            if last_list.list_id == list_id && last_list.kind == kind {
-                last_list.add_item(ListItem::from_paragraph(level, paragraph));
-                return;
-            }
+        if let Some(Block::ListBlock(last_list)) = self.document.blocks.last_mut()
+            && last_list.list_id == list_id
+            && last_list.kind == kind
+        {
+            last_list.add_item(ListItem::from_paragraph(level, paragraph));
+            return;
         }
 
         // Create a new list block
@@ -1234,11 +1236,12 @@ impl Interpreter {
         }
 
         if let Some(ref mut cell) = self.current_cell {
-            if let Some(Block::ListBlock(last_list)) = cell.blocks.last_mut() {
-                if last_list.list_id == list_id && last_list.kind == kind {
-                    last_list.add_item(ListItem::from_paragraph(level, paragraph));
-                    return;
-                }
+            if let Some(Block::ListBlock(last_list)) = cell.blocks.last_mut()
+                && last_list.list_id == list_id
+                && last_list.kind == kind
+            {
+                last_list.add_item(ListItem::from_paragraph(level, paragraph));
+                return;
             }
 
             let mut list_block = ListBlock::new(list_id, kind);
@@ -1443,15 +1446,15 @@ impl Interpreter {
                 return;
             }
 
-            if let Some(existing_row_count) = self.current_table.as_ref().map(|t| t.rows.len()) {
-                if existing_row_count >= self.limits.max_rows_per_table {
-                    self.set_hard_failure(ParseError::InvalidStructure(format!(
-                        "Table has {} rows, maximum is {}",
-                        existing_row_count + 1,
-                        self.limits.max_rows_per_table
-                    )));
-                    return;
-                }
+            if let Some(existing_row_count) = self.current_table.as_ref().map(|t| t.rows.len())
+                && existing_row_count >= self.limits.max_rows_per_table
+            {
+                self.set_hard_failure(ParseError::InvalidStructure(format!(
+                    "Table has {} rows, maximum is {}",
+                    existing_row_count + 1,
+                    self.limits.max_rows_per_table
+                )));
+                return;
             }
 
             if let Some(ref mut table) = self.current_table {
@@ -1592,13 +1595,13 @@ impl Interpreter {
 
         // Check merge spans
         for cell in &row.cells {
-            if let Some(CellMerge::HorizontalStart { span }) = cell.merge {
-                if span > self.limits.max_merge_span {
-                    return Err(ParseError::InvalidStructure(format!(
-                        "Merge span {} exceeds maximum {}",
-                        span, self.limits.max_merge_span
-                    )));
-                }
+            if let Some(CellMerge::HorizontalStart { span }) = cell.merge
+                && span > self.limits.max_merge_span
+            {
+                return Err(ParseError::InvalidStructure(format!(
+                    "Merge span {} exceeds maximum {}",
+                    span, self.limits.max_merge_span
+                )));
             }
         }
 
@@ -1617,10 +1620,10 @@ impl Interpreter {
         }
 
         // Add the table to the document if it has content
-        if let Some(table) = self.current_table.take() {
-            if !table.is_empty() {
-                self.document.blocks.push(Block::TableBlock(table));
-            }
+        if let Some(table) = self.current_table.take()
+            && !table.is_empty()
+        {
+            self.document.blocks.push(Block::TableBlock(table));
         }
 
         // Reset table state
@@ -2143,7 +2146,7 @@ mod tests {
         for i in 0..20 {
             input.push_str(&format!("\\unknown{} ", i));
         }
-        input.push_str("}");
+        input.push('}');
 
         // Set a warning limit of 5
         let limits = ParserLimits::new().with_max_warning_count(5);
