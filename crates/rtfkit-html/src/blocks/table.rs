@@ -229,10 +229,10 @@ fn cell_to_html(
     }
 
     // Handle colspan for horizontal merges
-    if let Some(CellMerge::HorizontalStart { span }) = cell.merge {
-        if span > 1 {
-            attrs.push(("colspan", span.to_string()));
-        }
+    if let Some(CellMerge::HorizontalStart { span }) = cell.merge
+        && span > 1
+    {
+        attrs.push(("colspan", span.to_string()));
     }
 
     // Handle rowspan for vertical merges (pre-computed value)
@@ -241,11 +241,11 @@ fn cell_to_html(
     }
 
     // Handle width styling
-    if let Some(width_twips) = cell.width_twips {
-        if width_twips > 0 {
-            let points = twips_to_points(width_twips);
-            attrs.push(("style", format!("width: {:.1}pt", points)));
-        }
+    if let Some(width_twips) = cell.width_twips
+        && width_twips > 0
+    {
+        let points = twips_to_points(width_twips);
+        attrs.push(("style", format!("width: {:.1}pt", points)));
     }
 
     // Combine classes into a single attribute

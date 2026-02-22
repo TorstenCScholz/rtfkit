@@ -61,6 +61,17 @@ const EXIT_PARSE_ERROR: u8 = 2;
 const EXIT_CONVERSION_ERROR: u8 = 3;
 const EXIT_STRICT_MODE: u8 = 4;
 
+struct ConvertRequest {
+    input: PathBuf,
+    output: Option<PathBuf>,
+    to: String,
+    format: String,
+    emit_ir: Option<PathBuf>,
+    strict: bool,
+    force: bool,
+    verbose: bool,
+}
+
 fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
 
@@ -81,29 +92,31 @@ fn run() -> Result<ExitCode> {
             emit_ir,
             strict,
             force,
-        } => handle_convert(
+        } => handle_convert(ConvertRequest {
             input,
-            output.as_ref(),
-            &to,
-            &format,
-            emit_ir.as_ref(),
+            output,
+            to,
+            format,
+            emit_ir,
             strict,
             force,
-            cli.verbose,
-        ),
+            verbose: cli.verbose,
+        }),
     }
 }
 
-fn handle_convert(
-    input: PathBuf,
-    output: Option<&PathBuf>,
-    to: &str,
-    format: &str,
-    emit_ir: Option<&PathBuf>,
-    strict: bool,
-    force: bool,
-    verbose: bool,
-) -> Result<ExitCode> {
+fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
+    let ConvertRequest {
+        input,
+        output,
+        to,
+        format,
+        emit_ir,
+        strict,
+        force,
+        verbose,
+    } = request;
+
     debug!("Target format requested: {to}");
 
     // Read input file
@@ -123,7 +136,7 @@ fn handle_convert(
     debug!("Report: {} warnings", report.warnings.len());
 
     // Emit IR if requested
-    if let Some(ir_path) = emit_ir {
+    if let Some(ir_path) = emit_ir.as_ref() {
         emit_ir_to_file(&document, ir_path)?;
     }
 
@@ -137,8 +150,8 @@ fn handle_convert(
     }
 
     // Handle output if --output is specified
-    if let Some(output_path) = output {
-        return match to {
+    if let Some(output_path) = output.as_ref() {
+        return match to.as_str() {
             "docx" => handle_docx_output(&document, output_path, force, verbose),
             "html" => handle_html_output(&document, output_path, force, verbose, strict),
             _ => unreachable!("clap validates --to"),
@@ -146,7 +159,7 @@ fn handle_convert(
     }
 
     // Output report to stdout (when no --output specified)
-    match format {
+    match format.as_str() {
         "json" => print_report_json(&report)?,
         "text" => print_report_text(&report),
         _ => unreachable!("clap validates format"),

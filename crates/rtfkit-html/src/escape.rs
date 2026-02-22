@@ -1,7 +1,7 @@
 //! HTML escaping utilities.
-///
-/// This module provides functions for escaping special HTML characters
-/// to prevent XSS and ensure valid HTML output.
+//!
+//! This module provides functions for escaping special HTML characters
+//! to prevent XSS and ensure valid HTML output.
 
 /// Escapes special HTML characters in a string.
 ///
