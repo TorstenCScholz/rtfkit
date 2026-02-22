@@ -1,0 +1,19 @@
+[package]
+name = "rtfkit-render-typst"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Typst-based PDF renderer for rtfkit IR documents"
+
+[dependencies]
+rtfkit-core = { path = "../rtfkit-core" }
+thiserror = "2.0"
+typst = "0.14"
+typst-pdf = "0.14"
+typst-kit = { version = "0.14", features = ["embed-fonts"] }
+ecow = "0.2"
+chrono = "0.4"
+
+[dev-dependencies]
+tempfile = "3"

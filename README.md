@@ -6,12 +6,13 @@ RTF parsing toolkit with a CLI-first workflow.
 
 ## Current Status (Phase 6)
 
-rtfkit provides a complete RTF-to-DOCX and RTF-to-HTML conversion pipeline with:
+rtfkit provides a complete RTF-to-DOCX, RTF-to-HTML, and RTF-to-PDF conversion pipeline with:
 
 - **Text extraction** with formatting preservation (bold, italic, underline, alignment)
 - **List support** - bullet and decimal lists with nested levels (up to 8)
 - **Table support** - rows, cells, horizontal/vertical merges, cell alignment
 - **HTML output** - semantic-first HTML5 output with `--to html`
+- **PDF output** - In-process PDF generation via embedded Typst renderer with `--to pdf`
 - **Conversion reports** - JSON or text format with warnings and statistics
 - **IR emission** - `--emit-ir` for snapshot/debug workflows
 - **Parser limits** - safety limits for input size, depth, and warnings
@@ -70,6 +71,22 @@ rtfkit convert document.rtf --to html --html-css-file custom.css --output docume
 ```
 
 See [HTML Styling Reference](docs/reference/html-styling.md) for CSS classes and customization options.
+
+### PDF Output Options
+
+Convert RTF to PDF with `--to pdf`:
+
+```bash
+# Basic PDF conversion
+rtfkit convert document.rtf --to pdf --output document.pdf
+
+# US Letter page size
+rtfkit convert document.rtf --to pdf --pdf-page-size letter --output document.pdf
+```
+
+PDF output uses an embedded Typst renderer - no external dependencies required. The output is deterministic and works completely offline.
+
+See [PDF Output Reference](docs/reference/pdf-output.md) for PDF-specific options and [PDF Determinism](docs/reference/pdf-determinism.md) for determinism guarantees.
 
 ### Exit Codes
 
@@ -231,6 +248,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the fixture-first contribution workfl
 - No hyperlinks/fields as first-class output
 - DOCX output supports basic text formatting, lists, and tables
 - HTML output is semantic-first, not pixel-perfect (no font sizes, colors, or borders)
+- PDF output uses embedded fonts (no custom font support)
 - List nesting limited to 8 levels (DOCX compatibility)
 - Row alignment and indent not fully supported by docx-rs (cosmetic loss only)
 
@@ -242,10 +260,18 @@ For up-to-date support details, see [RTF Feature Overview](docs/rtf-feature-over
 - [RTF Feature Overview](docs/rtf-feature-overview.md)
 - [Feature Support Matrix](docs/feature-support.md)
 - [HTML Styling Reference](docs/reference/html-styling.md)
+- [PDF Output Reference](docs/reference/pdf-output.md)
+- [PDF Determinism Guarantees](docs/reference/pdf-determinism.md)
 - [Warning Reference](docs/warning-reference.md)
 - [Limits Policy](docs/limits-policy.md)
 - [Contributing Guide](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
+
+### Migration Notes
+
+- **PDF rendering** is now in-process via `rtfkit-render-typst` crate (no external CLI required)
+- **`--pdf-backend` flag** has been removed (single backend now)
+- **`--keep-intermediate` flag** has been removed (in-process rendering)
 
 ## License
 

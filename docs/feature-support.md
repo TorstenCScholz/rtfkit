@@ -91,10 +91,10 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 |--------|---------|-------|
 | DOCX | ✅ Supported | Primary output format (default) |
 | HTML | ✅ Supported | Via `--to html` flag; semantic-first output |
+| PDF | ✅ Supported | Via `--to pdf` flag; in-process rendering (no external dependencies) |
 | IR JSON | ✅ Supported | Via `--emit-ir` flag |
 | Report JSON | ✅ Supported | Via `--format json` |
 | Report Text | ✅ Supported | Default output |
-| PDF | ❌ Not Supported | Planned for future phase |
 
 ### HTML Output Details
 
@@ -118,6 +118,30 @@ HTML output is selected with `--to html` and produces semantic HTML5:
 | Colors | ❌ Not Supported | Semantic-first design |
 | Borders | ❌ Not Supported | Semantic-first design |
 | Images | ❌ Not Supported | No IR image blocks |
+
+### PDF Output Details
+
+PDF output is selected with `--to pdf` and produces PDF via the embedded Typst renderer:
+
+| Feature | PDF Support | Notes |
+|---------|-------------|-------|
+| Paragraphs | ✅ Supported | With inline formatting |
+| Bold text | ✅ Supported | Mapped to Typst emphasis |
+| Italic text | ✅ Supported | Mapped to Typst emphasis |
+| Underline text | ✅ Supported | Mapped to Typst underline |
+| Text alignment | ✅ Supported | Left, center, right, justify |
+| Bullet lists | ✅ Supported | Typst list syntax |
+| Ordered lists | ✅ Supported | Typst numbered list syntax |
+| Nested lists | ✅ Supported | Up to 8 levels |
+| Tables | ✅ Supported | With cell merging |
+| Horizontal merges | ✅ Supported | Colspan in table cells |
+| Vertical merges | ✅ Supported | Rowspan in table cells |
+| Unicode text | ✅ Supported | Full Unicode support |
+| Page size options | ✅ Supported | A4 (default) and US Letter |
+| Deterministic output | ✅ Supported | Byte-identical for same input |
+| Images | ❌ Not Supported | No IR image blocks |
+| Hyperlinks | ❌ Not Supported | Rendered as plain text |
+| Custom fonts | ❌ Not Supported | Uses embedded fonts |
 
 ## Safety Features
 
@@ -152,12 +176,13 @@ HTML output is selected with `--to html` and produces semantic HTML5:
 5. **List nesting limit** - Maximum 8 levels due to DOCX compatibility
 6. **No nested tables** - Tables inside cells are not supported
 7. **HTML is semantic-first** - No font sizes, colors, or borders in HTML output
+8. **PDF uses embedded fonts** - Custom fonts not supported; uses Typst's embedded fonts
 
 ## Version History
 
 | Version | Changes |
 |---------|---------|
-| 0.6.0 | Added HTML output support, feature support matrix documentation |
+| 0.6.0 | Added HTML output support, PDF output support, feature support matrix documentation |
 | 0.5.0 | Added table merge and alignment support |
 | 0.4.0 | Added basic table support |
 | 0.3.0 | Added list support |
@@ -167,6 +192,9 @@ HTML output is selected with `--to html` and produces semantic HTML5:
 ## Related Documentation
 
 - [RTF Feature Overview](rtf-feature-overview.md)
+- [HTML Styling Reference](reference/html-styling.md)
+- [PDF Output Reference](reference/pdf-output.md)
+- [PDF Determinism Guarantees](reference/pdf-determinism.md)
 - [Warning Reference](warning-reference.md)
 - [Limits Policy](limits-policy.md)
 - [Architecture Overview](arch/README.md)

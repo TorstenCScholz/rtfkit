@@ -200,6 +200,8 @@ When adding or changing features, update the relevant documentation:
 - `CHANGELOG.md` - Version history
 - `docs/arch/README.md` - Architecture overview
 - `docs/feature-support.md` - Feature support matrix
+- `docs/reference/pdf-output.md` - PDF output documentation
+- `docs/reference/pdf-determinism.md` - PDF determinism guarantees
 - `docs/warning-reference.md` - Warning documentation
 - `docs/limits-policy.md` - Parser limits policy
 

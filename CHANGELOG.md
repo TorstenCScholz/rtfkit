@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+#### In-Process PDF Rendering
+- New `rtfkit-render-typst` crate with embedded Typst renderer
+- PDF output no longer requires external Typst CLI installation
+- Deterministic PDF output with byte-identical results for same input
+- Offline-capable PDF generation (no network access required)
+- Single binary deployment for all output formats
+- PDF determinism documentation (`docs/reference/pdf-determinism.md`)
+- PDF output reference documentation (`docs/reference/pdf-output.md`)
+
 #### Fixture Taxonomy
 - 44 fixtures organized by category:
   - `text_*` (9 fixtures) - Text and formatting tests
@@ -63,6 +72,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Warning cap now preserves `DroppedContent` signal for strict mode
 - All limit violations now map consistently to exit code 2
 - Documentation synchronized with implemented behavior
+- PDF output now uses in-process rendering instead of external Typst CLI
+
+### Removed
+
+- `--pdf-backend` flag (single backend now, no selection needed)
+- `--keep-intermediate` flag (in-process rendering, no intermediate files)
+- `--intermediate-dir` flag (in-process rendering, no intermediate files)
+- `rtfkit-pdf` crate (replaced by `rtfkit-render-typst`)
+
+### Legacy Cleanup
+
+- Old `rtfkit-pdf` implementation and superseded PDF docs were removed from the active code path.
+
+### Migration Notes
+
+- **No external Typst CLI required** - PDF output now works out of the box
+- **Removed CLI flags** - `--pdf-backend`, `--keep-intermediate`, and `--intermediate-dir` are no longer available
+- **Single binary deployment** - All output formats work without external dependencies
 
 ### Fixed
 

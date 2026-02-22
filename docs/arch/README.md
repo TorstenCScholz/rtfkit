@@ -4,7 +4,7 @@ This document reflects the current implementation in `main` (v0.6, Phase 6).
 
 ## Overview
 
-`rtfkit` provides a complete RTF-to-DOCX and RTF-to-HTML conversion pipeline with an intermediate representation (IR), conversion reporting, and comprehensive test coverage.
+`rtfkit` provides a complete RTF-to-DOCX, RTF-to-HTML, and RTF-to-PDF conversion pipeline with an intermediate representation (IR), conversion reporting, and comprehensive test coverage.
 
 ```mermaid
 flowchart LR
@@ -17,6 +17,8 @@ flowchart LR
     DOCXWriter --> DOCXFile[.docx File]
     IR --> HTMLWriter[HTML Writer]
     HTMLWriter --> HTMLFile[.html File]
+    IR --> PDFRenderer[PDF Renderer]
+    PDFRenderer --> PDFFile[.pdf File]
     IR --> CLI[--emit-ir JSON]
     Report --> CLIOut[stdout text/json]
 ```
@@ -26,17 +28,18 @@ flowchart LR
 ```text
 rtfkit/
 ├── crates/
-│   ├── rtfkit-core/   # Parser, interpreter, IR, reporting, limits
-│   ├── rtfkit-docx/   # DOCX writer implementation
-│   ├── rtfkit-html/   # HTML writer implementation
-│   └── rtfkit-cli/    # CLI entrypoint, tests, IO/report rendering
-├── fixtures/          # RTF inputs for tests (44 fixtures organized by category)
-├── golden/            # Golden IR snapshots
-├── golden_html/       # Golden HTML snapshots
+│   ├── rtfkit-core/        # Parser, interpreter, IR, reporting, limits
+│   ├── rtfkit-docx/        # DOCX writer implementation
+│   ├── rtfkit-html/        # HTML writer implementation
+│   ├── rtfkit-render-typst/# PDF renderer (in-process Typst)
+│   └── rtfkit-cli/         # CLI entrypoint, tests, IO/report rendering
+├── fixtures/               # RTF inputs for tests (44 fixtures organized by category)
+├── golden/                 # Golden IR snapshots
+├── golden_html/            # Golden HTML snapshots
 └── docs/
-    ├── adr/           # Architecture Decision Records
-    ├── arch/          # Architecture documentation
-    └── specs/         # Phase specifications
+    ├── adr/                # Architecture Decision Records
+    ├── arch/               # Architecture documentation
+    └── specs/              # Phase specifications
 ```
 
 ## `rtfkit-core`
@@ -199,6 +202,45 @@ Responsibilities:
 - **Well-formed**: Valid HTML5 with proper escaping
 - **Minimal CSS**: Optional default stylesheet for basic styling
 
+## `rtfkit-render-typst`
+
+Responsibilities:
+- Convert IR `Document` to PDF format
+- Embed Typst renderer for in-process PDF generation
+- Ensure deterministic output with fixed timestamps
+- Use embedded fonts only (no system fonts)
+
+### Architecture
+
+The PDF renderer uses the Typst library compiled into the binary:
+
+1. **IR → Typst Source**: IR is converted to Typst markup
+2. **In-Process Compilation**: Typst compiles markup in the same process
+3. **PDF Export**: Typst exports to PDF bytes
+
+Key characteristics:
+- **No external dependencies** - No Typst CLI installation required
+- **Offline capable** - No network access needed
+- **Deterministic** - Same input produces byte-identical PDF
+- **Embedded fonts** - Uses Typst's embedded fonts, not system fonts
+
+### IR → PDF Mapping
+
+| IR Element | PDF/Typst Output |
+|------------|------------------|
+| `Document` | PDF document with pages |
+| `Block::Paragraph` | Typst paragraph |
+| `Block::ListBlock` (bullet) | Typst bullet list |
+| `Block::ListBlock` (ordered) | Typst numbered list |
+| `Block::TableBlock` | Typst table |
+| `Run.bold = true` | `*text*` (Typst strong) |
+| `Run.italic = true` | `_text_` (Typst emphasis) |
+| `Run.underline = true` | `#underline[text]` |
+| `Paragraph.alignment` | Typst alignment |
+| `CellMerge` | Typst grid columns/rows |
+
+See [PDF Output Reference](../reference/pdf-output.md) for usage and [PDF Determinism](../reference/pdf-determinism.md) for determinism guarantees.
+
 ## `rtfkit` CLI
 
 Binary name: `rtfkit`
@@ -210,13 +252,14 @@ rtfkit convert [OPTIONS] <INPUT>
 ```
 
 Options:
-- `--to <docx|html>`: output format (default `docx`)
+- `--to <docx|html|pdf>`: output format (default `docx`)
 - `--format <text|json>`: report output format (default `text`)
 - `--emit-ir <FILE>`: write IR as pretty JSON
 - `--strict`: exit non-zero if `DroppedContent` warnings exist
 - `-o, --output <FILE>`: write output to file
 - `--force`: overwrite existing output file
 - `--verbose`: debug logging
+- `--pdf-page-size <a4|letter>`: PDF page size (PDF only)
 
 Exit codes:
 - `0`: success
@@ -301,6 +344,7 @@ Fixtures are organized by category:
 - No hyperlinks/fields as first-class output
 - DOCX output supports basic text formatting, lists, and tables
 - HTML output is semantic-first (no font sizes, colors, or borders)
+- PDF output uses embedded fonts (no custom font support)
 - Row alignment and indent not fully supported by docx-rs (cosmetic loss only)
 - No full RTF spec compliance target
 
@@ -308,6 +352,8 @@ Fixtures are organized by category:
 
 - [ADR-0001: RTF Parser Selection](../adr/0001-rtf-parser-selection.md)
 - [ADR-0002: DOCX Writer Selection](../adr/0002-docx-writer-selection.md)
+- [PDF Output Reference](../reference/pdf-output.md)
+- [PDF Determinism Guarantees](../reference/pdf-determinism.md)
 - [Phase 1 Specification](../specs/PHASE1.md)
 - [Phase 2 Specification](../specs/PHASE2.md)
 - [Phase 3 Specification](../specs/PHASE3.md)

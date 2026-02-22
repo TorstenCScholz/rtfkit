@@ -1,6 +1,6 @@
 # rtfkit Follow-on Plan (HTML CSS Polish Track)
 
-Status: planned follow-on track after `PHASE_HTML.md`, before `PHASE_PDF.md`.
+Status: planned follow-on track after `PHASE_HTML.md`.
 
 This phase improves visual quality of HTML output while preserving existing parser, warning, strict-mode, and determinism contracts.
 
@@ -223,6 +223,6 @@ Phase is complete when all are true:
 
 After this phase:
 
-1. Start `PHASE_PDF.md` backend selection/implementation.
+1. PDF output is now handled by `rtfkit-render-typst` crate (in-process Typst rendering).
 2. Reuse print-oriented CSS and realworld fixtures for PDF quality baselines.
-3. Keep PDF-specific layout logic in the chosen backend; do not overload HTML polish with PDF-only hacks.
+3. Keep PDF-specific layout logic in the Typst backend; do not overload HTML polish with PDF-only hacks.

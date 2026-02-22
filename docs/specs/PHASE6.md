@@ -152,6 +152,6 @@ After Phase 6:
 
 - HTML output track: [PHASE_HTML.md](PHASE_HTML.md)
 - HTML CSS polish track: [PHASE_CSS_POLISH.md](PHASE_CSS_POLISH.md)
-- PDF track: [PHASE_PDF.md](PHASE_PDF.md)
+- PDF output: Implemented in `rtfkit-render-typst` crate (in-process Typst rendering)
 
 These should start only after Phase 6 gates are met (now complete).

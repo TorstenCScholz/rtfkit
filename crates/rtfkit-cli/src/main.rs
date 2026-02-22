@@ -3,10 +3,14 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::{Context, Result};
+use chrono::DateTime;
 use clap::{Parser, Subcommand, ValueEnum};
 use rtfkit_core::{Document, Interpreter, Report, Warning};
 use rtfkit_docx::write_docx;
 use rtfkit_html::{CssMode, HtmlWriterOptions, document_to_html_with_warnings};
+use rtfkit_render_typst::{
+    DeterminismOptions, Margins, PageSize, RenderOptions, document_to_pdf_with_warnings,
+};
 use tracing::debug;
 
 /// RTF conversion toolkit - convert RTF files to various formats.
@@ -43,12 +47,25 @@ impl From<CssModeArg> for CssMode {
 enum Target {
     Docx,
     Html,
+    Pdf,
 }
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 enum ReportFormat {
     Json,
     Text,
+}
+
+/// Infer target format from output file extension.
+/// Returns None if the extension doesn't match a known format.
+fn infer_target_from_extension(path: &Path) -> Option<Target> {
+    let extension = path.extension()?.to_string_lossy().to_lowercase();
+    match extension.as_str() {
+        "docx" => Some(Target::Docx),
+        "html" | "htm" => Some(Target::Html),
+        "pdf" => Some(Target::Pdf),
+        _ => None,
+    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -59,13 +76,13 @@ enum Commands {
         #[arg(required = true)]
         input: PathBuf,
 
-        /// Output file path (e.g., output.docx)
+        /// Output file path (e.g., output.docx, output.html, output.pdf)
         #[arg(short, long)]
         output: Option<PathBuf>,
 
-        /// Output target format (docx or html)
-        #[arg(long, value_enum, default_value_t = Target::Docx)]
-        to: Target,
+        /// Output target format (docx, html, or pdf)
+        #[arg(long, value_enum)]
+        to: Option<Target>,
 
         /// Output format for conversion report
         #[arg(long, value_enum, default_value_t = ReportFormat::Text)]
@@ -90,6 +107,14 @@ enum Commands {
         /// Path to custom CSS file to append after built-in CSS
         #[arg(long, value_name = "FILE")]
         html_css_file: Option<PathBuf>,
+
+        /// PDF page size (default: a4)
+        #[arg(long, value_name = "a4|letter")]
+        pdf_page_size: Option<String>,
+
+        /// Fixed RFC3339 timestamp for deterministic PDF metadata
+        #[arg(long, value_name = "RFC3339")]
+        fixed_timestamp: Option<String>,
     },
 }
 
@@ -103,7 +128,7 @@ const MAX_CUSTOM_CSS_BYTES: u64 = 1024 * 1024; // 1 MiB
 struct ConvertRequest {
     input: PathBuf,
     output: Option<PathBuf>,
-    to: Target,
+    to: Option<Target>,
     format: ReportFormat,
     emit_ir: Option<PathBuf>,
     strict: bool,
@@ -111,6 +136,8 @@ struct ConvertRequest {
     verbose: bool,
     html_css: Option<CssModeArg>,
     html_css_file: Option<PathBuf>,
+    pdf_page_size: Option<String>,
+    fixed_timestamp: Option<String>,
 }
 
 fn run() -> Result<ExitCode> {
@@ -135,6 +162,8 @@ fn run() -> Result<ExitCode> {
             force,
             html_css,
             html_css_file,
+            pdf_page_size,
+            fixed_timestamp,
         } => handle_convert(ConvertRequest {
             input,
             output,
@@ -146,6 +175,8 @@ fn run() -> Result<ExitCode> {
             verbose: cli.verbose,
             html_css,
             html_css_file,
+            pdf_page_size,
+            fixed_timestamp,
         }),
     }
 }
@@ -162,13 +193,77 @@ fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
         verbose,
         html_css,
         html_css_file,
+        pdf_page_size,
+        fixed_timestamp,
     } = request;
 
-    debug!("Target format requested: {:?}", to);
+    // Resolve target format:
+    // - Explicit --to takes precedence.
+    // - When --to is omitted, infer from output extension if known.
+    // - Fall back to docx.
+    let extension_target = output
+        .as_ref()
+        .and_then(|output_path| infer_target_from_extension(output_path));
+    let resolved_to = match (to, extension_target) {
+        (Some(explicit), Some(inferred)) if explicit != inferred => {
+            eprintln!(
+                "Error: target format mismatch: --to {} conflicts with output extension '{}'",
+                match explicit {
+                    Target::Docx => "docx",
+                    Target::Html => "html",
+                    Target::Pdf => "pdf",
+                },
+                match inferred {
+                    Target::Docx => "docx",
+                    Target::Html => "html",
+                    Target::Pdf => "pdf",
+                }
+            );
+            eprintln!("       Use matching values or omit --to to infer from extension.");
+            return Ok(ExitCode::from(EXIT_PARSE_ERROR));
+        }
+        (Some(explicit), _) => explicit,
+        (None, Some(inferred)) => inferred,
+        (None, None) => Target::Docx,
+    };
+
+    debug!(
+        "Target format resolved: {:?} (requested: {:?}, extension: {:?})",
+        resolved_to, to, extension_target
+    );
 
     // HTML-specific flags are only valid with --to html.
-    if to != Target::Html && (html_css.is_some() || html_css_file.is_some()) {
+    if resolved_to != Target::Html && (html_css.is_some() || html_css_file.is_some()) {
         eprintln!("Error: --html-css and --html-css-file are only valid with --to html");
+        return Ok(ExitCode::from(EXIT_PARSE_ERROR));
+    }
+
+    // PDF-specific flags are only valid with --to pdf.
+    if resolved_to != Target::Pdf && (pdf_page_size.is_some() || fixed_timestamp.is_some()) {
+        eprintln!("Error: --pdf-page-size and --fixed-timestamp are only valid with --to pdf");
+        return Ok(ExitCode::from(EXIT_PARSE_ERROR));
+    }
+
+    // Validate pdf_page_size value if provided
+    if let Some(ref page_size) = pdf_page_size {
+        let page_size_lower = page_size.to_lowercase();
+        if page_size_lower != "a4" && page_size_lower != "letter" {
+            eprintln!(
+                "Error: Invalid PDF page size '{}'. Valid values: a4, letter",
+                page_size
+            );
+            return Ok(ExitCode::from(EXIT_PARSE_ERROR));
+        }
+    }
+
+    // Validate fixed_timestamp value if provided
+    if let Some(ref timestamp) = fixed_timestamp
+        && DateTime::parse_from_rfc3339(timestamp).is_err()
+    {
+        eprintln!(
+            "Error: Invalid timestamp '{}'. Use RFC3339 format, e.g. 2024-01-01T00:00:00Z",
+            timestamp
+        );
         return Ok(ExitCode::from(EXIT_PARSE_ERROR));
     }
 
@@ -204,7 +299,7 @@ fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
 
     // Handle output if --output is specified
     if let Some(output_path) = output.as_ref() {
-        return match to {
+        return match resolved_to {
             Target::Docx => handle_docx_output(&document, output_path, force, verbose),
             Target::Html => handle_html_output(
                 &document,
@@ -214,6 +309,15 @@ fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
                 strict,
                 html_css,
                 html_css_file.as_ref(),
+            ),
+            Target::Pdf => handle_pdf_output(
+                &document,
+                output_path,
+                force,
+                verbose,
+                strict,
+                pdf_page_size.as_deref(),
+                fixed_timestamp.as_deref(),
             ),
         };
     }
@@ -227,6 +331,70 @@ fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
     Ok(ExitCode::from(EXIT_SUCCESS))
 }
 
+fn validate_output_path(
+    output_path: &Path,
+    force: bool,
+    verbose: bool,
+    format_name: &str,
+    valid_extensions: &[&str],
+    suggested_extension: &str,
+) -> Option<ExitCode> {
+    let extension = output_path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase());
+
+    match extension.as_deref() {
+        Some(ext) if valid_extensions.iter().any(|candidate| candidate == &ext) => {}
+        Some(other) => {
+            if verbose {
+                eprintln!(
+                    "Warning: Output file has '.{other}' extension, but {format_name} format will be written."
+                );
+                eprintln!("         Consider using '{suggested_extension}' extension for clarity.");
+            }
+        }
+        None => {
+            if verbose {
+                eprintln!(
+                    "Warning: Output file has no extension. {format_name} format will be written."
+                );
+                eprintln!("         Consider using '{suggested_extension}' extension for clarity.");
+            }
+        }
+    }
+
+    if let Some(parent) = output_path.parent() {
+        if !parent.exists() {
+            eprintln!(
+                "Error: Output directory does not exist: {}",
+                parent.display()
+            );
+            return Some(ExitCode::from(EXIT_CONVERSION_ERROR));
+        }
+
+        // Check directory writability using a unique probe filename.
+        if let Err(e) = check_directory_writable(parent) {
+            eprintln!(
+                "Error: Output directory is not writable: {}",
+                parent.display()
+            );
+            eprintln!("  {e}");
+            return Some(ExitCode::from(EXIT_CONVERSION_ERROR));
+        }
+    }
+
+    if output_path.exists() && !force {
+        eprintln!(
+            "Error: Output file already exists: {}",
+            output_path.display()
+        );
+        eprintln!("       Use --force to overwrite existing files.");
+        return Some(ExitCode::from(EXIT_CONVERSION_ERROR));
+    }
+
+    None
+}
+
 /// Handle writing DOCX output with validation and error handling
 fn handle_docx_output(
     document: &Document,
@@ -234,61 +402,10 @@ fn handle_docx_output(
     force: bool,
     verbose: bool,
 ) -> Result<ExitCode> {
-    // Validate .docx extension
-    let extension = output_path
-        .extension()
-        .map(|e| e.to_string_lossy().to_lowercase());
-
-    match extension.as_deref() {
-        Some("docx") => {}
-        Some(other) => {
-            if verbose {
-                eprintln!(
-                    "Warning: Output file has '.{other}' extension, but DOCX format will be written."
-                );
-                eprintln!("         Consider using '.docx' extension for clarity.");
-            }
-        }
-        None => {
-            if verbose {
-                eprintln!("Warning: Output file has no extension. DOCX format will be written.");
-                eprintln!("         Consider using '.docx' extension for clarity.");
-            }
-        }
-    }
-
-    // Check if output directory exists and is writable
-    if let Some(parent) = output_path.parent() {
-        if !parent.exists() {
-            eprintln!(
-                "Error: Output directory does not exist: {}",
-                parent.display()
-            );
-            return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
-        }
-
-        // Check directory writability using a unique probe filename.
-        match check_directory_writable(parent) {
-            Ok(()) => {}
-            Err(e) => {
-                eprintln!(
-                    "Error: Output directory is not writable: {}",
-                    parent.display()
-                );
-                eprintln!("  {e}");
-                return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
-            }
-        }
-    }
-
-    // Check if file exists and --force is not set
-    if output_path.exists() && !force {
-        eprintln!(
-            "Error: Output file already exists: {}",
-            output_path.display()
-        );
-        eprintln!("       Use --force to overwrite existing files.");
-        return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+    if let Some(code) =
+        validate_output_path(output_path, force, verbose, "DOCX", &["docx"], ".docx")
+    {
+        return Ok(code);
     }
 
     // Write DOCX file
@@ -313,66 +430,22 @@ fn handle_html_output(
     html_css: Option<CssModeArg>,
     html_css_file: Option<&PathBuf>,
 ) -> Result<ExitCode> {
-    // Validate HTML extension (warn only in verbose mode)
-    let extension = output_path
-        .extension()
-        .map(|e| e.to_string_lossy().to_lowercase());
-
-    match extension.as_deref() {
-        Some("html") | Some("htm") => {}
-        Some(other) => {
-            if verbose {
-                eprintln!(
-                    "Warning: Output file has '.{other}' extension, but HTML format will be written."
-                );
-                eprintln!("         Consider using '.html' extension for clarity.");
-            }
-        }
-        None => {
-            if verbose {
-                eprintln!("Warning: Output file has no extension. HTML format will be written.");
-                eprintln!("         Consider using '.html' extension for clarity.");
-            }
-        }
-    }
-
-    // Check if output directory exists and is writable
-    if let Some(parent) = output_path.parent() {
-        if !parent.exists() {
-            eprintln!(
-                "Error: Output directory does not exist: {}",
-                parent.display()
-            );
-            return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
-        }
-
-        // Check directory writability using a unique probe filename.
-        match check_directory_writable(parent) {
-            Ok(()) => {}
-            Err(e) => {
-                eprintln!(
-                    "Error: Output directory is not writable: {}",
-                    parent.display()
-                );
-                eprintln!("  {e}");
-                return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
-            }
-        }
-    }
-
-    // Check if file exists and --force is not set
-    if output_path.exists() && !force {
-        eprintln!(
-            "Error: Output file already exists: {}",
-            output_path.display()
-        );
-        eprintln!("       Use --force to overwrite existing files.");
-        return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+    if let Some(code) = validate_output_path(
+        output_path,
+        force,
+        verbose,
+        "HTML",
+        &["html", "htm"],
+        ".html",
+    ) {
+        return Ok(code);
     }
 
     // Build HTML writer options
-    let mut html_options = HtmlWriterOptions::default();
-    html_options.css_mode = html_css.unwrap_or(CssModeArg::Default).into();
+    let mut html_options = HtmlWriterOptions {
+        css_mode: html_css.unwrap_or(CssModeArg::Default).into(),
+        ..Default::default()
+    };
 
     // Load custom CSS file if provided
     if let Some(css_file) = html_css_file {
@@ -431,6 +504,75 @@ fn handle_html_output(
     }
 
     eprintln!("HTML written to: {}", output_path.display());
+    Ok(ExitCode::from(EXIT_SUCCESS))
+}
+
+/// Handle writing PDF output with validation and error handling
+fn handle_pdf_output(
+    document: &Document,
+    output_path: &Path,
+    force: bool,
+    verbose: bool,
+    strict: bool,
+    pdf_page_size: Option<&str>,
+    fixed_timestamp: Option<&str>,
+) -> Result<ExitCode> {
+    if let Some(code) = validate_output_path(output_path, force, verbose, "PDF", &["pdf"], ".pdf") {
+        return Ok(code);
+    }
+
+    // Build PDF render options
+    let options = RenderOptions {
+        page_size: match pdf_page_size.map(|s| s.to_lowercase()).as_deref() {
+            Some("letter") => PageSize::Letter,
+            _ => PageSize::A4,
+        },
+        margins: Margins::default(),
+        determinism: DeterminismOptions {
+            fixed_timestamp: fixed_timestamp.map(str::to_owned),
+            normalize_metadata: fixed_timestamp.is_some(),
+        },
+    };
+
+    // Generate PDF using in-process Typst renderer
+    debug!("Writing PDF to: {}", output_path.display());
+    let output = match document_to_pdf_with_warnings(document, &options) {
+        Ok(output) => output,
+        Err(e) => {
+            eprintln!("Error generating PDF: {}", output_path.display());
+            eprintln!("  {e}");
+            return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+        }
+    };
+
+    // Strict mode for PDF includes writer-level dropped semantic content.
+    // Parser/interpreter drops are checked in handle_convert.
+    if strict {
+        let dropped_reasons: Vec<String> = output
+            .warnings
+            .iter()
+            .filter_map(|w| {
+                if matches!(w.kind, rtfkit_render_typst::WarningKind::DroppedContent) {
+                    Some(w.message.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !dropped_reasons.is_empty() {
+            print_strict_mode_violation(&dropped_reasons);
+            return Ok(ExitCode::from(EXIT_STRICT_MODE));
+        }
+    }
+
+    // Write PDF file
+    if let Err(e) = fs::write(output_path, output.pdf_bytes) {
+        eprintln!("Error writing PDF file: {}", output_path.display());
+        eprintln!("  {e}");
+        return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+    }
+
+    eprintln!("PDF written to: {}", output_path.display());
     Ok(ExitCode::from(EXIT_SUCCESS))
 }
 
