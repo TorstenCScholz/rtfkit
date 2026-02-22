@@ -85,9 +85,9 @@ pub fn list_to_html_with_warnings(
 
 fn list_tag_and_class(kind: ListKind) -> (&'static str, Option<&'static str>) {
     match kind {
-        ListKind::Bullet => ("ul", None),
-        ListKind::OrderedDecimal => ("ol", None),
-        ListKind::Mixed => ("ul", Some("rtf-list-mixed")),
+        ListKind::Bullet => ("ul", Some("rtf-list")),
+        ListKind::OrderedDecimal => ("ol", Some("rtf-list")),
+        ListKind::Mixed => ("ul", Some("rtf-list rtf-list-mixed")),
     }
 }
 
@@ -129,7 +129,7 @@ mod tests {
         let mut buf = HtmlBuffer::new();
         let mut dropped_reasons = Vec::new();
         list_to_html_with_warnings(&list, &mut buf, &mut dropped_reasons);
-        assert_eq!(buf.as_str(), "<ul></ul>");
+        assert_eq!(buf.as_str(), r#"<ul class="rtf-list"></ul>"#);
         assert!(dropped_reasons.is_empty());
     }
 
@@ -144,8 +144,11 @@ mod tests {
         let mut buf = HtmlBuffer::new();
         let mut dropped_reasons = Vec::new();
         list_to_html_with_warnings(&list, &mut buf, &mut dropped_reasons);
-        // Paragraphs inside list items are wrapped in <p> tags
-        assert_eq!(buf.as_str(), "<ul><li><p>Item 1</p></li></ul>");
+        // Paragraphs inside list items are wrapped in <p> tags with rtf-p class
+        assert_eq!(
+            buf.as_str(),
+            r#"<ul class="rtf-list"><li><p class="rtf-p">Item 1</p></li></ul>"#
+        );
         assert!(dropped_reasons.is_empty());
     }
 
@@ -155,7 +158,7 @@ mod tests {
         let mut buf = HtmlBuffer::new();
         let mut dropped_reasons = Vec::new();
         list_to_html_with_warnings(&list, &mut buf, &mut dropped_reasons);
-        assert_eq!(buf.as_str(), "<ol></ol>");
+        assert_eq!(buf.as_str(), r#"<ol class="rtf-list"></ol>"#);
         assert!(dropped_reasons.is_empty());
     }
 
@@ -176,7 +179,7 @@ mod tests {
         list_to_html_with_warnings(&list, &mut buf, &mut dropped_reasons);
         assert_eq!(
             buf.as_str(),
-            "<ol><li><p>First</p></li><li><p>Second</p></li></ol>"
+            r#"<ol class="rtf-list"><li><p class="rtf-p">First</p></li><li><p class="rtf-p">Second</p></li></ol>"#
         );
         assert!(dropped_reasons.is_empty());
     }
@@ -192,10 +195,10 @@ mod tests {
         let mut buf = HtmlBuffer::new();
         let mut dropped_reasons = Vec::new();
         list_to_html_with_warnings(&list, &mut buf, &mut dropped_reasons);
-        // Mixed lists use <ul> with rtf-list-mixed class
+        // Mixed lists use <ul> with both rtf-list and rtf-list-mixed classes
         assert_eq!(
             buf.as_str(),
-            "<ul class=\"rtf-list-mixed\"><li><p>Item</p></li></ul>"
+            r#"<ul class="rtf-list rtf-list-mixed"><li><p class="rtf-p">Item</p></li></ul>"#
         );
         assert!(dropped_reasons.is_empty());
     }
@@ -230,7 +233,7 @@ mod tests {
         list_to_html_with_warnings(&outer, &mut buf, &mut dropped_reasons);
         assert_eq!(
             buf.as_str(),
-            "<ul><li><p>Outer item</p></li><li><p>Item with nested:</p><ol><li><p>Nested item</p></li></ol></li></ul>"
+            r#"<ul class="rtf-list"><li><p class="rtf-p">Outer item</p></li><li><p class="rtf-p">Item with nested:</p><ol class="rtf-list"><li><p class="rtf-p">Nested item</p></li></ol></li></ul>"#
         );
         assert!(dropped_reasons.is_empty());
     }
@@ -255,7 +258,7 @@ mod tests {
         list_to_html_with_warnings(&list, &mut buf, &mut dropped_reasons);
         assert_eq!(
             buf.as_str(),
-            "<ul><li><p>First paragraph</p><p>Second paragraph</p></li></ul>"
+            r#"<ul class="rtf-list"><li><p class="rtf-p">First paragraph</p><p class="rtf-p">Second paragraph</p></li></ul>"#
         );
         assert!(dropped_reasons.is_empty());
     }
@@ -296,7 +299,7 @@ mod tests {
         list_to_html_with_warnings(&level1, &mut buf, &mut dropped_reasons);
         assert_eq!(
             buf.as_str(),
-            "<ul><li><p>Level 1</p></li><li><ol><li><p>Level 2</p></li><li><ul><li><p>Level 3</p></li></ul></li></ol></li></ul>"
+            r#"<ul class="rtf-list"><li><p class="rtf-p">Level 1</p></li><li><ol class="rtf-list"><li><p class="rtf-p">Level 2</p></li><li><ul class="rtf-list"><li><p class="rtf-p">Level 3</p></li></ul></li></ol></li></ul>"#
         );
         assert!(dropped_reasons.is_empty());
     }
@@ -327,7 +330,7 @@ mod tests {
 
         assert_eq!(
             buf.as_str(),
-            "<ol><li><p>Top 1</p><ol><li><p>Nested 1</p></li><li><p>Nested 2</p></li></ol></li><li><p>Top 2</p></li></ol>"
+            r#"<ol class="rtf-list"><li><p class="rtf-p">Top 1</p><ol class="rtf-list"><li><p class="rtf-p">Nested 1</p></li><li><p class="rtf-p">Nested 2</p></li></ol></li><li><p class="rtf-p">Top 2</p></li></ol>"#
         );
         assert!(dropped_reasons.is_empty());
     }

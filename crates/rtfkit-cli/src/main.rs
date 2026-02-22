@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use rtfkit_core::{Document, Interpreter, Report, Warning};
 use rtfkit_docx::write_docx;
-use rtfkit_html::{HtmlWriterOptions, document_to_html_with_warnings};
+use rtfkit_html::{CssMode, HtmlWriterOptions, document_to_html_with_warnings};
 use tracing::debug;
 
 /// RTF conversion toolkit - convert RTF files to various formats.
@@ -19,6 +19,36 @@ struct Cli {
 
     #[command(subcommand)]
     command: Commands,
+}
+
+/// CSS mode argument for CLI parsing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum CssModeArg {
+    /// Embed the built-in polished stylesheet (default).
+    Default,
+    /// Omit built-in CSS, emit semantic HTML only.
+    None,
+}
+
+impl From<CssModeArg> for CssMode {
+    fn from(arg: CssModeArg) -> Self {
+        match arg {
+            CssModeArg::Default => CssMode::Default,
+            CssModeArg::None => CssMode::None,
+        }
+    }
+}
+
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+enum Target {
+    Docx,
+    Html,
+}
+
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+enum ReportFormat {
+    Json,
+    Text,
 }
 
 #[derive(Subcommand, Debug)]
@@ -34,12 +64,12 @@ enum Commands {
         output: Option<PathBuf>,
 
         /// Output target format (docx or html)
-        #[arg(long, default_value = "docx", value_parser = ["docx", "html"])]
-        to: String,
+        #[arg(long, value_enum, default_value_t = Target::Docx)]
+        to: Target,
 
         /// Output format for conversion report
-        #[arg(long, default_value = "text", value_parser = ["json", "text"])]
-        format: String,
+        #[arg(long, value_enum, default_value_t = ReportFormat::Text)]
+        format: ReportFormat,
 
         /// Serialize IR to JSON file for analysis/debugging
         #[arg(long, value_name = "FILE")]
@@ -52,6 +82,14 @@ enum Commands {
         /// Overwrite existing output file without prompting
         #[arg(long)]
         force: bool,
+
+        /// CSS output mode for HTML output
+        #[arg(long, value_name = "MODE", value_enum)]
+        html_css: Option<CssModeArg>,
+
+        /// Path to custom CSS file to append after built-in CSS
+        #[arg(long, value_name = "FILE")]
+        html_css_file: Option<PathBuf>,
     },
 }
 
@@ -60,16 +98,19 @@ const EXIT_SUCCESS: u8 = 0;
 const EXIT_PARSE_ERROR: u8 = 2;
 const EXIT_CONVERSION_ERROR: u8 = 3;
 const EXIT_STRICT_MODE: u8 = 4;
+const MAX_CUSTOM_CSS_BYTES: u64 = 1024 * 1024; // 1 MiB
 
 struct ConvertRequest {
     input: PathBuf,
     output: Option<PathBuf>,
-    to: String,
-    format: String,
+    to: Target,
+    format: ReportFormat,
     emit_ir: Option<PathBuf>,
     strict: bool,
     force: bool,
     verbose: bool,
+    html_css: Option<CssModeArg>,
+    html_css_file: Option<PathBuf>,
 }
 
 fn run() -> Result<ExitCode> {
@@ -92,6 +133,8 @@ fn run() -> Result<ExitCode> {
             emit_ir,
             strict,
             force,
+            html_css,
+            html_css_file,
         } => handle_convert(ConvertRequest {
             input,
             output,
@@ -101,6 +144,8 @@ fn run() -> Result<ExitCode> {
             strict,
             force,
             verbose: cli.verbose,
+            html_css,
+            html_css_file,
         }),
     }
 }
@@ -115,9 +160,17 @@ fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
         strict,
         force,
         verbose,
+        html_css,
+        html_css_file,
     } = request;
 
-    debug!("Target format requested: {to}");
+    debug!("Target format requested: {:?}", to);
+
+    // HTML-specific flags are only valid with --to html.
+    if to != Target::Html && (html_css.is_some() || html_css_file.is_some()) {
+        eprintln!("Error: --html-css and --html-css-file are only valid with --to html");
+        return Ok(ExitCode::from(EXIT_PARSE_ERROR));
+    }
 
     // Read input file
     let content = fs::read_to_string(&input)
@@ -151,18 +204,24 @@ fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
 
     // Handle output if --output is specified
     if let Some(output_path) = output.as_ref() {
-        return match to.as_str() {
-            "docx" => handle_docx_output(&document, output_path, force, verbose),
-            "html" => handle_html_output(&document, output_path, force, verbose, strict),
-            _ => unreachable!("clap validates --to"),
+        return match to {
+            Target::Docx => handle_docx_output(&document, output_path, force, verbose),
+            Target::Html => handle_html_output(
+                &document,
+                output_path,
+                force,
+                verbose,
+                strict,
+                html_css,
+                html_css_file.as_ref(),
+            ),
         };
     }
 
     // Output report to stdout (when no --output specified)
-    match format.as_str() {
-        "json" => print_report_json(&report)?,
-        "text" => print_report_text(&report),
-        _ => unreachable!("clap validates format"),
+    match format {
+        ReportFormat::Json => print_report_json(&report)?,
+        ReportFormat::Text => print_report_text(&report),
     }
 
     Ok(ExitCode::from(EXIT_SUCCESS))
@@ -251,6 +310,8 @@ fn handle_html_output(
     force: bool,
     verbose: bool,
     strict: bool,
+    html_css: Option<CssModeArg>,
+    html_css_file: Option<&PathBuf>,
 ) -> Result<ExitCode> {
     // Validate HTML extension (warn only in verbose mode)
     let extension = output_path
@@ -309,10 +370,41 @@ fn handle_html_output(
         return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
     }
 
+    // Build HTML writer options
+    let mut html_options = HtmlWriterOptions::default();
+    html_options.css_mode = html_css.unwrap_or(CssModeArg::Default).into();
+
+    // Load custom CSS file if provided
+    if let Some(css_file) = html_css_file {
+        let css_size = match fs::metadata(css_file) {
+            Ok(metadata) => metadata.len(),
+            Err(e) => {
+                eprintln!("Error reading CSS file metadata: {}", css_file.display());
+                eprintln!("  {e}");
+                return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+            }
+        };
+        if css_size > MAX_CUSTOM_CSS_BYTES {
+            eprintln!(
+                "Error: CSS file too large: {} bytes exceeds limit of {} bytes",
+                css_size, MAX_CUSTOM_CSS_BYTES
+            );
+            return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+        }
+
+        match fs::read_to_string(css_file) {
+            Ok(css) => html_options.custom_css = Some(css),
+            Err(e) => {
+                eprintln!("Error reading CSS file: {}", css_file.display());
+                eprintln!("  {e}");
+                return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));
+            }
+        }
+    }
+
     // Generate HTML
     debug!("Writing HTML to: {}", output_path.display());
-    let options = HtmlWriterOptions::default();
-    let output = match document_to_html_with_warnings(document, &options) {
+    let output = match document_to_html_with_warnings(document, &html_options) {
         Ok(output) => output,
         Err(e) => {
             eprintln!("Error generating HTML: {}", output_path.display());

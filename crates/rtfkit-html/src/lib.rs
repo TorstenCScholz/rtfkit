@@ -58,7 +58,7 @@ pub mod writer;
 
 // Re-export public API types
 pub use error::HtmlWriterError;
-pub use options::HtmlWriterOptions;
+pub use options::{CssMode, HtmlWriterOptions};
 pub use writer::{HtmlWriterOutput, document_to_html, document_to_html_with_warnings};
 
 #[cfg(test)]
@@ -90,7 +90,7 @@ mod tests {
 
         let html = result.unwrap();
         assert!(html.contains("Test content"));
-        assert!(html.contains("<p>"));
+        assert!(html.contains(r#"<p class="rtf-p">"#));
     }
 
     #[test]
@@ -101,11 +101,12 @@ mod tests {
 
         let options = HtmlWriterOptions {
             emit_document_wrapper: false,
-            include_default_css: false,
+            css_mode: CssMode::None,
+            custom_css: None,
         };
 
         let html = document_to_html(&doc, &options).unwrap();
         assert!(!html.contains("<!doctype html>"));
-        assert!(html.contains("<p>Fragment</p>"));
+        assert!(html.contains(r#"<p class="rtf-p">Fragment</p>"#));
     }
 }

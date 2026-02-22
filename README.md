@@ -54,6 +54,23 @@ rtfkit convert fixtures/text_simple_paragraph.rtf --emit-ir out.json
 rtfkit convert fixtures/mixed_complex.rtf --strict --format json
 ```
 
+### HTML Output Options
+
+Control CSS output with `--html-css`:
+
+```bash
+# Default: embed built-in CSS
+rtfkit convert document.rtf --to html --output document.html
+
+# No built-in CSS (for custom styling)
+rtfkit convert document.rtf --to html --html-css none --output document.html
+
+# Append custom CSS
+rtfkit convert document.rtf --to html --html-css-file custom.css --output document.html
+```
+
+See [HTML Styling Reference](docs/reference/html-styling.md) for CSS classes and customization options.
+
 ### Exit Codes
 
 | Code | Meaning |
@@ -224,6 +241,7 @@ For up-to-date support details, see [RTF Feature Overview](docs/rtf-feature-over
 - [Architecture Overview](docs/arch/README.md)
 - [RTF Feature Overview](docs/rtf-feature-overview.md)
 - [Feature Support Matrix](docs/feature-support.md)
+- [HTML Styling Reference](docs/reference/html-styling.md)
 - [Warning Reference](docs/warning-reference.md)
 - [Limits Policy](docs/limits-policy.md)
 - [Contributing Guide](CONTRIBUTING.md)

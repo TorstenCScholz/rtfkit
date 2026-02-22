@@ -118,15 +118,48 @@ pub fn table_to_html_with_warnings(
     // Pre-compute vertical merge information
     let (rowspan_map, skip_cells) = compute_vertical_merges(table);
 
-    for (row_idx, row) in table.rows.iter().enumerate() {
+    // Emit rows with optional thead/tbody wrappers.
+    // Splitting only applies when the first row has no rowspan that would cross section boundaries.
+    let can_split_header_body = table.rows.len() > 1
+        && rowspan_map
+            .first()
+            .is_some_and(|row| row.iter().all(|&span| span <= 1));
+
+    if can_split_header_body {
+        buf.push_raw("<thead>");
         row_to_html(
-            row,
-            row_idx,
+            &table.rows[0],
+            0,
             &rowspan_map,
             &skip_cells,
             buf,
             dropped_reasons,
         );
+        buf.push_raw("</thead>");
+
+        buf.push_raw("<tbody>");
+        for (row_idx, row) in table.rows.iter().enumerate().skip(1) {
+            row_to_html(
+                row,
+                row_idx,
+                &rowspan_map,
+                &skip_cells,
+                buf,
+                dropped_reasons,
+            );
+        }
+        buf.push_raw("</tbody>");
+    } else {
+        for (row_idx, row) in table.rows.iter().enumerate() {
+            row_to_html(
+                row,
+                row_idx,
+                &rowspan_map,
+                &skip_cells,
+                buf,
+                dropped_reasons,
+            );
+        }
     }
 
     buf.push_close_tag("table");
@@ -305,6 +338,10 @@ mod tests {
 
         assert!(html.starts_with(r#"<table class="rtf-table">"#));
         assert!(html.ends_with("</table>"));
+        assert!(html.contains("<thead>"));
+        assert!(html.contains("</thead>"));
+        assert!(html.contains("<tbody>"));
+        assert!(html.contains("</tbody>"));
         assert!(html.contains("<tr>"));
         assert!(html.contains("</tr>"));
         assert!(html.contains("<td>"));
@@ -377,6 +414,8 @@ mod tests {
         // Should have rowspan="2" on the vertical start cell
         assert!(html.contains(r#"rowspan="2""#));
         assert!(html.contains("Top"));
+        assert!(!html.contains("<thead>"));
+        assert!(!html.contains("<tbody>"));
         // Bottom cell content should not appear (it's skipped)
         // Note: empty string won't show anyway, but the cell is properly skipped
     }
@@ -415,6 +454,8 @@ mod tests {
         assert!(html.contains("R1"));
         assert!(html.contains("R2"));
         assert!(html.contains("R3"));
+        assert!(!html.contains("<thead>"));
+        assert!(!html.contains("<tbody>"));
         // Mid and Bottom content should not appear (continuation cells are skipped)
         assert!(!html.contains(">Mid<"));
         assert!(!html.contains(">Bottom<"));

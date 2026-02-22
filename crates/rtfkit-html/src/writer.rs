@@ -4,7 +4,7 @@
 //! to HTML string output.
 
 use crate::error::HtmlWriterError;
-use crate::options::HtmlWriterOptions;
+use crate::options::{CssMode, HtmlWriterOptions};
 use crate::serialize::HtmlBuffer;
 use crate::style::default_stylesheet;
 use rtfkit_core::{Block, Document};
@@ -79,18 +79,35 @@ fn emit_document_start(buf: &mut HtmlBuffer, options: &HtmlWriterOptions) {
     buf.push_raw("<head>\n");
     buf.push_raw("<meta charset=\"utf-8\">\n");
 
-    if options.include_default_css {
+    // Emit CSS based on mode
+    match options.css_mode {
+        CssMode::Default => {
+            buf.push_raw("<style>\n");
+            buf.push_raw(default_stylesheet());
+            buf.push_raw("\n</style>\n");
+        }
+        CssMode::None => {
+            // No built-in CSS
+        }
+    }
+
+    // Append custom CSS if provided
+    if let Some(ref custom_css) = options.custom_css {
         buf.push_raw("<style>\n");
-        buf.push_raw(default_stylesheet());
+        buf.push_raw(custom_css);
         buf.push_raw("\n</style>\n");
     }
 
     buf.push_raw("</head>\n");
     buf.push_raw("<body>\n");
+    buf.push_raw("<div class=\"rtf-doc\">\n");
+    buf.push_raw("<div class=\"rtf-content\">\n");
 }
 
 /// Emits the document end (body and html closing).
 fn emit_document_end(buf: &mut HtmlBuffer) {
+    buf.push_raw("</div>\n");
+    buf.push_raw("</div>\n");
     buf.push_raw("</body>\n");
     buf.push_raw("</html>\n");
 }
@@ -143,6 +160,8 @@ mod tests {
         assert!(html.contains("</html>"));
         assert!(html.contains("<body>"));
         assert!(html.contains("</body>"));
+        assert!(html.contains("<div class=\"rtf-doc\">"));
+        assert!(html.contains("<div class=\"rtf-content\">"));
     }
 
     #[test]
@@ -150,7 +169,8 @@ mod tests {
         let doc = Document::new();
         let options = HtmlWriterOptions {
             emit_document_wrapper: false,
-            include_default_css: false,
+            css_mode: CssMode::None,
+            custom_css: None,
         };
         let html = document_to_html(&doc, &options).unwrap();
 
@@ -167,7 +187,7 @@ mod tests {
         let options = HtmlWriterOptions::default();
         let html = document_to_html(&doc, &options).unwrap();
 
-        assert!(html.contains("<p>Hello</p>"));
+        assert!(html.contains(r#"<p class="rtf-p">Hello</p>"#));
     }
 
     #[test]
@@ -175,11 +195,48 @@ mod tests {
         let doc = Document::new();
         let options = HtmlWriterOptions {
             emit_document_wrapper: true,
-            include_default_css: false,
+            css_mode: CssMode::None,
+            custom_css: None,
         };
         let html = document_to_html(&doc, &options).unwrap();
 
         assert!(!html.contains("<style>"));
+    }
+
+    #[test]
+    fn document_with_custom_css_only() {
+        let doc = Document::new();
+        let options = HtmlWriterOptions {
+            emit_document_wrapper: true,
+            css_mode: CssMode::None,
+            custom_css: Some("body { background: #fff; }".to_string()),
+        };
+        let html = document_to_html(&doc, &options).unwrap();
+
+        // Should not contain default stylesheet
+        assert!(!html.contains(".rtf-doc"));
+        // Should contain custom CSS
+        assert!(html.contains("body { background: #fff; }"));
+        // Should have exactly one style block
+        assert_eq!(html.matches("<style>").count(), 1);
+    }
+
+    #[test]
+    fn document_with_default_and_custom_css() {
+        let doc = Document::new();
+        let options = HtmlWriterOptions {
+            emit_document_wrapper: true,
+            css_mode: CssMode::Default,
+            custom_css: Some("body { color: red; }".to_string()),
+        };
+        let html = document_to_html(&doc, &options).unwrap();
+
+        // Should contain default stylesheet
+        assert!(html.contains(".rtf-doc"));
+        // Should also contain custom CSS
+        assert!(html.contains("body { color: red; }"));
+        // Should have two style blocks
+        assert_eq!(html.matches("<style>").count(), 2);
     }
 
     #[test]
@@ -189,7 +246,7 @@ mod tests {
         ]))]);
         let options = HtmlWriterOptions::default();
         let output = document_to_html_with_warnings(&doc, &options).unwrap();
-        assert!(output.html.contains("<p>Hello</p>"));
+        assert!(output.html.contains(r#"<p class="rtf-p">Hello</p>"#));
         assert!(output.dropped_content_reasons.is_empty());
     }
 
@@ -212,6 +269,149 @@ mod tests {
         assert_eq!(
             output.dropped_content_reasons,
             vec!["list_nesting_semantics".to_string()]
+        );
+    }
+
+    /// Test that CssMode::None produces HTML without any <style> block for built-in CSS.
+    #[test]
+    fn css_mode_none_omits_builtin_stylesheet() {
+        let doc = Document::new();
+        let options = HtmlWriterOptions {
+            emit_document_wrapper: true,
+            css_mode: CssMode::None,
+            custom_css: None,
+        };
+        let html = document_to_html(&doc, &options).unwrap();
+
+        // Should not contain any style block
+        assert!(
+            !html.contains("<style>"),
+            "CssMode::None should not emit any <style> block"
+        );
+        assert!(
+            !html.contains(".rtf-doc"),
+            "CssMode::None should not include built-in CSS classes"
+        );
+    }
+
+    /// Test that custom CSS is appended after built-in CSS.
+    #[test]
+    fn custom_css_appended_after_builtin_css() {
+        let doc = Document::new();
+        let options = HtmlWriterOptions {
+            emit_document_wrapper: true,
+            css_mode: CssMode::Default,
+            custom_css: Some("/* custom css */".to_string()),
+        };
+        let html = document_to_html(&doc, &options).unwrap();
+
+        // Find positions of built-in and custom CSS
+        let builtin_pos = html
+            .find(".rtf-doc")
+            .expect("Built-in CSS should be present");
+        let custom_pos = html
+            .find("/* custom css */")
+            .expect("Custom CSS should be present");
+
+        // Custom CSS should come after built-in CSS
+        assert!(
+            custom_pos > builtin_pos,
+            "Custom CSS should be appended after built-in CSS"
+        );
+    }
+
+    /// Test that custom CSS appears in its own <style> block.
+    #[test]
+    fn custom_css_in_own_style_block() {
+        let doc = Document::new();
+        let options = HtmlWriterOptions {
+            emit_document_wrapper: true,
+            css_mode: CssMode::Default,
+            custom_css: Some(".custom { color: red; }".to_string()),
+        };
+        let html = document_to_html(&doc, &options).unwrap();
+
+        // Should have exactly two style blocks
+        let style_count = html.matches("<style>").count();
+        assert_eq!(
+            style_count, 2,
+            "Should have two <style> blocks (built-in and custom)"
+        );
+
+        // Verify the custom CSS is in its own block
+        assert!(
+            html.contains(".custom { color: red; }"),
+            "Custom CSS should be present"
+        );
+    }
+
+    /// Test that CssMode::None with custom CSS produces only one style block.
+    #[test]
+    fn css_mode_none_with_custom_css_single_block() {
+        let doc = Document::new();
+        let options = HtmlWriterOptions {
+            emit_document_wrapper: true,
+            css_mode: CssMode::None,
+            custom_css: Some(".my-style { margin: 0; }".to_string()),
+        };
+        let html = document_to_html(&doc, &options).unwrap();
+
+        // Should have exactly one style block (custom only)
+        let style_count = html.matches("<style>").count();
+        assert_eq!(
+            style_count, 1,
+            "Should have exactly one <style> block for custom CSS"
+        );
+
+        // Should contain custom CSS
+        assert!(
+            html.contains(".my-style { margin: 0; }"),
+            "Custom CSS should be present"
+        );
+
+        // Should not contain built-in CSS
+        assert!(
+            !html.contains(".rtf-doc"),
+            "Should not contain built-in CSS classes"
+        );
+    }
+
+    /// Test that HTML output is deterministic across multiple calls.
+    #[test]
+    fn html_output_is_deterministic() {
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
+            Run::new("Test content"),
+        ]))]);
+        let options = HtmlWriterOptions::default();
+
+        // Generate HTML multiple times
+        let html1 = document_to_html(&doc, &options).unwrap();
+        let html2 = document_to_html(&doc, &options).unwrap();
+        let html3 = document_to_html(&doc, &options).unwrap();
+
+        // All outputs should be identical
+        assert_eq!(html1, html2, "HTML output should be deterministic");
+        assert_eq!(html2, html3, "HTML output should be deterministic");
+    }
+
+    /// Test that HTML output with custom CSS is deterministic.
+    #[test]
+    fn html_output_with_custom_css_is_deterministic() {
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
+            Run::new("Test"),
+        ]))]);
+        let options = HtmlWriterOptions {
+            emit_document_wrapper: true,
+            css_mode: CssMode::Default,
+            custom_css: Some(".custom {}".to_string()),
+        };
+
+        let html1 = document_to_html(&doc, &options).unwrap();
+        let html2 = document_to_html(&doc, &options).unwrap();
+
+        assert_eq!(
+            html1, html2,
+            "HTML output with custom CSS should be deterministic"
         );
     }
 }

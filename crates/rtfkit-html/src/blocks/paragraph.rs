@@ -12,16 +12,19 @@ use rtfkit_core::Alignment;
 
 /// Converts a paragraph to HTML.
 ///
-/// Emits a `<p>` element with appropriate alignment class if needed.
+/// Emits a `<p>` element with `rtf-p` class and appropriate alignment class if needed.
 /// Runs are merged when they have identical formatting to reduce noise.
 pub fn paragraph_to_html(para: &Paragraph, buf: &mut HtmlBuffer) {
     // Merge adjacent runs with identical formatting
     let merged_runs = merge_runs(&para.runs);
 
-    // Build class attribute if alignment is non-default
-    let attrs: Vec<(&str, &str)> = alignment_class(para.alignment)
-        .map(|class| vec![("class", class)])
-        .unwrap_or_default();
+    // Build class attribute - always include rtf-p, add alignment if non-default
+    let mut classes: Vec<&'static str> = vec!["rtf-p"];
+    if let Some(align_class) = alignment_class(para.alignment) {
+        classes.push(align_class);
+    }
+    let class_str = classes.join(" ");
+    let attrs: Vec<(&str, &str)> = vec![("class", &class_str)];
 
     buf.push_open_tag("p", &attrs);
 
@@ -115,7 +118,7 @@ mod tests {
         let para = Paragraph::new();
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
-        assert_eq!(buf.as_str(), "<p></p>");
+        assert_eq!(buf.as_str(), r#"<p class="rtf-p"></p>"#);
     }
 
     #[test]
@@ -123,7 +126,7 @@ mod tests {
         let para = Paragraph::from_runs(vec![Run::new("Hello")]);
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
-        assert_eq!(buf.as_str(), "<p>Hello</p>");
+        assert_eq!(buf.as_str(), r#"<p class="rtf-p">Hello</p>"#);
     }
 
     #[test]
@@ -133,7 +136,10 @@ mod tests {
         let para = Paragraph::from_runs(vec![run]);
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
-        assert_eq!(buf.as_str(), "<p><strong>bold</strong></p>");
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><strong>bold</strong></p>"#
+        );
     }
 
     #[test]
@@ -143,7 +149,7 @@ mod tests {
         let para = Paragraph::from_runs(vec![run]);
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
-        assert_eq!(buf.as_str(), "<p><em>italic</em></p>");
+        assert_eq!(buf.as_str(), r#"<p class="rtf-p"><em>italic</em></p>"#);
     }
 
     #[test]
@@ -155,7 +161,7 @@ mod tests {
         paragraph_to_html(&para, &mut buf);
         assert_eq!(
             buf.as_str(),
-            "<p><span class=\"rtf-u\">underline</span></p>"
+            r#"<p class="rtf-p"><span class="rtf-u">underline</span></p>"#
         );
     }
 
@@ -171,7 +177,7 @@ mod tests {
         // Nesting order: strong -> em -> span.rtf-u
         assert_eq!(
             buf.as_str(),
-            "<p><strong><em><span class=\"rtf-u\">bold italic underline</span></em></strong></p>"
+            r#"<p class="rtf-p"><strong><em><span class="rtf-u">bold italic underline</span></em></strong></p>"#
         );
     }
 
@@ -183,7 +189,10 @@ mod tests {
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
-        assert_eq!(buf.as_str(), "<p class=\"rtf-align-center\">centered</p>");
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p rtf-align-center">centered</p>"#
+        );
     }
 
     #[test]
@@ -194,7 +203,10 @@ mod tests {
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
-        assert_eq!(buf.as_str(), "<p class=\"rtf-align-right\">right</p>");
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p rtf-align-right">right</p>"#
+        );
     }
 
     #[test]
@@ -205,7 +217,10 @@ mod tests {
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
-        assert_eq!(buf.as_str(), "<p class=\"rtf-align-justify\">justified</p>");
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p rtf-align-justify">justified</p>"#
+        );
     }
 
     #[test]
@@ -216,8 +231,8 @@ mod tests {
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
-        // Left is default, no class should be emitted
-        assert_eq!(buf.as_str(), "<p>left</p>");
+        // Left is default, only rtf-p class should be emitted
+        assert_eq!(buf.as_str(), r#"<p class="rtf-p">left</p>"#);
     }
 
     #[test]
@@ -240,7 +255,7 @@ mod tests {
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
         // Should merge into single text node
-        assert_eq!(buf.as_str(), "<p>Hello World</p>");
+        assert_eq!(buf.as_str(), r#"<p class="rtf-p">Hello World</p>"#);
     }
 
     #[test]
@@ -252,7 +267,10 @@ mod tests {
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
         // Should NOT merge - different formatting
-        assert_eq!(buf.as_str(), "<p>Hello <strong>World</strong></p>");
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p">Hello <strong>World</strong></p>"#
+        );
     }
 
     #[test]
@@ -267,7 +285,7 @@ mod tests {
         paragraph_to_html(&para, &mut buf);
         assert_eq!(
             buf.as_str(),
-            "<p>normal <strong>bold </strong><em>italic</em></p>"
+            r#"<p class="rtf-p">normal <strong>bold </strong><em>italic</em></p>"#
         );
     }
 
@@ -281,7 +299,10 @@ mod tests {
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
         // Should merge into single strong element
-        assert_eq!(buf.as_str(), "<p><strong>Hello World</strong></p>");
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><strong>Hello World</strong></p>"#
+        );
     }
 
     #[test]

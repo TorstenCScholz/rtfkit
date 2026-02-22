@@ -151,6 +151,7 @@ Phase 6 is complete:
 After Phase 6:
 
 - HTML output track: [PHASE_HTML.md](PHASE_HTML.md)
+- HTML CSS polish track: [PHASE_CSS_POLISH.md](PHASE_CSS_POLISH.md)
 - PDF track: [PHASE_PDF.md](PHASE_PDF.md)
 
 These should start only after Phase 6 gates are met (now complete).

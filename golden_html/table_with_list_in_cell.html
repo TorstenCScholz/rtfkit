@@ -3,17 +3,39 @@
 <head>
 <meta charset="utf-8">
 <style>
+:root{--rtf-font-body:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--rtf-font-mono:"SF Mono",Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;--rtf-color-text:#1a1a1a;--rtf-color-text-muted:#5a5a5a;--rtf-color-background:#fff;--rtf-color-link:#06c;--rtf-color-link-hover:#049;--rtf-color-border:#d0d0d0;--rtf-color-border-light:#e8e8e8;--rtf-color-table-header-bg:#f5f5f5;--rtf-color-table-stripe-bg:#fafafa;--rtf-space-xs:0.25rem;--rtf-space-sm:0.5rem;--rtf-space-md:1rem;--rtf-space-lg:1.5rem;--rtf-space-xl:2rem;--rtf-table-cell-padding:0.5rem 0.75rem;--rtf-table-border-width:1px}
+.rtf-doc{font-family:var(--rtf-font-body);color:var(--rtf-color-text);background:var(--rtf-color-background);line-height:1.6}
+.rtf-content{max-width:800px;margin:0 auto;padding:var(--rtf-space-lg)}
+.rtf-p{margin:0 0 var(--rtf-space-md)}
+.rtf-link{color:var(--rtf-color-link);text-decoration:none}
+.rtf-link:hover{color:var(--rtf-color-link-hover);text-decoration:underline}
+.rtf-table{width:100%;border-collapse:collapse;margin:var(--rtf-space-md) 0}
+.rtf-table tr:first-child{background:var(--rtf-color-table-header-bg)}
+.rtf-table tr:nth-child(even){background:var(--rtf-color-table-stripe-bg)}
+.rtf-table th,.rtf-table td{padding:var(--rtf-table-cell-padding);border:var(--rtf-table-border-width) solid var(--rtf-color-border)}
+.rtf-list{margin:var(--rtf-space-md) 0;padding-left:var(--rtf-space-lg)}
 .rtf-align-left{text-align:left}
 .rtf-align-center{text-align:center}
 .rtf-align-right{text-align:right}
 .rtf-align-justify{text-align:justify}
 .rtf-u{text-decoration:underline}
-.rtf-table{border-collapse:collapse}
 .rtf-valign-top{vertical-align:top}
 .rtf-valign-middle{vertical-align:middle}
 .rtf-valign-bottom{vertical-align:bottom}
+@media print{@page{margin:2cm;size:A4 portrait}
+.rtf-doc{color:#000;background:#fff}
+.rtf-link{color:#000;text-decoration:underline}
+.rtf-link[href]::after{content:" (" attr(href) ")";font-size:0.85em;color:#5a5a5a}
+.rtf-table tr{break-inside:avoid}
+.rtf-p{orphans:3;widows:3}
+.rtf-table{break-before:auto;break-after:auto;max-width:100%}
+h1,h2,h3{break-after:avoid}}
 </style>
 </head>
 <body>
-<table class="rtf-table"><tr><td style="width: 144.0pt"><p>Regular cell</p></td><td style="width: 144.0pt"><ul><li><p>Item A</p></li><li><p>Item B</p></li></ul></td></tr><tr><td style="width: 144.0pt"><p>Another cell</p></td><td style="width: 144.0pt"><p>Last cell</p></td></tr></table></body>
+<div class="rtf-doc">
+<div class="rtf-content">
+<table class="rtf-table"><thead><tr><td style="width: 144.0pt"><p class="rtf-p">Regular cell</p></td><td style="width: 144.0pt"><ul class="rtf-list"><li><p class="rtf-p">Item A</p></li><li><p class="rtf-p">Item B</p></li></ul></td></tr></thead><tbody><tr><td style="width: 144.0pt"><p class="rtf-p">Another cell</p></td><td style="width: 144.0pt"><p class="rtf-p">Last cell</p></td></tr></tbody></table></div>
+</div>
+</body>
 </html>
