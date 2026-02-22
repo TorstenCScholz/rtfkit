@@ -77,82 +77,37 @@ fn map_list_items(
         return String::new();
     }
 
-    let mut current_level: u8 = 0;
-    let mut level_stack: Vec<String> = Vec::new();
+    let mut previous_level: u8 = 0;
+    let marker = get_list_marker(kind);
+    let mut lines: Vec<String> = Vec::new();
 
-    // Start with empty string for level 0
-    level_stack.push(String::new());
-
-    for item in items {
-        let target_level = item.level;
-
-        // Handle level transitions
-        if target_level > current_level {
-            // Going deeper - create nested lists
-            for level in current_level..target_level {
-                // Check for level skip (malformed)
-                if level + 1 < target_level && level == current_level {
-                    warnings.push(MappingWarning::ListLevelSkip {
-                        from: current_level,
-                        to: target_level,
-                    });
-                }
-
-                // Push a new nesting level
-                level_stack.push(String::new());
-            }
-            current_level = target_level;
-        } else if target_level < current_level {
-            // Going back up - close nested lists
-            while current_level > target_level && level_stack.len() > 1 {
-                let nested_content = level_stack.pop().unwrap_or_default();
-                let parent = level_stack.last_mut().unwrap();
-
-                // Add the nested enum block to parent
-                if !nested_content.is_empty() {
-                    let marker = get_list_marker(kind);
-                    // Each nested level needs proper indentation
-                    let indented = indent_nested_list(&nested_content, current_level);
-                    parent.push_str(&format!("{} {{\n{}}}\n", marker, indented));
-                }
-                current_level -= 1;
-            }
-            current_level = target_level;
+    for (idx, item) in items.iter().enumerate() {
+        if idx > 0 && item.level > previous_level.saturating_add(1) {
+            warnings.push(MappingWarning::ListLevelSkip {
+                from: previous_level,
+                to: item.level,
+            });
         }
 
-        // Map the item content
         let item_content = map_list_item(item, warnings);
-
-        // Add to current level
-        let current_level_content = level_stack.last_mut().unwrap();
-        if !item_content.is_empty() {
-            let marker = get_list_marker(kind);
-            current_level_content.push_str(&format!("{} {}\n", marker, item_content));
+        if item_content.is_empty() {
+            previous_level = item.level;
+            continue;
         }
-    }
 
-    // Close any remaining nested levels
-    while level_stack.len() > 1 {
-        let nested_content = level_stack.pop().unwrap_or_default();
-        let parent = level_stack.last_mut().unwrap();
-
-        if !nested_content.is_empty() {
-            let marker = get_list_marker(kind);
-            let indented = indent_nested_list(&nested_content, current_level);
-            parent.push_str(&format!("{} {{\n{}}}\n", marker, indented));
+        let indent = "  ".repeat(item.level as usize);
+        let mut content_lines = item_content.lines();
+        if let Some(first_line) = content_lines.next() {
+            lines.push(format!("{indent}{marker} {first_line}"));
+            let continuation_indent = format!("{indent}  ");
+            for continuation in content_lines {
+                lines.push(format!("{continuation_indent}{continuation}"));
+            }
         }
-        current_level = current_level.saturating_sub(1);
+        previous_level = item.level;
     }
 
-    // Get the final result from level 0
-    let mut result = level_stack.pop().unwrap_or_default();
-
-    // Trim trailing newline
-    if result.ends_with('\n') {
-        result.pop();
-    }
-
-    result
+    lines.join("\n")
 }
 
 /// Map a single list item's content to Typst source.
@@ -187,22 +142,6 @@ fn get_list_marker(kind: IrListKind) -> &'static str {
         IrListKind::OrderedDecimal => "+",
         IrListKind::Mixed => "-", // Fallback to bullet
     }
-}
-
-/// Indent a nested list's content for proper Typst formatting.
-fn indent_nested_list(content: &str, _level: u8) -> String {
-    // Add one level of indentation to each line
-    content
-        .lines()
-        .map(|line| {
-            if line.is_empty() {
-                String::new()
-            } else {
-                format!("  {}", line)
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 #[cfg(test)]
@@ -273,10 +212,9 @@ mod tests {
 
         let output = map_list(&list);
 
-        // Should have nested structure
-        assert!(output.typst_source.contains("- Top level"));
-        assert!(output.typst_source.contains("{"));
-        assert!(output.typst_source.contains("  - Nested item"));
+        assert_eq!(output.typst_source, "- Top level\n  - Nested item");
+        assert!(!output.typst_source.contains('{'));
+        assert!(!output.typst_source.contains('}'));
     }
 
     #[test]

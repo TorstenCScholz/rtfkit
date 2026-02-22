@@ -5,9 +5,7 @@
 )
 
 - Level 0
-- {
   - Level 1
-  - {
-    - Level 2}
-  - Back to Level 1}
+    - Level 2
+  - Back to Level 1
 - Back to Level 0
