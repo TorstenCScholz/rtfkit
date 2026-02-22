@@ -3,6 +3,6 @@
 //! This module contains submodules for converting each block type
 //! to HTML.
 
-pub mod paragraph;
 pub mod list;
+pub mod paragraph;
 pub mod table;

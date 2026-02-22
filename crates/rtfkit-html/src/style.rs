@@ -105,14 +105,23 @@ mod tests {
         assert_eq!(alignment_class(Alignment::Left), None);
         assert_eq!(alignment_class(Alignment::Center), Some("rtf-align-center"));
         assert_eq!(alignment_class(Alignment::Right), Some("rtf-align-right"));
-        assert_eq!(alignment_class(Alignment::Justify), Some("rtf-align-justify"));
+        assert_eq!(
+            alignment_class(Alignment::Justify),
+            Some("rtf-align-justify")
+        );
     }
 
     #[test]
     fn test_valign_class() {
         assert_eq!(valign_class(CellVerticalAlign::Top), None);
-        assert_eq!(valign_class(CellVerticalAlign::Center), Some("rtf-valign-middle"));
-        assert_eq!(valign_class(CellVerticalAlign::Bottom), Some("rtf-valign-bottom"));
+        assert_eq!(
+            valign_class(CellVerticalAlign::Center),
+            Some("rtf-valign-middle")
+        );
+        assert_eq!(
+            valign_class(CellVerticalAlign::Bottom),
+            Some("rtf-valign-bottom")
+        );
     }
 
     #[test]

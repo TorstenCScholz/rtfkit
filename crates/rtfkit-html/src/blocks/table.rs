@@ -14,10 +14,10 @@
 //! | vertical merge | `rowspan` |
 //! | `CellVerticalAlign` | class `rtf-valign-top|middle|bottom` |
 
-use std::collections::HashSet;
-use rtfkit_core::{Block, CellMerge, CellVerticalAlign, TableBlock, TableCell, TableRow};
-use crate::serialize::HtmlBuffer;
 use super::paragraph::paragraph_to_html;
+use crate::serialize::HtmlBuffer;
+use rtfkit_core::{Block, CellMerge, CellVerticalAlign, TableBlock, TableCell, TableRow};
+use std::collections::HashSet;
 
 /// Converts twips to points.
 /// 1 point = 20 twips.
@@ -119,7 +119,14 @@ pub fn table_to_html_with_warnings(
     let (rowspan_map, skip_cells) = compute_vertical_merges(table);
 
     for (row_idx, row) in table.rows.iter().enumerate() {
-        row_to_html(row, row_idx, &rowspan_map, &skip_cells, buf, dropped_reasons);
+        row_to_html(
+            row,
+            row_idx,
+            &rowspan_map,
+            &skip_cells,
+            buf,
+            dropped_reasons,
+        );
     }
 
     buf.push_close_tag("table");
@@ -148,9 +155,13 @@ fn row_to_html(
         }
 
         match cell.merge {
-                Some(CellMerge::HorizontalStart { span }) if span > 1 => {
-                    // Start of horizontal merge - emit the cell with colspan
-                    let rowspan = rowspan_map.get(row_idx).and_then(|r| r.get(col_idx)).copied().unwrap_or(0);
+            Some(CellMerge::HorizontalStart { span }) if span > 1 => {
+                // Start of horizontal merge - emit the cell with colspan
+                let rowspan = rowspan_map
+                    .get(row_idx)
+                    .and_then(|r| r.get(col_idx))
+                    .copied()
+                    .unwrap_or(0);
                 cell_to_html(cell, rowspan, buf, dropped_reasons);
                 expected_h_continuations = span.saturating_sub(1) as usize;
             }
@@ -173,7 +184,11 @@ fn row_to_html(
             }
             Some(CellMerge::VerticalStart) | Some(CellMerge::VerticalContinue) => {
                 // Vertical merge - emit with computed rowspan (already handled skip_cells above)
-                let rowspan = rowspan_map.get(row_idx).and_then(|r| r.get(col_idx)).copied().unwrap_or(0);
+                let rowspan = rowspan_map
+                    .get(row_idx)
+                    .and_then(|r| r.get(col_idx))
+                    .copied()
+                    .unwrap_or(0);
                 cell_to_html(cell, rowspan, buf, dropped_reasons);
             }
             _ => {
@@ -194,7 +209,12 @@ fn row_to_html(
 /// - `rowspan` for vertical merges (computed from VerticalStart/VerticalContinue)
 /// - `style="width: Npt"` for explicit widths
 /// - `class="rtf-valign-*"` for vertical alignment
-fn cell_to_html(cell: &TableCell, rowspan: usize, buf: &mut HtmlBuffer, dropped_reasons: &mut Vec<String>) {
+fn cell_to_html(
+    cell: &TableCell,
+    rowspan: usize,
+    buf: &mut HtmlBuffer,
+    dropped_reasons: &mut Vec<String>,
+) {
     let mut attrs: Vec<(&str, String)> = Vec::new();
     let mut classes: Vec<&'static str> = Vec::new();
 
@@ -243,7 +263,9 @@ fn cell_to_html(cell: &TableCell, rowspan: usize, buf: &mut HtmlBuffer, dropped_
     for block in &cell.blocks {
         match block {
             Block::Paragraph(para) => paragraph_to_html(para, buf),
-            Block::ListBlock(list) => super::list::list_to_html_with_warnings(list, buf, dropped_reasons),
+            Block::ListBlock(list) => {
+                super::list::list_to_html_with_warnings(list, buf, dropped_reasons)
+            }
             Block::TableBlock(nested) => table_to_html_with_warnings(nested, buf, dropped_reasons),
         }
     }
@@ -295,13 +317,16 @@ mod tests {
 
     #[test]
     fn table_with_horizontal_merge_colspan() {
-        let mut start_cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Merged")]));
+        let mut start_cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Merged")]));
         start_cell.merge = Some(CellMerge::HorizontalStart { span: 2 });
 
-        let mut continue_cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Hidden")]));
+        let mut continue_cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Hidden")]));
         continue_cell.merge = Some(CellMerge::HorizontalContinue);
 
-        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![start_cell, continue_cell])]);
+        let table =
+            TableBlock::from_rows(vec![TableRow::from_cells(vec![start_cell, continue_cell])]);
 
         let mut buf = HtmlBuffer::new();
         table_to_html(&table, &mut buf);
@@ -359,13 +384,15 @@ mod tests {
     #[test]
     fn table_with_vertical_merge_three_rows() {
         // Three rows with vertical merge - should have rowspan="3"
-        let mut top_cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Merged")]));
+        let mut top_cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Merged")]));
         top_cell.merge = Some(CellMerge::VerticalStart);
 
         let mut mid_cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Mid")]));
         mid_cell.merge = Some(CellMerge::VerticalContinue);
 
-        let mut bottom_cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Bottom")]));
+        let mut bottom_cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Bottom")]));
         bottom_cell.merge = Some(CellMerge::VerticalContinue);
 
         let right_cell1 = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("R1")]));
@@ -398,7 +425,8 @@ mod tests {
         // Cell with both horizontal and vertical merge semantics
         // Note: In the current IR, a cell can only have one merge type at a time
         // This test verifies horizontal merge takes precedence in emission
-        let mut h_start = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("H-Merge")]));
+        let mut h_start =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("H-Merge")]));
         h_start.merge = Some(CellMerge::HorizontalStart { span: 3 });
 
         let mut h_cont1 = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Cont1")]));
@@ -407,7 +435,8 @@ mod tests {
         let mut h_cont2 = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Cont2")]));
         h_cont2.merge = Some(CellMerge::HorizontalContinue);
 
-        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![h_start, h_cont1, h_cont2])]);
+        let table =
+            TableBlock::from_rows(vec![TableRow::from_cells(vec![h_start, h_cont1, h_cont2])]);
 
         let mut buf = HtmlBuffer::new();
         table_to_html(&table, &mut buf);
@@ -424,10 +453,12 @@ mod tests {
         let mut top_cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Top")]));
         top_cell.v_align = Some(CellVerticalAlign::Top);
 
-        let mut middle_cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Middle")]));
+        let mut middle_cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Middle")]));
         middle_cell.v_align = Some(CellVerticalAlign::Center);
 
-        let mut bottom_cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Bottom")]));
+        let mut bottom_cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Bottom")]));
         bottom_cell.v_align = Some(CellVerticalAlign::Bottom);
 
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![
@@ -503,7 +534,7 @@ mod tests {
 
     #[test]
     fn table_with_list_in_cell() {
-        use rtfkit_core::{ListItem, ListBlock, ListKind};
+        use rtfkit_core::{ListBlock, ListItem, ListKind};
 
         let mut list = ListBlock::new(1, ListKind::Bullet);
         list.add_item(ListItem::from_paragraph(
@@ -530,9 +561,10 @@ mod tests {
     #[test]
     fn nested_table() {
         // Create inner table
-        let inner_table = TableBlock::from_rows(vec![TableRow::from_cells(vec![
-            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Inner")])),
-        ])]);
+        let inner_table =
+            TableBlock::from_rows(vec![TableRow::from_cells(vec![TableCell::from_paragraph(
+                Paragraph::from_runs(vec![Run::new("Inner")]),
+            )])]);
 
         // Create outer table with nested table
         let outer_table = TableBlock::from_rows(vec![TableRow::from_cells(vec![
@@ -556,11 +588,10 @@ mod tests {
     fn malformed_table_missing_row_terminator() {
         // Test that malformed tables still produce valid HTML
         // The IR should already have normalized this, but we test robustness
-        let table = TableBlock::from_rows(vec![
-            TableRow::from_cells(vec![TableCell::from_paragraph(Paragraph::from_runs(vec![
-                Run::new("Cell"),
-            ]))]),
-        ]);
+        let table =
+            TableBlock::from_rows(vec![TableRow::from_cells(vec![TableCell::from_paragraph(
+                Paragraph::from_runs(vec![Run::new("Cell")]),
+            )])]);
 
         let mut buf = HtmlBuffer::new();
         table_to_html(&table, &mut buf);

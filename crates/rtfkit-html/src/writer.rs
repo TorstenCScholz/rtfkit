@@ -3,11 +3,11 @@
 //! This module provides the main entry point for converting a `Document`
 //! to HTML string output.
 
-use rtfkit_core::{Document, Block};
 use crate::error::HtmlWriterError;
 use crate::options::HtmlWriterOptions;
 use crate::serialize::HtmlBuffer;
 use crate::style::default_stylesheet;
+use rtfkit_core::{Block, Document};
 
 /// HTML rendering result with writer-level semantic degradation reasons.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -38,7 +38,10 @@ pub struct HtmlWriterOutput {
 /// let html = document_to_html(&doc, &options).unwrap();
 /// assert!(html.contains("Hello, World!"));
 /// ```
-pub fn document_to_html(doc: &Document, options: &HtmlWriterOptions) -> Result<String, HtmlWriterError> {
+pub fn document_to_html(
+    doc: &Document,
+    options: &HtmlWriterOptions,
+) -> Result<String, HtmlWriterError> {
     Ok(document_to_html_with_warnings(doc, options)?.html)
 }
 
@@ -49,20 +52,20 @@ pub fn document_to_html_with_warnings(
 ) -> Result<HtmlWriterOutput, HtmlWriterError> {
     let mut buf = HtmlBuffer::new();
     let mut dropped_content_reasons = Vec::new();
-    
+
     // Emit document wrapper if requested
     if options.emit_document_wrapper {
         emit_document_start(&mut buf, options);
     }
-    
+
     // Emit body content
     emit_blocks(&doc.blocks, &mut buf, &mut dropped_content_reasons)?;
-    
+
     // Close document wrapper if requested
     if options.emit_document_wrapper {
         emit_document_end(&mut buf);
     }
-    
+
     Ok(HtmlWriterOutput {
         html: buf.into_string(),
         dropped_content_reasons,
@@ -75,13 +78,13 @@ fn emit_document_start(buf: &mut HtmlBuffer, options: &HtmlWriterOptions) {
     buf.push_raw("<html lang=\"en\">\n");
     buf.push_raw("<head>\n");
     buf.push_raw("<meta charset=\"utf-8\">\n");
-    
+
     if options.include_default_css {
         buf.push_raw("<style>\n");
         buf.push_raw(default_stylesheet());
         buf.push_raw("\n</style>\n");
     }
-    
+
     buf.push_raw("</head>\n");
     buf.push_raw("<body>\n");
 }
@@ -134,7 +137,7 @@ mod tests {
         let doc = Document::new();
         let options = HtmlWriterOptions::default();
         let html = document_to_html(&doc, &options).unwrap();
-        
+
         assert!(html.contains("<!doctype html>"));
         assert!(html.contains("<html lang=\"en\">"));
         assert!(html.contains("</html>"));
@@ -150,7 +153,7 @@ mod tests {
             include_default_css: false,
         };
         let html = document_to_html(&doc, &options).unwrap();
-        
+
         assert!(!html.contains("<!doctype html>"));
         assert!(!html.contains("<html>"));
         assert!(html.is_empty());
@@ -158,12 +161,12 @@ mod tests {
 
     #[test]
     fn document_with_paragraph() {
-        let doc = Document::from_blocks(vec![
-            Block::Paragraph(Paragraph::from_runs(vec![Run::new("Hello")])),
-        ]);
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
+            Run::new("Hello"),
+        ]))]);
         let options = HtmlWriterOptions::default();
         let html = document_to_html(&doc, &options).unwrap();
-        
+
         assert!(html.contains("<p>Hello</p>"));
     }
 
@@ -175,15 +178,15 @@ mod tests {
             include_default_css: false,
         };
         let html = document_to_html(&doc, &options).unwrap();
-        
+
         assert!(!html.contains("<style>"));
     }
 
     #[test]
     fn document_with_warnings_api_empty_reasons_for_normal_input() {
-        let doc = Document::from_blocks(vec![
-            Block::Paragraph(Paragraph::from_runs(vec![Run::new("Hello")])),
-        ]);
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
+            Run::new("Hello"),
+        ]))]);
         let options = HtmlWriterOptions::default();
         let output = document_to_html_with_warnings(&doc, &options).unwrap();
         assert!(output.html.contains("<p>Hello</p>"));

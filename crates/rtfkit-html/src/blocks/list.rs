@@ -136,8 +136,11 @@ mod tests {
     #[test]
     fn bullet_list_with_item() {
         let mut list = ListBlock::new(1, ListKind::Bullet);
-        list.add_item(ListItem::from_paragraph(0, Paragraph::from_runs(vec![Run::new("Item 1")])));
-        
+        list.add_item(ListItem::from_paragraph(
+            0,
+            Paragraph::from_runs(vec![Run::new("Item 1")]),
+        ));
+
         let mut buf = HtmlBuffer::new();
         let mut dropped_reasons = Vec::new();
         list_to_html_with_warnings(&list, &mut buf, &mut dropped_reasons);
@@ -159,44 +162,69 @@ mod tests {
     #[test]
     fn ordered_list_with_items() {
         let mut list = ListBlock::new(1, ListKind::OrderedDecimal);
-        list.add_item(ListItem::from_paragraph(0, Paragraph::from_runs(vec![Run::new("First")])));
-        list.add_item(ListItem::from_paragraph(0, Paragraph::from_runs(vec![Run::new("Second")])));
-        
+        list.add_item(ListItem::from_paragraph(
+            0,
+            Paragraph::from_runs(vec![Run::new("First")]),
+        ));
+        list.add_item(ListItem::from_paragraph(
+            0,
+            Paragraph::from_runs(vec![Run::new("Second")]),
+        ));
+
         let mut buf = HtmlBuffer::new();
         let mut dropped_reasons = Vec::new();
         list_to_html_with_warnings(&list, &mut buf, &mut dropped_reasons);
-        assert_eq!(buf.as_str(), "<ol><li><p>First</p></li><li><p>Second</p></li></ol>");
+        assert_eq!(
+            buf.as_str(),
+            "<ol><li><p>First</p></li><li><p>Second</p></li></ol>"
+        );
         assert!(dropped_reasons.is_empty());
     }
 
     #[test]
     fn mixed_list_has_class() {
         let mut list = ListBlock::new(1, ListKind::Mixed);
-        list.add_item(ListItem::from_paragraph(0, Paragraph::from_runs(vec![Run::new("Item")])));
-        
+        list.add_item(ListItem::from_paragraph(
+            0,
+            Paragraph::from_runs(vec![Run::new("Item")]),
+        ));
+
         let mut buf = HtmlBuffer::new();
         let mut dropped_reasons = Vec::new();
         list_to_html_with_warnings(&list, &mut buf, &mut dropped_reasons);
         // Mixed lists use <ul> with rtf-list-mixed class
-        assert_eq!(buf.as_str(), "<ul class=\"rtf-list-mixed\"><li><p>Item</p></li></ul>");
+        assert_eq!(
+            buf.as_str(),
+            "<ul class=\"rtf-list-mixed\"><li><p>Item</p></li></ul>"
+        );
         assert!(dropped_reasons.is_empty());
     }
 
     #[test]
     fn nested_list() {
         let mut outer = ListBlock::new(1, ListKind::Bullet);
-        outer.add_item(ListItem::from_paragraph(0, Paragraph::from_runs(vec![Run::new("Outer item")])));
-        
+        outer.add_item(ListItem::from_paragraph(
+            0,
+            Paragraph::from_runs(vec![Run::new("Outer item")]),
+        ));
+
         // Create nested list
         let mut nested = ListBlock::new(2, ListKind::OrderedDecimal);
-        nested.add_item(ListItem::from_paragraph(1, Paragraph::from_runs(vec![Run::new("Nested item")])));
-        
+        nested.add_item(ListItem::from_paragraph(
+            1,
+            Paragraph::from_runs(vec![Run::new("Nested item")]),
+        ));
+
         // Add nested list as second item's content
         let mut item_with_nested = ListItem::new(0);
-        item_with_nested.blocks.push(Block::Paragraph(Paragraph::from_runs(vec![Run::new("Item with nested:")])));
+        item_with_nested
+            .blocks
+            .push(Block::Paragraph(Paragraph::from_runs(vec![Run::new(
+                "Item with nested:",
+            )])));
         item_with_nested.blocks.push(Block::ListBlock(nested));
         outer.add_item(item_with_nested);
-        
+
         let mut buf = HtmlBuffer::new();
         let mut dropped_reasons = Vec::new();
         list_to_html_with_warnings(&outer, &mut buf, &mut dropped_reasons);
@@ -210,12 +238,18 @@ mod tests {
     #[test]
     fn list_item_with_multiple_blocks() {
         let mut list = ListBlock::new(1, ListKind::Bullet);
-        
+
         let mut item = ListItem::new(0);
-        item.blocks.push(Block::Paragraph(Paragraph::from_runs(vec![Run::new("First paragraph")])));
-        item.blocks.push(Block::Paragraph(Paragraph::from_runs(vec![Run::new("Second paragraph")])));
+        item.blocks
+            .push(Block::Paragraph(Paragraph::from_runs(vec![Run::new(
+                "First paragraph",
+            )])));
+        item.blocks
+            .push(Block::Paragraph(Paragraph::from_runs(vec![Run::new(
+                "Second paragraph",
+            )])));
         list.add_item(item);
-        
+
         let mut buf = HtmlBuffer::new();
         let mut dropped_reasons = Vec::new();
         list_to_html_with_warnings(&list, &mut buf, &mut dropped_reasons);
@@ -230,20 +264,33 @@ mod tests {
     fn deeply_nested_list() {
         // Create a three-level nested list
         let mut level3 = ListBlock::new(3, ListKind::Bullet);
-        level3.add_item(ListItem::from_paragraph(2, Paragraph::from_runs(vec![Run::new("Level 3")])));
-        
+        level3.add_item(ListItem::from_paragraph(
+            2,
+            Paragraph::from_runs(vec![Run::new("Level 3")]),
+        ));
+
         let mut level2 = ListBlock::new(2, ListKind::OrderedDecimal);
-        level2.add_item(ListItem::from_paragraph(1, Paragraph::from_runs(vec![Run::new("Level 2")])));
+        level2.add_item(ListItem::from_paragraph(
+            1,
+            Paragraph::from_runs(vec![Run::new("Level 2")]),
+        ));
         let mut level2_item_with_nested = ListItem::new(1);
-        level2_item_with_nested.blocks.push(Block::ListBlock(level3));
+        level2_item_with_nested
+            .blocks
+            .push(Block::ListBlock(level3));
         level2.add_item(level2_item_with_nested);
-        
+
         let mut level1 = ListBlock::new(1, ListKind::Bullet);
-        level1.add_item(ListItem::from_paragraph(0, Paragraph::from_runs(vec![Run::new("Level 1")])));
+        level1.add_item(ListItem::from_paragraph(
+            0,
+            Paragraph::from_runs(vec![Run::new("Level 1")]),
+        ));
         let mut level1_item_with_nested = ListItem::new(0);
-        level1_item_with_nested.blocks.push(Block::ListBlock(level2));
+        level1_item_with_nested
+            .blocks
+            .push(Block::ListBlock(level2));
         level1.add_item(level1_item_with_nested);
-        
+
         let mut buf = HtmlBuffer::new();
         let mut dropped_reasons = Vec::new();
         list_to_html_with_warnings(&level1, &mut buf, &mut dropped_reasons);
@@ -257,10 +304,22 @@ mod tests {
     #[test]
     fn level_based_nesting_from_flat_ir_items() {
         let mut list = ListBlock::new(1, ListKind::OrderedDecimal);
-        list.add_item(ListItem::from_paragraph(0, Paragraph::from_runs(vec![Run::new("Top 1")])));
-        list.add_item(ListItem::from_paragraph(1, Paragraph::from_runs(vec![Run::new("Nested 1")])));
-        list.add_item(ListItem::from_paragraph(1, Paragraph::from_runs(vec![Run::new("Nested 2")])));
-        list.add_item(ListItem::from_paragraph(0, Paragraph::from_runs(vec![Run::new("Top 2")])));
+        list.add_item(ListItem::from_paragraph(
+            0,
+            Paragraph::from_runs(vec![Run::new("Top 1")]),
+        ));
+        list.add_item(ListItem::from_paragraph(
+            1,
+            Paragraph::from_runs(vec![Run::new("Nested 1")]),
+        ));
+        list.add_item(ListItem::from_paragraph(
+            1,
+            Paragraph::from_runs(vec![Run::new("Nested 2")]),
+        ));
+        list.add_item(ListItem::from_paragraph(
+            0,
+            Paragraph::from_runs(vec![Run::new("Top 2")]),
+        ));
 
         let mut buf = HtmlBuffer::new();
         let mut dropped_reasons = Vec::new();
@@ -276,8 +335,14 @@ mod tests {
     #[test]
     fn malformed_level_jump_records_dropped_reason() {
         let mut list = ListBlock::new(1, ListKind::Bullet);
-        list.add_item(ListItem::from_paragraph(0, Paragraph::from_runs(vec![Run::new("Top")])));
-        list.add_item(ListItem::from_paragraph(3, Paragraph::from_runs(vec![Run::new("Too deep")])));
+        list.add_item(ListItem::from_paragraph(
+            0,
+            Paragraph::from_runs(vec![Run::new("Top")]),
+        ));
+        list.add_item(ListItem::from_paragraph(
+            3,
+            Paragraph::from_runs(vec![Run::new("Too deep")]),
+        ));
 
         let mut buf = HtmlBuffer::new();
         let mut dropped_reasons = Vec::new();

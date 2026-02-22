@@ -48,18 +48,18 @@
 //! All functions return [`Result`] with [`HtmlWriterError`] on failure.
 //! See [`HtmlWriterError`] for the error types that can occur.
 
-pub mod error;
-pub mod options;
-pub mod writer;
-pub mod serialize;
-pub mod escape;
-pub mod style;
 pub mod blocks;
+pub mod error;
+pub mod escape;
+pub mod options;
+pub mod serialize;
+pub mod style;
+pub mod writer;
 
 // Re-export public API types
 pub use error::HtmlWriterError;
 pub use options::HtmlWriterOptions;
-pub use writer::{document_to_html, document_to_html_with_warnings, HtmlWriterOutput};
+pub use writer::{HtmlWriterOutput, document_to_html, document_to_html_with_warnings};
 
 #[cfg(test)]
 mod tests {
@@ -72,7 +72,7 @@ mod tests {
         let options = HtmlWriterOptions::default();
         let result = document_to_html(&doc, &options);
         assert!(result.is_ok());
-        
+
         let html = result.unwrap();
         assert!(html.contains("<!doctype html>"));
         assert!(html.contains("<body>"));
@@ -80,16 +80,14 @@ mod tests {
 
     #[test]
     fn test_public_api_simple_document() {
-        let doc = Document::from_blocks(vec![
-            Block::Paragraph(Paragraph::from_runs(vec![
-                Run::new("Test content"),
-            ])),
-        ]);
-        
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
+            Run::new("Test content"),
+        ]))]);
+
         let options = HtmlWriterOptions::default();
         let result = document_to_html(&doc, &options);
         assert!(result.is_ok());
-        
+
         let html = result.unwrap();
         assert!(html.contains("Test content"));
         assert!(html.contains("<p>"));
@@ -97,17 +95,15 @@ mod tests {
 
     #[test]
     fn test_fragment_mode() {
-        let doc = Document::from_blocks(vec![
-            Block::Paragraph(Paragraph::from_runs(vec![
-                Run::new("Fragment"),
-            ])),
-        ]);
-        
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
+            Run::new("Fragment"),
+        ]))]);
+
         let options = HtmlWriterOptions {
             emit_document_wrapper: false,
             include_default_css: false,
         };
-        
+
         let html = document_to_html(&doc, &options).unwrap();
         assert!(!html.contains("<!doctype html>"));
         assert!(html.contains("<p>Fragment</p>"));

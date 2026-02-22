@@ -5,10 +5,10 @@
 
 use rtfkit_core::{Paragraph, Run};
 
-#[cfg(test)]
-use rtfkit_core::Alignment;
 use crate::serialize::HtmlBuffer;
 use crate::style::alignment_class;
+#[cfg(test)]
+use rtfkit_core::Alignment;
 
 /// Converts a paragraph to HTML.
 ///
@@ -17,19 +17,19 @@ use crate::style::alignment_class;
 pub fn paragraph_to_html(para: &Paragraph, buf: &mut HtmlBuffer) {
     // Merge adjacent runs with identical formatting
     let merged_runs = merge_runs(&para.runs);
-    
+
     // Build class attribute if alignment is non-default
     let attrs: Vec<(&str, &str)> = alignment_class(para.alignment)
         .map(|class| vec![("class", class)])
         .unwrap_or_default();
-    
+
     buf.push_open_tag("p", &attrs);
-    
+
     // Emit merged runs
     for run in &merged_runs {
         run_to_html(run, buf);
     }
-    
+
     buf.push_close_tag("p");
 }
 
@@ -41,10 +41,10 @@ fn merge_runs(runs: &[Run]) -> Vec<Run> {
     if runs.is_empty() {
         return Vec::new();
     }
-    
+
     let mut result = Vec::new();
     let mut current = runs[0].clone();
-    
+
     for run in runs.iter().skip(1) {
         // Check if formatting is identical
         if current.bold == run.bold
@@ -61,7 +61,7 @@ fn merge_runs(runs: &[Run]) -> Vec<Run> {
             current = run.clone();
         }
     }
-    
+
     // Don't forget the last run
     result.push(current);
     result
@@ -79,7 +79,7 @@ pub fn run_to_html(run: &Run, buf: &mut HtmlBuffer) {
     if run.text.is_empty() {
         return;
     }
-    
+
     // Open tags in stable order: strong -> em -> span.rtf-u
     if run.bold {
         buf.push_raw("<strong>");
@@ -90,10 +90,10 @@ pub fn run_to_html(run: &Run, buf: &mut HtmlBuffer) {
     if run.underline {
         buf.push_raw("<span class=\"rtf-u\">");
     }
-    
+
     // Emit escaped text content
     buf.push_text(&run.text);
-    
+
     // Close tags in reverse order: span.rtf-u -> em -> strong
     if run.underline {
         buf.push_raw("</span>");
@@ -153,7 +153,10 @@ mod tests {
         let para = Paragraph::from_runs(vec![run]);
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
-        assert_eq!(buf.as_str(), "<p><span class=\"rtf-u\">underline</span></p>");
+        assert_eq!(
+            buf.as_str(),
+            "<p><span class=\"rtf-u\">underline</span></p>"
+        );
     }
 
     #[test]
@@ -166,7 +169,10 @@ mod tests {
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
         // Nesting order: strong -> em -> span.rtf-u
-        assert_eq!(buf.as_str(), "<p><strong><em><span class=\"rtf-u\">bold italic underline</span></em></strong></p>");
+        assert_eq!(
+            buf.as_str(),
+            "<p><strong><em><span class=\"rtf-u\">bold italic underline</span></em></strong></p>"
+        );
     }
 
     #[test]
@@ -259,7 +265,10 @@ mod tests {
         let para = Paragraph::from_runs(vec![run1, run2, run3]);
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
-        assert_eq!(buf.as_str(), "<p>normal <strong>bold </strong><em>italic</em></p>");
+        assert_eq!(
+            buf.as_str(),
+            "<p>normal <strong>bold </strong><em>italic</em></p>"
+        );
     }
 
     #[test]

@@ -9,7 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use rtfkit_core::Interpreter;
-use rtfkit_html::{document_to_html, HtmlWriterOptions};
+use rtfkit_html::{HtmlWriterOptions, document_to_html};
 use similar::{ChangeTag, TextDiff};
 
 fn project_root() -> PathBuf {
@@ -586,8 +586,9 @@ fn html_snapshots() {
             fs::create_dir_all(&golden_html).ok();
             // Normalize to LF for consistency across platforms
             let actual_normalized = normalize_line_endings(&actual);
-            fs::write(&golden_path, &actual_normalized)
-                .unwrap_or_else(|e| panic!("Failed to write golden HTML file {golden_path:?}: {e}"));
+            fs::write(&golden_path, &actual_normalized).unwrap_or_else(|e| {
+                panic!("Failed to write golden HTML file {golden_path:?}: {e}")
+            });
             eprintln!("Updated golden HTML file: {golden_path:?}");
             continue;
         }
