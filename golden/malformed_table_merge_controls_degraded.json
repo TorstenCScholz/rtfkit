@@ -10,8 +10,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Merged start",
                       "bold": false,
                       "italic": false,
@@ -36,8 +37,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Third cell",
                       "bold": false,
                       "italic": false,
@@ -57,8 +59,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Regular A",
                       "bold": false,
                       "italic": false,
@@ -74,8 +77,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Regular B",
                       "bold": false,
                       "italic": false,
@@ -91,8 +95,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Regular C",
                       "bold": false,
                       "italic": false,

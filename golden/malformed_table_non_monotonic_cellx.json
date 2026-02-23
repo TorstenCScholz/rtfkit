@@ -10,8 +10,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "First",
                       "bold": false,
                       "italic": false,
@@ -27,8 +28,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Second",
                       "bold": false,
                       "italic": false,
@@ -43,8 +45,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Third",
                       "bold": false,
                       "italic": false,

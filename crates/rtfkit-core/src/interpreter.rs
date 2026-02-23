@@ -28,8 +28,9 @@ use crate::error::{ConversionError, ParseError};
 use crate::limits::ParserLimits;
 use crate::report::ReportBuilder;
 use crate::{
-    Alignment, Block, CellMerge, CellVerticalAlign, Document, ListBlock, ListId, ListItem,
-    ListKind, Paragraph, Report, RowAlignment, RowProps, Run, TableBlock, TableCell, TableRow,
+    Alignment, Block, CellMerge, CellVerticalAlign, Document, Hyperlink, Inline, ListBlock, ListId,
+    ListItem, ListKind, Paragraph, Report, RowAlignment, RowProps, Run, TableBlock, TableCell,
+    TableRow,
 };
 use nom::{
     IResult,
@@ -221,6 +222,19 @@ enum DestinationBehavior {
     Dropped(&'static str),
     ListTable,
     ListOverrideTable,
+    /// Field instruction destination - handled specially for hyperlink parsing
+    FldInst,
+    /// Field result destination - handled specially for hyperlink parsing
+    FldRslt,
+}
+
+#[derive(Debug, Clone, Default)]
+struct NestedFieldState {
+    field_group_depth: usize,
+    parsing_fldinst: bool,
+    fldinst_group_depth: usize,
+    parsing_fldrslt: bool,
+    fldrslt_group_depth: usize,
 }
 
 // =============================================================================
@@ -328,6 +342,29 @@ pub struct Interpreter {
     /// Used for hard-limit violations discovered in helper methods that
     /// don't return `Result` directly.
     hard_failure: Option<ParseError>,
+    // =============================================================================
+    // Field Parsing State (Hyperlinks)
+    // =============================================================================
+    /// Whether we're currently parsing a field group
+    parsing_field: bool,
+    /// Depth of the field group (for tracking nested groups within field)
+    field_group_depth: usize,
+    /// Whether we're currently in the fldinst (instruction) part of a field
+    parsing_fldinst: bool,
+    /// Depth of the fldinst group
+    fldinst_group_depth: usize,
+    /// Whether we're currently in the fldrslt (result) part of a field
+    parsing_fldrslt: bool,
+    /// Depth of the fldrslt group
+    fldrslt_group_depth: usize,
+    /// Accumulated instruction text from fldinst
+    field_instruction_text: String,
+    /// Accumulated runs from fldrslt (visible content)
+    field_result_inlines: Vec<Inline>,
+    /// Style state at field start (to restore after field)
+    field_style_snapshot: Option<StyleState>,
+    /// Nested field state stack (fields inside fldrslt are degraded to plain text)
+    nested_fields: Vec<NestedFieldState>,
 }
 
 impl Interpreter {
@@ -379,6 +416,17 @@ impl Interpreter {
             pending_cell_v_align: None,
             pending_row_props: RowProps::default(),
             hard_failure: None,
+            // Field parsing state (Hyperlinks)
+            parsing_field: false,
+            field_group_depth: 0,
+            parsing_fldinst: false,
+            fldinst_group_depth: 0,
+            parsing_fldrslt: false,
+            fldrslt_group_depth: 0,
+            field_instruction_text: String::new(),
+            field_result_inlines: Vec::new(),
+            field_style_snapshot: None,
+            nested_fields: Vec::new(),
         }
     }
 
@@ -495,6 +543,9 @@ impl Interpreter {
                 self.current_depth = self.current_depth.saturating_sub(1);
                 self.group_can_start_destination.pop();
                 self.destination_marker = false;
+
+                // Process field group end
+                self.process_field_group_end();
             }
             RtfEvent::ControlWord { word, parameter } => {
                 self.handle_control_word(&word, parameter);
@@ -504,7 +555,12 @@ impl Interpreter {
             }
             RtfEvent::Text(text) => {
                 self.mark_current_group_non_destination();
-                self.handle_text(text);
+                // Route text to field handler if in field parsing mode
+                if self.parsing_field {
+                    self.handle_field_text(text);
+                } else {
+                    self.handle_text(text);
+                }
             }
             RtfEvent::BinaryData(data) => {
                 self.report_builder
@@ -761,6 +817,9 @@ impl Interpreter {
             // List table destinations - need special parsing
             "listtable" => Some(DestinationBehavior::ListTable),
             "listoverridetable" => Some(DestinationBehavior::ListOverrideTable),
+            // Field destinations - handled specially for hyperlink parsing
+            "fldinst" => Some(DestinationBehavior::FldInst),
+            "fldrslt" => Some(DestinationBehavior::FldRslt),
             // Metadata destinations that are intentionally excluded from body content.
             "fonttbl" | "colortbl" | "stylesheet" | "info" | "title" | "author" | "operator"
             | "keywords" | "comment" | "version" | "vern" | "creatim" | "revtim" | "printim"
@@ -769,11 +828,12 @@ impl Interpreter {
             }
             // Destinations that represent currently unsupported visible content.
             "pict" | "obj" | "objclass" | "objdata" | "shppict" | "nonshppict" | "picprop"
-            | "field" | "fldinst" | "fldrslt" | "datafield" | "header" | "headerl" | "headerr"
-            | "footer" | "footerl" | "footerr" | "footnote" | "annotation" | "pn" | "pntext"
-            | "pntxtb" | "pntxta" | "pnseclvl" => Some(DestinationBehavior::Dropped(
-                "Dropped unsupported RTF destination content",
-            )),
+            | "datafield" | "header" | "headerl" | "headerr" | "footer" | "footerl" | "footerr"
+            | "footnote" | "annotation" | "pn" | "pntext" | "pntxtb" | "pntxta" | "pnseclvl" => {
+                Some(DestinationBehavior::Dropped(
+                    "Dropped unsupported RTF destination content",
+                ))
+            }
             _ => None,
         }
     }
@@ -800,6 +860,34 @@ impl Interpreter {
                 DestinationBehavior::ListOverrideTable => {
                     self.parsing_list_override_table = true;
                     self.skip_destination_depth = 1;
+                }
+                DestinationBehavior::FldInst => {
+                    // Field instruction - handle specially for hyperlink parsing
+                    // Set state but don't skip - we need to capture the instruction text
+                    if let Some(nested) = self.nested_fields.last_mut() {
+                        nested.parsing_fldinst = true;
+                        nested.fldinst_group_depth = self.current_depth;
+                    } else if self.parsing_field {
+                        self.parsing_fldinst = true;
+                        self.fldinst_group_depth = self.current_depth;
+                    }
+                    self.destination_marker = false;
+                    self.mark_current_group_non_destination();
+                    return false; // Don't skip - continue processing
+                }
+                DestinationBehavior::FldRslt => {
+                    // Field result - handle specially for hyperlink parsing
+                    // Set state but don't skip - we need to capture the result content
+                    if let Some(nested) = self.nested_fields.last_mut() {
+                        nested.parsing_fldrslt = true;
+                        nested.fldrslt_group_depth = self.current_depth;
+                    } else if self.parsing_field {
+                        self.parsing_fldrslt = true;
+                        self.fldrslt_group_depth = self.current_depth;
+                    }
+                    self.destination_marker = false;
+                    self.mark_current_group_non_destination();
+                    return false; // Don't skip - continue processing
                 }
             }
             self.destination_marker = false;
@@ -1010,6 +1098,33 @@ impl Interpreter {
             "clvmrg" => {
                 self.pending_cell_merge = Some(CellMerge::VerticalContinue);
             }
+            // =============================================================================
+            // Field Control Words (Hyperlinks)
+            // =============================================================================
+            // \field - Start of a field group
+            "field" => {
+                self.start_field_parsing();
+            }
+            // \fldinst - Field instruction (contains HYPERLINK "url" for hyperlinks)
+            "fldinst" => {
+                if let Some(nested) = self.nested_fields.last_mut() {
+                    nested.parsing_fldinst = true;
+                    nested.fldinst_group_depth = self.current_depth;
+                } else if self.parsing_field {
+                    self.parsing_fldinst = true;
+                    self.fldinst_group_depth = self.current_depth;
+                }
+            }
+            // \fldrslt - Field result (visible content)
+            "fldrslt" => {
+                if let Some(nested) = self.nested_fields.last_mut() {
+                    nested.parsing_fldrslt = true;
+                    nested.fldrslt_group_depth = self.current_depth;
+                } else if self.parsing_field {
+                    self.parsing_fldrslt = true;
+                    self.fldrslt_group_depth = self.current_depth;
+                }
+            }
             // RTF header control words - silently ignored (not user-facing)
             "rtf" | "ansi" | "ansicpg" | "deff" | "deflang" | "deflangfe" | "adeflang"
             | "result" | "hwid" | "emdash" | "endash" | "emspace" | "enspace" | "qmspace"
@@ -1050,7 +1165,7 @@ impl Interpreter {
     /// Internal text handling (after skip logic)
     fn handle_text_internal(&mut self, text: String) {
         // If we already completed table rows and prose starts, close table first.
-        if self.current_paragraph.runs.is_empty()
+        if self.current_paragraph.inlines.is_empty()
             && self.current_text.is_empty()
             && self.current_table.is_some()
             && self.current_row.is_none()
@@ -1060,7 +1175,7 @@ impl Interpreter {
         }
 
         // If this is the first text in the paragraph, capture the alignment
-        if self.current_paragraph.runs.is_empty() && self.current_text.is_empty() {
+        if self.current_paragraph.inlines.is_empty() && self.current_text.is_empty() {
             self.paragraph_alignment = self.current_style.alignment;
         }
 
@@ -1069,7 +1184,7 @@ impl Interpreter {
             // Flush current text as a run if any
             if !self.current_text.is_empty() {
                 let run = self.create_run();
-                self.current_paragraph.runs.push(run);
+                self.current_paragraph.inlines.push(Inline::Run(run));
                 self.current_text.clear();
             }
             self.current_run_style = self.current_style.snapshot();
@@ -1101,13 +1216,13 @@ impl Interpreter {
     fn flush_current_text_as_run(&mut self) {
         if !self.current_text.is_empty() {
             let run = self.create_run();
-            self.current_paragraph.runs.push(run);
+            self.current_paragraph.inlines.push(Inline::Run(run));
             self.current_text.clear();
         }
     }
 
     fn has_pending_paragraph_content(&self) -> bool {
-        !self.current_text.is_empty() || !self.current_paragraph.runs.is_empty()
+        !self.current_text.is_empty() || !self.current_paragraph.inlines.is_empty()
     }
 
     fn reset_paragraph_state(&mut self) {
@@ -1145,7 +1260,7 @@ impl Interpreter {
         self.flush_current_text_as_run();
 
         // Add paragraph to document if it has content
-        if !self.current_paragraph.runs.is_empty() {
+        if !self.current_paragraph.inlines.is_empty() {
             self.current_paragraph.alignment = self.paragraph_alignment;
 
             // Resolve list reference if we have pending list state
@@ -1170,7 +1285,7 @@ impl Interpreter {
             // Track stats
             self.report_builder.increment_paragraph_count();
             self.report_builder
-                .add_runs(self.current_paragraph.runs.len());
+                .add_runs(Self::inline_run_count(&self.current_paragraph.inlines));
         }
 
         self.reset_paragraph_state();
@@ -1639,7 +1754,7 @@ impl Interpreter {
         self.flush_current_text_as_run();
 
         // Add paragraph to current cell if it has content
-        if !self.current_paragraph.runs.is_empty() {
+        if !self.current_paragraph.inlines.is_empty() {
             self.current_paragraph.alignment = self.paragraph_alignment;
             self.resolve_list_reference();
 
@@ -1666,10 +1781,318 @@ impl Interpreter {
             // Track stats
             self.report_builder.increment_paragraph_count();
             self.report_builder
-                .add_runs(self.current_paragraph.runs.len());
+                .add_runs(Self::inline_run_count(&self.current_paragraph.inlines));
         }
 
         self.reset_paragraph_state();
+    }
+
+    // =============================================================================
+    // Field Parsing Methods (Hyperlinks)
+    // =============================================================================
+
+    /// Start parsing a field group.
+    fn start_field_parsing(&mut self) {
+        if self.parsing_field {
+            // Nested fields are currently degraded: preserve visible fldrslt text but
+            // do not attempt nested hyperlink semantics.
+            self.flush_current_text_as_field_run();
+            self.report_builder
+                .dropped_content("Nested fields are not supported", None);
+            self.nested_fields.push(NestedFieldState {
+                field_group_depth: self.current_depth,
+                ..Default::default()
+            });
+            return;
+        }
+
+        // Flush any pending text before starting the field
+        // This ensures text before the field is preserved
+        self.flush_current_text_as_run();
+
+        self.parsing_field = true;
+        self.field_group_depth = self.current_depth;
+        self.field_instruction_text.clear();
+        self.field_result_inlines.clear();
+        self.field_style_snapshot = Some(self.current_style.snapshot());
+        self.parsing_fldinst = false;
+        self.parsing_fldrslt = false;
+    }
+
+    /// Handle text content within a field (instruction text or result text).
+    fn handle_field_text(&mut self, text: String) {
+        enum FieldTextTarget {
+            NestedFldInst,
+            NestedFldRslt,
+            OuterFldInst,
+            OuterFldRslt,
+            Ignore,
+        }
+
+        let target = if let Some(nested) = self.nested_fields.last() {
+            if nested.parsing_fldinst {
+                FieldTextTarget::NestedFldInst
+            } else if nested.parsing_fldrslt {
+                FieldTextTarget::NestedFldRslt
+            } else {
+                FieldTextTarget::Ignore
+            }
+        } else if self.parsing_fldinst {
+            FieldTextTarget::OuterFldInst
+        } else if self.parsing_fldrslt {
+            FieldTextTarget::OuterFldRslt
+        } else {
+            FieldTextTarget::Ignore
+        };
+
+        match target {
+            FieldTextTarget::NestedFldInst => {
+                // Ignore nested field instruction text.
+            }
+            FieldTextTarget::NestedFldRslt | FieldTextTarget::OuterFldRslt => {
+                self.handle_field_result_text(text);
+            }
+            FieldTextTarget::OuterFldInst => {
+                self.field_instruction_text.push_str(&text);
+            }
+            FieldTextTarget::Ignore => {}
+        }
+    }
+
+    /// Handle text within fldrslt (visible content of the field).
+    fn handle_field_result_text(&mut self, text: String) {
+        // Skip fallback characters if needed (after \u escape)
+        if self.skip_next_chars > 0 {
+            let skip = self.skip_next_chars.min(text.chars().count());
+            let chars_to_take = text.chars().skip(skip);
+            let remaining: String = chars_to_take.collect();
+            self.skip_next_chars -= skip;
+
+            if remaining.is_empty() {
+                return;
+            }
+
+            self.handle_field_result_text_internal(remaining);
+        } else {
+            self.handle_field_result_text_internal(text);
+        }
+    }
+
+    /// Internal handler for field result text.
+    fn handle_field_result_text_internal(&mut self, text: String) {
+        // Check if style has changed
+        if self.field_style_changed() {
+            // Flush current text as a run if any
+            self.flush_current_text_as_field_run();
+            self.current_run_style = self.current_style.snapshot();
+        }
+
+        // Append text
+        self.current_text.push_str(&text);
+    }
+
+    /// Check if the current style differs from the run style (for field result).
+    fn field_style_changed(&self) -> bool {
+        self.current_style.bold != self.current_run_style.bold
+            || self.current_style.italic != self.current_run_style.italic
+            || self.current_style.underline != self.current_run_style.underline
+    }
+
+    fn flush_current_text_as_field_run(&mut self) {
+        if !self.current_text.is_empty() {
+            let run = self.create_run();
+            self.field_result_inlines.push(Inline::Run(run));
+            self.current_text.clear();
+        }
+    }
+
+    fn is_supported_hyperlink_url(url: &str) -> bool {
+        let lowered = url.trim().to_ascii_lowercase();
+        lowered.starts_with("http://")
+            || lowered.starts_with("https://")
+            || lowered.starts_with("mailto:")
+    }
+
+    /// Finalize the current field and emit the appropriate inline(s).
+    fn finalize_field(&mut self) {
+        // Flush any remaining text in field result
+        if self.parsing_fldrslt && !self.current_text.is_empty() {
+            self.flush_current_text_as_field_run();
+        }
+
+        let instruction = self.field_instruction_text.trim();
+        let has_instruction = !instruction.is_empty();
+        let is_hyperlink_instruction = instruction.to_ascii_uppercase().starts_with("HYPERLINK");
+        let had_result_content = !self.field_result_inlines.is_empty();
+        let parsed_url = if is_hyperlink_instruction {
+            self.extract_hyperlink_url()
+                .map(|url| url.trim().to_string())
+        } else {
+            None
+        };
+
+        if let Some(url) = parsed_url {
+            if Self::is_supported_hyperlink_url(&url) {
+                // Emit Inline::Hyperlink
+                let runs: Vec<Run> = self
+                    .field_result_inlines
+                    .iter()
+                    .filter_map(|inline| match inline {
+                        Inline::Run(run) => Some(run.clone()),
+                        _ => None,
+                    })
+                    .collect();
+
+                if !runs.is_empty() {
+                    let hyperlink = Hyperlink { url, runs };
+                    self.current_paragraph
+                        .inlines
+                        .push(Inline::Hyperlink(hyperlink));
+                } else {
+                    // Field with no result text - emit DroppedContent
+                    self.report_builder
+                        .dropped_content("Field with no result text", None);
+                }
+            } else {
+                for inline in self.field_result_inlines.drain(..) {
+                    self.current_paragraph.inlines.push(inline);
+                }
+                self.report_builder
+                    .dropped_content("Unsupported hyperlink URL scheme", None);
+            }
+        } else {
+            for inline in self.field_result_inlines.drain(..) {
+                self.current_paragraph.inlines.push(inline);
+            }
+
+            if is_hyperlink_instruction {
+                if had_result_content {
+                    self.report_builder
+                        .dropped_content("Malformed or unsupported hyperlink URL", None);
+                } else {
+                    self.report_builder
+                        .dropped_content("Field with no result text", None);
+                }
+            } else if has_instruction {
+                self.report_builder
+                    .dropped_content("Dropped unsupported field type", None);
+            } else if had_result_content {
+                self.report_builder
+                    .dropped_content("Field with no instruction text", None);
+            } else {
+                // Field with no instruction and no result
+                self.report_builder
+                    .dropped_content("Field with no instruction and no result", None);
+            }
+        }
+
+        // Reset field state
+        self.parsing_field = false;
+        self.field_group_depth = 0;
+        self.parsing_fldinst = false;
+        self.fldinst_group_depth = 0;
+        self.parsing_fldrslt = false;
+        self.fldrslt_group_depth = 0;
+        self.field_instruction_text.clear();
+        self.field_result_inlines.clear();
+        self.nested_fields.clear();
+
+        // Restore style from snapshot
+        if let Some(style) = self.field_style_snapshot.take() {
+            self.current_run_style = style;
+        }
+    }
+
+    /// Extract URL from HYPERLINK instruction text.
+    /// Pattern: HYPERLINK "url"
+    fn extract_hyperlink_url(&self) -> Option<String> {
+        let text = self.field_instruction_text.trim();
+
+        // Check if it starts with HYPERLINK
+        if !text.to_uppercase().starts_with("HYPERLINK") {
+            return None;
+        }
+
+        // Find the quoted URL
+        // Simple pattern: HYPERLINK "url"
+        let rest = &text["HYPERLINK".len()..];
+        let rest = rest.trim_start();
+
+        // Look for opening quote
+        if !rest.starts_with('"') {
+            return None;
+        }
+
+        // Find closing quote
+        let rest = &rest[1..]; // Skip opening quote
+        if let Some(end_quote_pos) = rest.find('"') {
+            let url = &rest[..end_quote_pos];
+            return Some(url.to_string());
+        }
+
+        None
+    }
+
+    /// Process field-related events during group end.
+    fn process_field_group_end(&mut self) {
+        if !self.parsing_field {
+            return;
+        }
+
+        let (exit_nested_fldinst, exit_nested_fldrslt, exit_nested_field) =
+            if let Some(nested) = self.nested_fields.last() {
+                (
+                    nested.parsing_fldinst && self.current_depth < nested.fldinst_group_depth,
+                    nested.parsing_fldrslt && self.current_depth < nested.fldrslt_group_depth,
+                    self.current_depth < nested.field_group_depth,
+                )
+            } else {
+                (false, false, false)
+            };
+
+        if exit_nested_fldrslt {
+            self.flush_current_text_as_field_run();
+        }
+
+        if let Some(nested) = self.nested_fields.last_mut() {
+            if exit_nested_fldinst {
+                nested.parsing_fldinst = false;
+            }
+            if exit_nested_fldrslt {
+                nested.parsing_fldrslt = false;
+            }
+        }
+
+        if exit_nested_field {
+            self.nested_fields.pop();
+        }
+
+        // Check if we're exiting fldinst group
+        if self.parsing_fldinst && self.current_depth < self.fldinst_group_depth {
+            self.parsing_fldinst = false;
+        }
+
+        // Check if we're exiting fldrslt group
+        if self.parsing_fldrslt && self.current_depth < self.fldrslt_group_depth {
+            // Flush remaining text before exiting fldrslt
+            self.flush_current_text_as_field_run();
+            self.parsing_fldrslt = false;
+        }
+
+        // Check if we're exiting the field group itself
+        if self.current_depth < self.field_group_depth {
+            self.finalize_field();
+        }
+    }
+
+    fn inline_run_count(inlines: &[Inline]) -> usize {
+        inlines
+            .iter()
+            .map(|inline| match inline {
+                Inline::Run(_) => 1,
+                Inline::Hyperlink(link) => link.runs.len(),
+            })
+            .sum()
     }
 }
 
@@ -1954,7 +2377,11 @@ mod tests {
 
         // Should have runs with different bold states
         if let Block::Paragraph(para) = &doc.blocks[0] {
-            assert!(para.runs.iter().any(|r| r.bold));
+            assert!(
+                para.inlines
+                    .iter()
+                    .any(|i| matches!(i, Inline::Run(r) if r.bold))
+            );
         } else {
             panic!("Expected Paragraph block");
         }
@@ -2198,8 +2625,11 @@ This is a \b bold\b0  test.\par
         let input = r#"{\rtf1\ansi \b Bold\b0\par}"#;
         let (doc, _report) = Interpreter::parse(input).unwrap();
         if let Block::Paragraph(para) = &doc.blocks[0] {
-            assert_eq!(para.runs.len(), 1);
-            assert!(para.runs[0].bold);
+            assert_eq!(para.inlines.len(), 1);
+            match &para.inlines[0] {
+                Inline::Run(r) => assert!(r.bold),
+                _ => panic!("Expected Run"),
+            }
         } else {
             panic!("Expected Paragraph block");
         }
@@ -2211,9 +2641,12 @@ This is a \b bold\b0  test.\par
         let (doc, _report) = Interpreter::parse(input).unwrap();
         if let Block::Paragraph(para) = &doc.blocks[0] {
             let rendered = para
-                .runs
+                .inlines
                 .iter()
-                .map(|run| run.text.as_str())
+                .filter_map(|i| match i {
+                    Inline::Run(run) => Some(run.text.as_str()),
+                    _ => None,
+                })
                 .collect::<String>();
             assert_eq!(rendered, "Bold text");
         } else {
@@ -2226,8 +2659,11 @@ This is a \b bold\b0  test.\par
         let input = r#"{\rtf1\ansi \{braced\} and \\ slash}"#;
         let (doc, _report) = Interpreter::parse(input).unwrap();
         if let Block::Paragraph(para) = &doc.blocks[0] {
-            assert_eq!(para.runs.len(), 1);
-            assert_eq!(para.runs[0].text, "{braced} and \\ slash");
+            assert_eq!(para.inlines.len(), 1);
+            match &para.inlines[0] {
+                Inline::Run(r) => assert_eq!(r.text, "{braced} and \\ slash"),
+                _ => panic!("Expected Run"),
+            }
         } else {
             panic!("Expected Paragraph block");
         }
@@ -2238,7 +2674,10 @@ This is a \b bold\b0  test.\par
         let input = r#"{\rtf1\ansi {\*\foo hidden} shown}"#;
         let (doc, report) = Interpreter::parse(input).unwrap();
         if let Block::Paragraph(para) = &doc.blocks[0] {
-            assert_eq!(para.runs[0].text, " shown");
+            match &para.inlines[0] {
+                Inline::Run(r) => assert_eq!(r.text, " shown"),
+                _ => panic!("Expected Run"),
+            }
             assert!(report.warnings.iter().any(|warning| matches!(
                 warning,
                 crate::report::Warning::UnknownDestination { .. }
@@ -2259,7 +2698,10 @@ This is a \b bold\b0  test.\par
         let input = r#"{\rtf1\ansi {\fonttbl\f0 Arial;} Hello}"#;
         let (doc, report) = Interpreter::parse(input).unwrap();
         if let Block::Paragraph(para) = &doc.blocks[0] {
-            assert_eq!(para.runs[0].text, " Hello");
+            match &para.inlines[0] {
+                Inline::Run(r) => assert_eq!(r.text, " Hello"),
+                _ => panic!("Expected Run"),
+            }
             assert!(report.warnings.is_empty());
         } else {
             panic!("Expected Paragraph block");
@@ -2325,7 +2767,10 @@ This is a \b bold\b0  test.\par
 
         // Without a matching override we keep paragraph output and emit warnings.
         if let Block::Paragraph(para) = &doc.blocks[0] {
-            assert_eq!(para.runs[0].text, "Item text");
+            match &para.inlines[0] {
+                Inline::Run(r) => assert_eq!(r.text, "Item text"),
+                _ => panic!("Expected Run"),
+            }
         } else {
             panic!("Expected Paragraph, got {:?}", doc.blocks[0]);
         }
@@ -2443,7 +2888,14 @@ This is a \b bold\b0  test.\par
 
         // Should have content without the pntext
         if let Block::Paragraph(para) = &doc.blocks[0] {
-            let text: String = para.runs.iter().map(|r| r.text.as_str()).collect();
+            let text: String = para
+                .inlines
+                .iter()
+                .filter_map(|i| match i {
+                    Inline::Run(r) => Some(r.text.as_str()),
+                    _ => None,
+                })
+                .collect();
             assert!(text.contains("Item text"));
             // pntext content should not appear
             assert!(!text.contains("bullet"));
@@ -2581,7 +3033,10 @@ This is a \b bold\b0  test.\par
         let (doc, _report) = Interpreter::parse(input).unwrap();
 
         if let Block::Paragraph(para) = &doc.blocks[0] {
-            assert_eq!(para.runs[0].text, "Item");
+            match &para.inlines[0] {
+                Inline::Run(r) => assert_eq!(r.text, "Item"),
+                _ => panic!("Expected Run"),
+            }
         } else {
             panic!("Expected Paragraph");
         }
@@ -2627,7 +3082,14 @@ After table text.\par
 
         assert!(matches!(doc.blocks[0], Block::TableBlock(_)));
         if let Block::Paragraph(para) = &doc.blocks[1] {
-            let text: String = para.runs.iter().map(|r| r.text.as_str()).collect();
+            let text: String = para
+                .inlines
+                .iter()
+                .filter_map(|i| match i {
+                    Inline::Run(r) => Some(r.text.as_str()),
+                    _ => None,
+                })
+                .collect();
             assert!(text.contains("After table text."));
         } else {
             panic!("Expected paragraph after table");
@@ -2662,7 +3124,14 @@ After table text.\par
             .blocks
             .iter()
             .flat_map(|b| match b {
-                Block::Paragraph(p) => p.runs.iter().map(|r| r.text.clone()).collect::<Vec<_>>(),
+                Block::Paragraph(p) => p
+                    .inlines
+                    .iter()
+                    .filter_map(|i| match i {
+                        Inline::Run(r) => Some(r.text.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>(),
                 _ => Vec::new(),
             })
             .collect();
@@ -2670,7 +3139,14 @@ After table text.\par
             .blocks
             .iter()
             .flat_map(|b| match b {
-                Block::Paragraph(p) => p.runs.iter().map(|r| r.text.clone()).collect::<Vec<_>>(),
+                Block::Paragraph(p) => p
+                    .inlines
+                    .iter()
+                    .filter_map(|i| match i {
+                        Inline::Run(r) => Some(r.text.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>(),
                 _ => Vec::new(),
             })
             .collect();
@@ -2808,5 +3284,245 @@ After table text.\par
             result,
             Err(ConversionError::Parse(ParseError::InvalidStructure(_)))
         ));
+    }
+
+    // ==========================================================================
+    // Hyperlink Field Parsing Tests (Step 3)
+    // ==========================================================================
+
+    #[test]
+    fn test_hyperlink_field_parses_to_inline_hyperlink() {
+        let input = r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK "https://example.com"}{\fldrslt Example Link}}}"#;
+        let (doc, report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.inlines.len(), 1);
+            match &para.inlines[0] {
+                Inline::Hyperlink(hyperlink) => {
+                    assert_eq!(hyperlink.url, "https://example.com");
+                    assert_eq!(hyperlink.runs.len(), 1);
+                    assert_eq!(hyperlink.runs[0].text, "Example Link");
+                }
+                _ => panic!("Expected Hyperlink inline"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+
+        // HYPERLINK fields should NOT emit DroppedContent
+        assert!(
+            !report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::report::Warning::DroppedContent { .. }))
+        );
+    }
+
+    #[test]
+    fn test_hyperlink_field_with_formatted_text() {
+        let input = r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK "https://example.com"}{\fldrslt \b Bold\b0  Link}}}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Hyperlink(hyperlink) => {
+                    assert_eq!(hyperlink.url, "https://example.com");
+                    // Should have two runs: "Bold " (bold) and " Link" (not bold)
+                    assert_eq!(hyperlink.runs.len(), 2);
+                    assert!(hyperlink.runs[0].bold);
+                    assert!(!hyperlink.runs[1].bold);
+                }
+                _ => panic!("Expected Hyperlink inline"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_hyperlink_field_mixed_with_regular_text() {
+        let input = r#"{\rtf1\ansi Before {\field{\*\fldinst HYPERLINK "https://example.com"}{\fldrslt Link}} After}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            // Should have 3 inlines: "Before ", Hyperlink, " After"
+            assert_eq!(para.inlines.len(), 3);
+            match (&para.inlines[0], &para.inlines[1], &para.inlines[2]) {
+                (Inline::Run(r1), Inline::Hyperlink(_), Inline::Run(r2)) => {
+                    assert_eq!(r1.text, "Before ");
+                    assert_eq!(r2.text, " After");
+                }
+                _ => panic!("Expected Run, Hyperlink, Run pattern"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_non_hyperlink_field_emits_dropped_content() {
+        let input = r#"{\rtf1\ansi {\field{\*\fldinst PAGE}{\fldrslt 1}}}"#;
+        let (doc, report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            // Non-HYPERLINK fields should emit result as plain runs
+            match &para.inlines[0] {
+                Inline::Run(r) => assert_eq!(r.text, "1"),
+                _ => panic!("Expected Run inline"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+
+        // Should emit DroppedContent for unsupported field type
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::report::Warning::DroppedContent { .. }))
+        );
+    }
+
+    #[test]
+    fn test_field_with_no_result_emits_dropped_content() {
+        let input = r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK "https://example.com"}}}"#;
+        let (_doc, report) = Interpreter::parse(input).unwrap();
+
+        // Field with no result text should emit DroppedContent
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::report::Warning::DroppedContent { .. }))
+        );
+    }
+
+    #[test]
+    fn test_extract_hyperlink_url_basic() {
+        let input =
+            r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK "https://test.com/path"}{\fldrslt Text}}}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Hyperlink(h) => assert_eq!(h.url, "https://test.com/path"),
+                _ => panic!("Expected Hyperlink"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_hyperlink_case_insensitive() {
+        let input =
+            r#"{\rtf1\ansi {\field{\*\fldinst hyperlink "https://example.com"}{\fldrslt Link}}}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Hyperlink(h) => assert_eq!(h.url, "https://example.com"),
+                _ => panic!("Expected Hyperlink"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_hyperlink_with_unsupported_scheme_falls_back_to_plain_text() {
+        let input = r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK "ftp://example.com/file"}{\fldrslt ftp link}}}"#;
+        let (doc, report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.inlines.len(), 1);
+            match &para.inlines[0] {
+                Inline::Run(r) => assert_eq!(r.text, "ftp link"),
+                _ => panic!("Expected fallback run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+
+        assert!(report.warnings.iter().any(|w| {
+            matches!(
+                w,
+                crate::report::Warning::DroppedContent { reason, .. }
+                if reason == "Unsupported hyperlink URL scheme"
+            )
+        }));
+    }
+
+    #[test]
+    fn test_hyperlink_with_leading_space_javascript_scheme_is_rejected() {
+        let input =
+            r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK " javascript:alert(1)"}{\fldrslt click}}}"#;
+        let (doc, report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.inlines.len(), 1);
+            match &para.inlines[0] {
+                Inline::Run(r) => assert_eq!(r.text, "click"),
+                _ => panic!("Expected fallback run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+
+        assert!(report.warnings.iter().any(|w| {
+            matches!(
+                w,
+                crate::report::Warning::DroppedContent { reason, .. }
+                if reason == "Unsupported hyperlink URL scheme"
+            )
+        }));
+    }
+
+    #[test]
+    fn test_field_with_result_but_no_instruction_emits_warning_and_preserves_text() {
+        let input = r#"{\rtf1\ansi {\field{\fldrslt Visible}}}"#;
+        let (doc, report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.inlines.len(), 1);
+            match &para.inlines[0] {
+                Inline::Run(r) => assert_eq!(r.text, "Visible"),
+                _ => panic!("Expected fallback run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+
+        assert!(report.warnings.iter().any(|w| {
+            matches!(
+                w,
+                crate::report::Warning::DroppedContent { reason, .. }
+                if reason == "Field with no instruction text"
+            )
+        }));
+    }
+
+    #[test]
+    fn test_nested_fields_degrade_inner_semantics_without_losing_outer_hyperlink() {
+        let input = r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK "https://outer.example"}{\fldrslt Outer {\field{\*\fldinst HYPERLINK "https://inner.example"}{\fldrslt Inner}} Tail}}}"#;
+        let (doc, report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.inlines.len(), 1);
+            match &para.inlines[0] {
+                Inline::Hyperlink(link) => {
+                    assert_eq!(link.url, "https://outer.example");
+                    let text: String = link.runs.iter().map(|r| r.text.as_str()).collect();
+                    assert_eq!(text, "Outer Inner Tail");
+                }
+                _ => panic!("Expected outer hyperlink"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+
+        assert!(report.warnings.iter().any(|w| {
+            matches!(
+                w,
+                crate::report::Warning::DroppedContent { reason, .. }
+                if reason == "Nested fields are not supported"
+            )
+        }));
     }
 }

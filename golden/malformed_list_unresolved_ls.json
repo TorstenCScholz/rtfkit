@@ -3,8 +3,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Item with unresolved list reference",
           "bold": false,
           "italic": false,
@@ -15,8 +16,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Normal paragraph after",
           "bold": false,
           "italic": false,

@@ -15,6 +15,7 @@
 //! | `Run.bold` | `w:rPr/w:b` |
 //! | `Run.italic` | `w:rPr/w:i` |
 //! | `Run.underline` | `w:rPr/w:u w:val="single"` |
+//! | `Inline::Hyperlink` | `w:hyperlink` + external relationship |
 //!
 //! # Example
 //!
@@ -39,6 +40,7 @@
 //! - Converts IR documents to valid OOXML DOCX files
 //! - Supports paragraph alignment (left, center, right, justify)
 //! - Supports inline formatting (bold, italic, underline)
+//! - Supports hyperlinks (`http://`, `https://`, `mailto:`)
 //! - Handles Unicode text correctly
 //! - Produces deterministic output
 //!

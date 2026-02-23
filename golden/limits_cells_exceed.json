@@ -10,8 +10,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "% Limits test: Row exceeding max_cells_per_row (1000)% This fixture should cause a parse error (exit code 2)% Note: Actual exceed fixture would have 1001 cells - this is a placeholderC1",
                       "bold": false,
                       "italic": false,
@@ -27,8 +28,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "C2",
                       "bold": false,
                       "italic": false,
@@ -44,8 +46,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "C3",
                       "bold": false,
                       "italic": false,

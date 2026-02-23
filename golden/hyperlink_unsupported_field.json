@@ -1,0 +1,31 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Page number: ",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "type": "run",
+          "text": "1",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "type": "run",
+          "text": ".",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}

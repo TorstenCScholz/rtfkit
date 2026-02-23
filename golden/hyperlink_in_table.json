@@ -1,0 +1,94 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Cell 1",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "hyperlink",
+                      "url": "https://example.com",
+                      "runs": [
+                        {
+                          "text": "Link in cell",
+                          "bold": false,
+                          "italic": false,
+                          "underline": false
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Cell 3",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Cell 4",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

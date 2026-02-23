@@ -3,8 +3,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Unicode Test:",
           "bold": false,
           "italic": false,
@@ -15,8 +16,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "é (e-acute via hex)",
           "bold": false,
           "italic": false,
@@ -27,8 +29,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "é (e with accent via unicode escape)",
           "bold": false,
           "italic": false,
@@ -39,8 +42,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "€ (Euro symbol)",
           "bold": false,
           "italic": false,
@@ -51,8 +55,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "© (copyright)",
           "bold": false,
           "italic": false,
@@ -63,8 +68,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "— (em dash)",
           "bold": false,
           "italic": false,

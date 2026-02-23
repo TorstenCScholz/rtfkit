@@ -392,6 +392,13 @@ The following reason strings are part of the stable API contract:
 - `"Dropped unsupported binary RTF data"`
 - `"Dropped legacy paragraph numbering content"`
 - `"Unresolved list override ls_id=N"`
+- `"Dropped unsupported field type"`
+- `"Field with no result text"`
+- `"Field with no instruction text"`
+- `"Field with no instruction and no result"`
+- `"Malformed or unsupported hyperlink URL"`
+- `"Unsupported hyperlink URL scheme"`
+- `"Nested fields are not supported"`
 
 **`MergeConflict` reasons**:
 - `"Orphan merge continuation without start - treating as standalone cell"`

@@ -10,8 +10,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Short",
                       "bold": false,
                       "italic": false,
@@ -27,8 +28,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "This cell contains much more text than the first one to test content preservation.",
                       "bold": false,
                       "italic": false,
@@ -48,8 +50,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Another cell with a moderate amount of textual content.",
                       "bold": false,
                       "italic": false,
@@ -65,8 +68,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Tiny",
                       "bold": false,
                       "italic": false,
@@ -86,8 +90,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "A",
                       "bold": false,
                       "italic": false,
@@ -103,8 +108,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "B",
                       "bold": false,
                       "italic": false,

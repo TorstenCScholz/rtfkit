@@ -10,8 +10,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "% Limits test: Table exceeding max_rows_per_table (10000)% This fixture should cause a parse error (exit code 2)% Generated programmatically - contains 10001 rowsR1C1",
                       "bold": false,
                       "italic": false,
@@ -27,8 +28,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "R1C2",
                       "bold": false,
                       "italic": false,
@@ -48,8 +50,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "R2C1",
                       "bold": false,
                       "italic": false,
@@ -65,8 +68,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "R2C2",
                       "bold": false,
                       "italic": false,
@@ -86,8 +90,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "R3C1",
                       "bold": false,
                       "italic": false,
@@ -103,8 +108,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "R3C2",
                       "bold": false,
                       "italic": false,
@@ -124,8 +130,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "R4C1",
                       "bold": false,
                       "italic": false,
@@ -141,8 +148,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "R4C2",
                       "bold": false,
                       "italic": false,
@@ -162,8 +170,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "R5C1",
                       "bold": false,
                       "italic": false,
@@ -179,8 +188,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "R5C2",
                       "bold": false,
                       "italic": false,

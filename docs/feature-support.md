@@ -82,7 +82,7 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | Footer (`\footer`) | 🔸 Degraded | Dropped with warning |
 | Picture (`\pict`) | 🔸 Degraded | Dropped with `DroppedContent` |
 | Object (`\obj`) | 🔸 Degraded | Dropped with `DroppedContent` |
-| Field (`\field`) | 🔸 Degraded | Dropped with `DroppedContent` |
+| Field (`\field`) | ⚠️ Partial | HYPERLINK fields supported; other fields dropped with warning |
 | Unknown destinations (`\*\foo`) | 🔸 Degraded | Dropped with `DroppedContent` |
 
 ## Output Formats
@@ -126,6 +126,7 @@ HTML output is selected with `--to html` and produces semantic HTML5:
 | Horizontal merges | ✅ Supported | `colspan` attribute |
 | Vertical merges | ✅ Supported | `rowspan` attribute |
 | Cell alignment | ✅ Supported | CSS classes |
+| Hyperlinks | ✅ Supported | `<a href>` with `rtf-link` class |
 | Font family/size | ❌ Not Supported | Semantic-first design |
 | Colors | ❌ Not Supported | Semantic-first design |
 | Borders | ❌ Not Supported | Semantic-first design |
@@ -152,8 +153,8 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 | Unicode text | ✅ Supported | Full Unicode support |
 | Page size options | ✅ Supported | A4 (default) and US Letter |
 | Deterministic output | ✅ Supported | Byte-identical for same input |
+| Hyperlinks | ✅ Supported | Typst `#link()` syntax |
 | Images | ❌ Not Supported | No IR image blocks |
-| Hyperlinks | ❌ Not Supported | Rendered as plain text |
 | Custom fonts | ❌ Not Supported | Uses embedded fonts |
 | Style Profiles | ✅ Supported | `--style-profile` flag (classic, report, compact) |
 
@@ -184,18 +185,19 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 ## Known Limitations
 
 1. **No image support** - Images are dropped with `DroppedContent` warning
-2. **No hyperlink support** - Fields are dropped with `DroppedContent` warning
-3. **Limited font/style fidelity** - Font family, size, and color are not mapped to output
-4. **Row alignment cosmetic loss** - Row alignment is parsed but not fully emitted by docx-rs
-5. **List nesting limit** - Maximum 8 levels due to DOCX compatibility
-6. **No nested tables** - Tables inside cells are not supported
-7. **HTML is semantic-first** - No font sizes, colors, or borders in HTML output
-8. **PDF uses embedded fonts** - Custom fonts not supported; uses Typst's embedded fonts
+2. **Limited font/style fidelity** - Font family, size, and color are not mapped to output
+3. **Row alignment cosmetic loss** - Row alignment is parsed but not fully emitted by docx-rs
+4. **List nesting limit** - Maximum 8 levels due to DOCX compatibility
+5. **No nested tables** - Tables inside cells are not supported
+6. **HTML is semantic-first** - No font sizes, colors, or borders in HTML output
+7. **PDF uses embedded fonts** - Custom fonts not supported; uses Typst's embedded fonts
+8. **Limited hyperlink support** - Only external `http://`, `https://`, `mailto:` URLs; bookmark links not supported
 
 ## Version History
 
 | Version | Changes |
 |---------|---------|
+| 0.7.0 | Added hyperlink support (DOCX, HTML, PDF), URL sanitization for HTML output |
 | 0.6.0 | Added HTML output support, PDF output support, feature support matrix documentation |
 | 0.5.0 | Added table merge and alignment support |
 | 0.4.0 | Added basic table support |

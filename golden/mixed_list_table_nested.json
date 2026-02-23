@@ -3,8 +3,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "% Mixed content with nested structures: table with lists in multiple cells% Tests nested list inside table cells",
           "bold": false,
           "italic": false,
@@ -15,8 +16,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Document with nested list in table:",
           "bold": false,
           "italic": false,
@@ -34,8 +36,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Simple cell",
                       "bold": false,
                       "italic": false,
@@ -51,8 +54,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Item A",
                       "bold": false,
                       "italic": false,
@@ -63,8 +67,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Item B",
                       "bold": false,
                       "italic": false,
@@ -75,8 +80,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Item C",
                       "bold": false,
                       "italic": false,
@@ -92,8 +98,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Another simple cell",
                       "bold": false,
                       "italic": false,
@@ -113,8 +120,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Row 2 Cell 1",
                       "bold": false,
                       "italic": false,
@@ -130,8 +138,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Nested item 1",
                       "bold": false,
                       "italic": false,
@@ -142,8 +151,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Nested item 2",
                       "bold": false,
                       "italic": false,
@@ -159,8 +169,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Row 2 Cell 3",
                       "bold": false,
                       "italic": false,
@@ -178,8 +189,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Paragraph after table.",
           "bold": false,
           "italic": false,

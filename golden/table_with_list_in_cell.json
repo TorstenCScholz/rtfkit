@@ -10,8 +10,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Regular cell",
                       "bold": false,
                       "italic": false,
@@ -35,8 +36,9 @@
                         {
                           "type": "paragraph",
                           "alignment": "left",
-                          "runs": [
+                          "inlines": [
                             {
+                              "type": "run",
                               "text": "Item A",
                               "bold": false,
                               "italic": false,
@@ -52,8 +54,9 @@
                         {
                           "type": "paragraph",
                           "alignment": "left",
-                          "runs": [
+                          "inlines": [
                             {
+                              "type": "run",
                               "text": "Item B",
                               "bold": false,
                               "italic": false,
@@ -77,8 +80,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Another cell",
                       "bold": false,
                       "italic": false,
@@ -94,8 +98,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Last cell",
                       "bold": false,
                       "italic": false,

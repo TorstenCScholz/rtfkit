@@ -11,8 +11,9 @@
             {
               "type": "paragraph",
               "alignment": "left",
-              "runs": [
+              "inlines": [
                 {
+                  "type": "run",
                   "text": "First item",
                   "bold": false,
                   "italic": false,
@@ -28,8 +29,9 @@
             {
               "type": "paragraph",
               "alignment": "left",
-              "runs": [
+              "inlines": [
                 {
+                  "type": "run",
                   "text": "Second item",
                   "bold": false,
                   "italic": false,
@@ -45,8 +47,9 @@
             {
               "type": "paragraph",
               "alignment": "left",
-              "runs": [
+              "inlines": [
                 {
+                  "type": "run",
                   "text": "Third item",
                   "bold": false,
                   "italic": false,

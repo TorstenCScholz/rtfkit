@@ -225,18 +225,44 @@ impl Run {
     }
 }
 
-/// A paragraph containing one or more text runs.
+/// An inline element within a paragraph.
+///
+/// `Inline` represents content that flows within a paragraph.
+/// It can be either a plain text run with formatting, or a hyperlink
+/// wrapping one or more formatted runs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Inline {
+    /// A plain text run with formatting.
+    Run(Run),
+    /// A hyperlink wrapping one or more formatted runs.
+    Hyperlink(Hyperlink),
+}
+
+/// A hyperlink with a target URL and visible content.
+///
+/// The hyperlink wraps one or more `Run` elements that represent
+/// the visible, clickable text of the link.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Hyperlink {
+    /// Target URL
+    pub url: String,
+    /// Visible content (formatted runs)
+    pub runs: Vec<Run>,
+}
+
+/// A paragraph containing one or more inline elements.
 ///
 /// A `Paragraph` represents a block of text that is separated from other
-/// blocks by paragraph breaks. It contains a sequence of `Run` objects
-/// and has an associated alignment.
+/// blocks by paragraph breaks. It contains a sequence of `Inline` elements
+/// (runs or hyperlinks) and has an associated alignment.
 ///
 /// # Example
 /// ```
-/// use rtfkit_core::{Paragraph, Run, Alignment};
+/// use rtfkit_core::{Paragraph, Run, Inline, Alignment};
 /// let para = Paragraph {
 ///     alignment: Alignment::Left,
-///     runs: vec![Run::new("Hello, World!")],
+///     inlines: vec![Inline::Run(Run::new("Hello, World!"))],
 /// };
 /// ```
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -244,8 +270,8 @@ pub struct Paragraph {
     /// Horizontal alignment of the paragraph
     #[serde(default)]
     pub alignment: Alignment,
-    /// The text runs that make up this paragraph
-    pub runs: Vec<Run>,
+    /// The inline elements that make up this paragraph
+    pub inlines: Vec<Inline>,
 }
 
 impl Paragraph {
@@ -254,11 +280,19 @@ impl Paragraph {
         Self::default()
     }
 
-    /// Creates a paragraph from a vector of runs.
+    /// Creates a paragraph from a vector of runs, wrapping each in Inline::Run.
     pub fn from_runs(runs: Vec<Run>) -> Self {
         Self {
             alignment: Alignment::default(),
-            runs,
+            inlines: runs.into_iter().map(Inline::Run).collect(),
+        }
+    }
+
+    /// Creates a paragraph from a vector of inline elements.
+    pub fn from_inlines(inlines: Vec<Inline>) -> Self {
+        Self {
+            alignment: Alignment::default(),
+            inlines,
         }
     }
 }

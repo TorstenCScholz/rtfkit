@@ -3,8 +3,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "% Malformed RTF with repeated bad controls but preserved text% Tests graceful degradation with multiple malformed constructs",
           "bold": false,
           "italic": false,
@@ -15,8 +16,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "First normal paragraph.",
           "bold": false,
           "italic": false,
@@ -27,8 +29,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Orphan cell control",
           "bold": false,
           "italic": false,
@@ -39,8 +42,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Orphan row control",
           "bold": false,
           "italic": false,
@@ -51,8 +55,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Another orphan cell",
           "bold": false,
           "italic": false,
@@ -63,8 +68,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Text between bad controls.",
           "bold": false,
           "italic": false,
@@ -82,8 +88,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Valid cell",
                       "bold": false,
                       "italic": false,
@@ -101,8 +108,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Yet another orphan",
           "bold": false,
           "italic": false,
@@ -113,8 +121,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "And another orphan row",
           "bold": false,
           "italic": false,
@@ -125,8 +134,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Final normal paragraph.",
           "bold": false,
           "italic": false,

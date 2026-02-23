@@ -3,14 +3,16 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Underlined Text",
           "bold": false,
           "italic": false,
           "underline": true
         },
         {
+          "type": "run",
           "text": "Normal Text",
           "bold": false,
           "italic": false,

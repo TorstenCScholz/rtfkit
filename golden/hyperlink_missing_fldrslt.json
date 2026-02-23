@@ -1,0 +1,24 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Broken link: ",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "type": "run",
+          "text": ".",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}

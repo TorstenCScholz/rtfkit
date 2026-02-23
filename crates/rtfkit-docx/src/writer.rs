@@ -5,14 +5,16 @@
 
 use crate::DocxError;
 use docx_rs::{
-    AbstractNumbering, AlignmentType, Docx, IndentLevel, Level, LevelJc, LevelText, NumberFormat,
-    Numbering, NumberingId, Numberings, Paragraph as DocxParagraph, Run as DocxRun, Start, Table,
-    TableCell, TableRow, VAlignType, VMergeType, WidthType,
+    AbstractNumbering, AlignmentType, Docx, Hyperlink as DocxHyperlink, HyperlinkType, IndentLevel,
+    Level, LevelJc, LevelText, NumberFormat, Numbering, NumberingId, Numberings,
+    Paragraph as DocxParagraph, Run as DocxRun, Start, Table, TableCell, TableRow, VAlignType,
+    VMergeType, WidthType,
 };
 use indexmap::IndexMap;
 use rtfkit_core::{
-    Alignment, Block, CellMerge, CellVerticalAlign, Document, ListBlock, ListId, ListKind,
-    Paragraph, Run, TableBlock, TableCell as IrTableCell, TableRow as IrTableRow,
+    Alignment, Block, CellMerge, CellVerticalAlign, Document, Hyperlink as IrHyperlink, Inline,
+    ListBlock, ListId, ListKind, Paragraph, Run, TableBlock, TableCell as IrTableCell,
+    TableRow as IrTableRow,
 };
 use std::fs::File;
 use std::io::{Cursor, Write};
@@ -261,6 +263,7 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
     }
 
     // Second pass: convert blocks
+    // Note: docx-rs handles hyperlink relationships internally
     for block in &document.blocks {
         match block {
             Block::Paragraph(para) => {
@@ -336,12 +339,33 @@ fn convert_paragraph_with_numbering(para: &Paragraph, num_id: u32, level: u8) ->
     // Map alignment
     p = p.align(convert_alignment(para.alignment));
 
-    // Map runs
-    for run in &para.runs {
-        p = p.add_run(convert_run(run));
+    // Map inlines
+    for inline in &para.inlines {
+        match inline {
+            Inline::Run(run) => {
+                p = p.add_run(convert_run(run));
+            }
+            Inline::Hyperlink(hyperlink) => {
+                let docx_hyperlink = convert_hyperlink(hyperlink);
+                p = p.add_hyperlink(docx_hyperlink);
+            }
+        }
     }
 
     p
+}
+
+/// Converts an IR Hyperlink to a docx-rs Hyperlink.
+fn convert_hyperlink(hyperlink: &IrHyperlink) -> DocxHyperlink {
+    // Create the hyperlink with the URL
+    let mut docx_hyperlink = DocxHyperlink::new(&hyperlink.url, HyperlinkType::External);
+
+    // Add runs to the hyperlink
+    for run in &hyperlink.runs {
+        docx_hyperlink = docx_hyperlink.add_run(convert_run(run));
+    }
+
+    docx_hyperlink
 }
 
 /// Converts IR alignment to docx-rs alignment.
@@ -540,6 +564,20 @@ fn convert_table_cell(cell: &IrTableCell, numbering: &NumberingAllocator) -> Tab
 mod tests {
     use super::*;
     use rtfkit_core::{ListItem, ListKind};
+    use std::io::Read;
+
+    fn zip_entry_string(bytes: &[u8], entry_name: &str) -> String {
+        let reader = Cursor::new(bytes);
+        let mut archive = zip::ZipArchive::new(reader).expect("Should be valid ZIP");
+        let mut entry = archive
+            .by_name(entry_name)
+            .unwrap_or_else(|_| panic!("missing ZIP entry: {entry_name}"));
+        let mut xml = String::new();
+        entry
+            .read_to_string(&mut xml)
+            .expect("Failed to read ZIP entry as UTF-8 string");
+        xml
+    }
 
     // =========================================================================
     // NumberingAllocator Tests
@@ -713,7 +751,7 @@ mod tests {
     fn test_alignment_left() {
         let mut para = Paragraph::new();
         para.alignment = Alignment::Left;
-        para.runs.push(Run::new("Left aligned"));
+        para.inlines.push(Inline::Run(Run::new("Left aligned")));
 
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
         let bytes = write_docx_to_bytes(&doc).unwrap();
@@ -724,7 +762,7 @@ mod tests {
     fn test_alignment_center() {
         let mut para = Paragraph::new();
         para.alignment = Alignment::Center;
-        para.runs.push(Run::new("Center aligned"));
+        para.inlines.push(Inline::Run(Run::new("Center aligned")));
 
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
         let bytes = write_docx_to_bytes(&doc).unwrap();
@@ -735,7 +773,7 @@ mod tests {
     fn test_alignment_right() {
         let mut para = Paragraph::new();
         para.alignment = Alignment::Right;
-        para.runs.push(Run::new("Right aligned"));
+        para.inlines.push(Inline::Run(Run::new("Right aligned")));
 
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
         let bytes = write_docx_to_bytes(&doc).unwrap();
@@ -746,7 +784,7 @@ mod tests {
     fn test_alignment_justify() {
         let mut para = Paragraph::new();
         para.alignment = Alignment::Justify;
-        para.runs.push(Run::new("Justified text"));
+        para.inlines.push(Inline::Run(Run::new("Justified text")));
 
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
         let bytes = write_docx_to_bytes(&doc).unwrap();
@@ -1444,5 +1482,83 @@ mod tests {
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
         let bytes = write_docx_to_bytes(&doc).unwrap();
         assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_hyperlink_emits_w_hyperlink_in_document_xml() {
+        let para = Paragraph::from_inlines(vec![
+            Inline::Run(Run::new("Visit ")),
+            Inline::Hyperlink(IrHyperlink {
+                url: "https://example.com".to_string(),
+                runs: vec![Run::new("Example")],
+            }),
+        ]);
+        let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        assert!(document_xml.contains("<w:hyperlink"));
+        assert!(document_xml.contains("r:id=\"rIdHyperlink"));
+        assert!(document_xml.contains("Example"));
+    }
+
+    #[test]
+    fn test_hyperlink_emits_relationship_entry() {
+        let para = Paragraph::from_inlines(vec![Inline::Hyperlink(IrHyperlink {
+            url: "https://example.com".to_string(),
+            runs: vec![Run::new("Example")],
+        })]);
+        let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let rels_xml = zip_entry_string(&bytes, "word/_rels/document.xml.rels");
+        assert!(rels_xml.contains(
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+        ));
+        assert!(rels_xml.contains("Target=\"https://example.com\""));
+        assert!(rels_xml.contains("TargetMode=\"External\""));
+    }
+
+    #[test]
+    fn test_multiple_hyperlinks_emit_multiple_targets() {
+        let para = Paragraph::from_inlines(vec![
+            Inline::Hyperlink(IrHyperlink {
+                url: "https://example.com".to_string(),
+                runs: vec![Run::new("Example")],
+            }),
+            Inline::Run(Run::new(" and ")),
+            Inline::Hyperlink(IrHyperlink {
+                url: "https://docs.example.com".to_string(),
+                runs: vec![Run::new("Docs")],
+            }),
+        ]);
+        let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let rels_xml = zip_entry_string(&bytes, "word/_rels/document.xml.rels");
+        assert!(rels_xml.contains("Target=\"https://example.com\""));
+        assert!(rels_xml.contains("Target=\"https://docs.example.com\""));
+    }
+
+    #[test]
+    fn test_hyperlink_preserves_run_formatting() {
+        let mut bold = Run::new("Bold");
+        bold.bold = true;
+        let mut italic = Run::new("Italic");
+        italic.italic = true;
+
+        let para = Paragraph::from_inlines(vec![Inline::Hyperlink(IrHyperlink {
+            url: "https://example.com".to_string(),
+            runs: vec![bold, italic],
+        })]);
+        let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        assert!(document_xml.contains("<w:hyperlink"));
+        assert!(document_xml.contains("Bold"));
+        assert!(document_xml.contains("Italic"));
+        assert!(document_xml.contains("<w:b"));
+        assert!(document_xml.contains("<w:i"));
     }
 }

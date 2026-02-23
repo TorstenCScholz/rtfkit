@@ -588,6 +588,67 @@ mod exit_code_tests {
     }
 
     #[test]
+    fn strict_mode_succeeds_on_supported_hyperlink_fixture() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/hyperlink_simple.rtf");
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--strict",
+            "--format",
+            "json",
+        ]);
+        cmd.assert().success().code(0);
+    }
+
+    #[test]
+    fn strict_mode_fails_on_unsupported_field_fixture() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/hyperlink_unsupported_field.rtf");
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--strict",
+            "--format",
+            "json",
+        ]);
+        cmd.assert()
+            .failure()
+            .code(4)
+            .stderr(contains("Strict mode violated"));
+    }
+
+    #[test]
+    fn strict_mode_fails_on_unsupported_hyperlink_scheme() {
+        let dir = tempdir().unwrap();
+        let input = dir.path().join("hyperlink_unsupported_scheme.rtf");
+        fs::write(
+            &input,
+            r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK "ftp://example.com/file"}{\fldrslt FTP}}}"#,
+        )
+        .unwrap();
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            input.to_str().unwrap(),
+            "--strict",
+            "--format",
+            "json",
+        ]);
+        cmd.assert()
+            .failure()
+            .code(4)
+            .stderr(contains("Strict mode violated"));
+    }
+
+    #[test]
     fn strict_mode_succeeds_on_well_formed_content() {
         // Well-formed content should succeed in strict mode
         let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));

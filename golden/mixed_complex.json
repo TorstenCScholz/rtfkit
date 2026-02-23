@@ -3,8 +3,9 @@
     {
       "type": "paragraph",
       "alignment": "center",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Complex Document Title",
           "bold": true,
           "italic": false,
@@ -15,8 +16,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Introduction",
           "bold": false,
           "italic": true,
@@ -27,44 +29,51 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "This document tests ",
           "bold": false,
           "italic": false,
           "underline": false
         },
         {
+          "type": "run",
           "text": "multiple",
           "bold": true,
           "italic": false,
           "underline": false
         },
         {
+          "type": "run",
           "text": " ",
           "bold": false,
           "italic": false,
           "underline": false
         },
         {
+          "type": "run",
           "text": "formatting",
           "bold": false,
           "italic": true,
           "underline": false
         },
         {
+          "type": "run",
           "text": " ",
           "bold": false,
           "italic": false,
           "underline": false
         },
         {
+          "type": "run",
           "text": "features",
           "bold": false,
           "italic": false,
           "underline": true
         },
         {
+          "type": "run",
           "text": " in a single file.",
           "bold": false,
           "italic": false,
@@ -75,8 +84,9 @@
     {
       "type": "paragraph",
       "alignment": "center",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Section 1: Alignment",
           "bold": true,
           "italic": false,
@@ -87,8 +97,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Left aligned text with € Euro symbol.",
           "bold": false,
           "italic": false,
@@ -99,8 +110,9 @@
     {
       "type": "paragraph",
       "alignment": "center",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Centered text with © copyright.",
           "bold": false,
           "italic": false,
@@ -111,8 +123,9 @@
     {
       "type": "paragraph",
       "alignment": "right",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Right aligned text.",
           "bold": false,
           "italic": false,
@@ -123,8 +136,9 @@
     {
       "type": "paragraph",
       "alignment": "right",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Section 2: Nested Styles",
           "bold": true,
           "italic": false,
@@ -135,32 +149,37 @@
     {
       "type": "paragraph",
       "alignment": "right",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Normal text ",
           "bold": false,
           "italic": false,
           "underline": false
         },
         {
+          "type": "run",
           "text": "bold ",
           "bold": true,
           "italic": false,
           "underline": false
         },
         {
+          "type": "run",
           "text": "bold-italic ",
           "bold": true,
           "italic": true,
           "underline": false
         },
         {
+          "type": "run",
           "text": "bold-italic-underlined",
           "bold": true,
           "italic": true,
           "underline": true
         },
         {
+          "type": "run",
           "text": " back to normal.",
           "bold": false,
           "italic": false,
@@ -171,8 +190,9 @@
     {
       "type": "paragraph",
       "alignment": "right",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Section 3: Unicode Characters",
           "bold": true,
           "italic": false,
@@ -183,8 +203,9 @@
     {
       "type": "paragraph",
       "alignment": "right",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "é è ê ë (accented e characters)",
           "bold": false,
           "italic": false,
@@ -195,8 +216,9 @@
     {
       "type": "paragraph",
       "alignment": "right",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "— (em dash) – (en dash)",
           "bold": false,
           "italic": false,
@@ -207,8 +229,9 @@
     {
       "type": "paragraph",
       "alignment": "center",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "The End",
           "bold": true,
           "italic": true,

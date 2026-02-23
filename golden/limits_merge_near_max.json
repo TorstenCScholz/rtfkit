@@ -10,8 +10,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "% Limits test: Merge span near max_merge_span (1000)% This fixture has a small merge as a representative test% Tests that the parser handles merge spans correctlyMerged cell",
                       "bold": false,
                       "italic": false,

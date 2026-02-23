@@ -26,7 +26,7 @@
 //! - `$` - Typst math mode marker
 //! - `~` - Typst non-breaking space
 
-use rtfkit_core::{Alignment, Paragraph, Run};
+use rtfkit_core::{Alignment, Hyperlink, Inline, Paragraph, Run};
 
 use super::MappingWarning;
 
@@ -55,8 +55,8 @@ pub struct ParagraphOutput {
 pub fn map_paragraph(paragraph: &Paragraph) -> ParagraphOutput {
     let mut warnings = Vec::new();
 
-    // Map runs to text content
-    let content = map_runs(&paragraph.runs, &mut warnings);
+    // Map inlines to text content
+    let content = map_inlines(&paragraph.inlines, &mut warnings);
 
     // Apply alignment if needed
     let typst_source = if content.is_empty() {
@@ -75,6 +75,81 @@ pub fn map_paragraph(paragraph: &Paragraph) -> ParagraphOutput {
         typst_source,
         warnings,
     }
+}
+
+/// Map inlines to Typst text content.
+///
+/// Handles both runs and hyperlinks, preserving formatting.
+/// Adjacent runs with identical formatting are merged for cleaner output.
+fn map_inlines(inlines: &[Inline], warnings: &mut Vec<MappingWarning>) -> String {
+    if inlines.is_empty() {
+        return String::new();
+    }
+
+    let mut result = String::new();
+    let mut pending_runs: Vec<Run> = Vec::new();
+
+    for inline in inlines {
+        match inline {
+            Inline::Run(run) => {
+                // Accumulate runs for potential merging
+                pending_runs.push(run.clone());
+            }
+            Inline::Hyperlink(hyperlink) => {
+                // Flush any pending runs before the hyperlink
+                if !pending_runs.is_empty() {
+                    result.push_str(&map_runs(&pending_runs, warnings));
+                    pending_runs.clear();
+                }
+                result.push_str(&map_hyperlink(hyperlink, warnings));
+            }
+        }
+    }
+
+    // Flush any remaining pending runs
+    if !pending_runs.is_empty() {
+        result.push_str(&map_runs(&pending_runs, warnings));
+    }
+
+    result
+}
+
+/// Map a hyperlink to Typst `#link()` syntax.
+///
+/// Generates `#link("url")[content]` with proper formatting for runs.
+fn map_hyperlink(hyperlink: &Hyperlink, warnings: &mut Vec<MappingWarning>) -> String {
+    // Map the runs inside the hyperlink
+    let content = map_runs(&hyperlink.runs, warnings);
+
+    if content.is_empty() {
+        return String::new();
+    }
+
+    // Escape the URL for Typst string literal
+    let escaped_url = escape_typst_string(&hyperlink.url);
+
+    // Generate #link("url")[content]
+    format!("#link(\"{}\")[{}]", escaped_url, content)
+}
+
+/// Escape a string for use in a Typst string literal.
+///
+/// Escapes: " \ and newlines
+fn escape_typst_string(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+
+    for c in s.chars() {
+        match c {
+            '"' => result.push_str("\\\""),
+            '\\' => result.push_str("\\\\"),
+            '\n' => result.push_str("\\n"),
+            '\r' => result.push_str("\\r"),
+            '\t' => result.push_str("\\t"),
+            _ => result.push(c),
+        }
+    }
+
+    result
 }
 
 /// Map runs to Typst text content.
@@ -412,5 +487,52 @@ mod tests {
 
         assert_eq!(output1.typst_source, output2.typst_source);
         assert_eq!(output2.typst_source, output3.typst_source);
+    }
+
+    #[test]
+    fn test_map_hyperlink_inline() {
+        let paragraph = Paragraph::from_inlines(vec![Inline::Hyperlink(Hyperlink {
+            url: "https://example.com".to_string(),
+            runs: vec![Run::new("Example")],
+        })]);
+
+        let output = map_paragraph(&paragraph);
+        assert_eq!(
+            output.typst_source,
+            "#link(\"https://example.com\")[Example]"
+        );
+    }
+
+    #[test]
+    fn test_map_hyperlink_with_formatted_runs() {
+        let mut bold = Run::new("Bold");
+        bold.bold = true;
+        let mut italic = Run::new("Italic");
+        italic.italic = true;
+
+        let paragraph = Paragraph::from_inlines(vec![Inline::Hyperlink(Hyperlink {
+            url: "https://example.com".to_string(),
+            runs: vec![bold, Run::new(" "), italic],
+        })]);
+
+        let output = map_paragraph(&paragraph);
+        assert_eq!(
+            output.typst_source,
+            "#link(\"https://example.com\")[*Bold* _Italic_]"
+        );
+    }
+
+    #[test]
+    fn test_hyperlink_url_is_escaped_for_typst_string_literal() {
+        let paragraph = Paragraph::from_inlines(vec![Inline::Hyperlink(Hyperlink {
+            url: "https://example.com?q=\\\"x\\\"".to_string(),
+            runs: vec![Run::new("Example")],
+        })]);
+
+        let output = map_paragraph(&paragraph);
+        assert_eq!(
+            output.typst_source,
+            "#link(\"https://example.com?q=\\\\\\\"x\\\\\\\"\")[Example]"
+        );
     }
 }

@@ -3,8 +3,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "% Mixed content document: prose, list, and table interleave% Tests the parser's ability to handle mixed block types in sequence",
           "bold": false,
           "italic": false,
@@ -15,8 +16,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Introduction paragraph before any structured content.",
           "bold": false,
           "italic": false,
@@ -27,8 +29,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "First list item",
           "bold": false,
           "italic": false,
@@ -39,8 +42,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Second list item",
           "bold": false,
           "italic": false,
@@ -51,8 +55,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Third list item",
           "bold": false,
           "italic": false,
@@ -63,8 +68,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Intermediate paragraph between list and table.",
           "bold": false,
           "italic": false,
@@ -82,8 +88,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Cell 1",
                       "bold": false,
                       "italic": false,
@@ -99,8 +106,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Cell 2",
                       "bold": false,
                       "italic": false,
@@ -120,8 +128,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Cell 3",
                       "bold": false,
                       "italic": false,
@@ -137,8 +146,9 @@
                 {
                   "type": "paragraph",
                   "alignment": "left",
-                  "runs": [
+                  "inlines": [
                     {
+                      "type": "run",
                       "text": "Cell 4",
                       "bold": false,
                       "italic": false,
@@ -156,8 +166,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Concluding paragraph after the table.",
           "bold": false,
           "italic": false,

@@ -1,0 +1,55 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Visit ",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "type": "hyperlink",
+          "url": "https://example.com",
+          "runs": [
+            {
+              "text": "Example Site",
+              "bold": false,
+              "italic": false,
+              "underline": false
+            }
+          ]
+        },
+        {
+          "type": "run",
+          "text": " or ",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "type": "hyperlink",
+          "url": "https://docs.example.com",
+          "runs": [
+            {
+              "text": "Documentation",
+              "bold": false,
+              "italic": false,
+              "underline": false
+            }
+          ]
+        },
+        {
+          "type": "run",
+          "text": " for more info.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}

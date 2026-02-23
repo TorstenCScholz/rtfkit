@@ -68,6 +68,21 @@ fn as_paragraph(block: &rtfkit_core::Block) -> Option<&rtfkit_core::Paragraph> {
     }
 }
 
+/// Helper to extract runs from a paragraph's inlines.
+/// Flattens Inline::Run variants and Hyperlink runs into a Vec of Run references.
+fn extract_runs(para: &rtfkit_core::Paragraph) -> Vec<&rtfkit_core::Run> {
+    let mut runs = Vec::new();
+    for inline in &para.inlines {
+        match inline {
+            rtfkit_core::Inline::Run(run) => runs.push(run),
+            rtfkit_core::Inline::Hyperlink(hyperlink) => {
+                runs.extend(hyperlink.runs.iter());
+            }
+        }
+    }
+    runs
+}
+
 /// Test that parses all RTF fixtures and compares IR output against golden files.
 #[test]
 fn golden_ir_output() {
@@ -145,11 +160,9 @@ fn test_simple_paragraph_content() {
     assert_eq!(doc.blocks.len(), 1, "Should have exactly one paragraph");
 
     let para = as_paragraph(&doc.blocks[0]).expect("Expected paragraph block");
-    assert_eq!(para.runs.len(), 1, "Should have one run");
-    assert_eq!(
-        para.runs[0].text, "Hello World",
-        "Text should be 'Hello World'"
-    );
+    let runs = extract_runs(para);
+    assert_eq!(runs.len(), 1, "Should have one run");
+    assert_eq!(runs[0].text, "Hello World", "Text should be 'Hello World'");
 }
 
 #[test]
@@ -162,13 +175,13 @@ fn test_bold_italic_formatting() {
     // Check that there are runs with bold and italic formatting
     let has_bold = doc.blocks.iter().any(|b| {
         as_paragraph(b)
-            .map(|p| p.runs.iter().any(|r| r.bold))
+            .map(|p| extract_runs(p).iter().any(|r| r.bold))
             .unwrap_or(false)
     });
 
     let has_italic = doc.blocks.iter().any(|b| {
         as_paragraph(b)
-            .map(|p| p.runs.iter().any(|r| r.italic))
+            .map(|p| extract_runs(p).iter().any(|r| r.italic))
             .unwrap_or(false)
     });
 
@@ -183,7 +196,7 @@ fn test_underline_formatting() {
 
     let has_underline = doc.blocks.iter().any(|b| {
         as_paragraph(b)
-            .map(|p| p.runs.iter().any(|r| r.underline))
+            .map(|p| extract_runs(p).iter().any(|r| r.underline))
             .unwrap_or(false)
     });
 
@@ -232,7 +245,10 @@ fn test_empty_document() {
         doc.blocks.is_empty()
             || doc.blocks.iter().all(|b| {
                 as_paragraph(b)
-                    .map(|p| p.runs.is_empty() || p.runs.iter().all(|r| r.text.trim().is_empty()))
+                    .map(|p| {
+                        let runs = extract_runs(p);
+                        runs.is_empty() || runs.iter().all(|r| r.text.trim().is_empty())
+                    })
                     .unwrap_or(true)
             }),
         "Empty RTF should produce empty or whitespace-only content"
@@ -252,8 +268,9 @@ fn test_nested_styles() {
     let mut style_combinations = 0;
     for block in &doc.blocks {
         if let Some(p) = as_paragraph(block) {
-            let bold_runs = p.runs.iter().filter(|r| r.bold).count();
-            let italic_runs = p.runs.iter().filter(|r| r.italic).count();
+            let runs = extract_runs(p);
+            let bold_runs = runs.iter().filter(|r| r.bold).count();
+            let italic_runs = runs.iter().filter(|r| r.italic).count();
             if bold_runs > 0 && italic_runs > 0 {
                 style_combinations += 1;
             }
@@ -276,7 +293,7 @@ fn test_mixed_formatting() {
     let total_runs: usize = doc
         .blocks
         .iter()
-        .filter_map(|b| as_paragraph(b).map(|p| p.runs.len()))
+        .filter_map(|b| as_paragraph(b).map(|p| extract_runs(p).len()))
         .sum();
 
     assert!(total_runs >= 1, "Should have at least one run");
@@ -349,8 +366,12 @@ fn test_list_bullet_simple() {
         .items
         .iter()
         .filter_map(|item| {
-            as_paragraph(&item.blocks[0])
-                .map(|p| p.runs.first().map(|r| r.text.as_str()).unwrap_or(""))
+            as_paragraph(&item.blocks[0]).map(|p| {
+                extract_runs(p)
+                    .first()
+                    .map(|r| r.text.as_str())
+                    .unwrap_or("")
+            })
         })
         .collect();
 
@@ -380,8 +401,12 @@ fn test_list_decimal_simple() {
         .items
         .iter()
         .filter_map(|item| {
-            as_paragraph(&item.blocks[0])
-                .map(|p| p.runs.first().map(|r| r.text.as_str()).unwrap_or(""))
+            as_paragraph(&item.blocks[0]).map(|p| {
+                extract_runs(p)
+                    .first()
+                    .map(|r| r.text.as_str())
+                    .unwrap_or("")
+            })
         })
         .collect();
 
@@ -414,8 +439,12 @@ fn test_list_nested_two_levels() {
         .items
         .iter()
         .filter_map(|item| {
-            as_paragraph(&item.blocks[0])
-                .map(|p| p.runs.first().map(|r| r.text.as_str()).unwrap_or(""))
+            as_paragraph(&item.blocks[0]).map(|p| {
+                extract_runs(p)
+                    .first()
+                    .map(|r| r.text.as_str())
+                    .unwrap_or("")
+            })
         })
         .collect();
 
@@ -443,7 +472,9 @@ fn test_list_mixed_kinds() {
     // First block should be a paragraph (heading)
     let heading1 = as_paragraph(&doc.blocks[0]).expect("First block should be paragraph");
     assert!(
-        heading1.runs.iter().any(|r| r.text.contains("Bullet List")),
+        extract_runs(heading1)
+            .iter()
+            .any(|r| r.text.contains("Bullet List")),
         "First paragraph should contain 'Bullet List'"
     );
 
@@ -463,8 +494,7 @@ fn test_list_mixed_kinds() {
     // Third block should be a paragraph (heading)
     let heading2 = as_paragraph(&doc.blocks[2]).expect("Third block should be paragraph");
     assert!(
-        heading2
-            .runs
+        extract_runs(heading2)
             .iter()
             .any(|r| r.text.contains("Ordered List")),
         "Third paragraph should contain 'Ordered List'"
@@ -498,7 +528,12 @@ fn test_list_malformed_fallback() {
         .iter()
         .flat_map(|b| {
             as_paragraph(b)
-                .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>())
+                .map(|p| {
+                    extract_runs(p)
+                        .iter()
+                        .map(|r| r.text.as_str())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_else(|| {
                     as_list_block(b)
                         .map(|l| {
@@ -507,7 +542,7 @@ fn test_list_malformed_fallback() {
                                 .flat_map(|item| {
                                     as_paragraph(&item.blocks[0])
                                         .map(|p| {
-                                            p.runs
+                                            extract_runs(p)
                                                 .iter()
                                                 .map(|r| r.text.as_str())
                                                 .collect::<Vec<_>>()

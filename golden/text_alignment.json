@@ -3,8 +3,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Left Aligned Text",
           "bold": false,
           "italic": false,
@@ -15,8 +16,9 @@
     {
       "type": "paragraph",
       "alignment": "center",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Centered Text",
           "bold": false,
           "italic": false,
@@ -27,8 +29,9 @@
     {
       "type": "paragraph",
       "alignment": "right",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Right Aligned Text",
           "bold": false,
           "italic": false,

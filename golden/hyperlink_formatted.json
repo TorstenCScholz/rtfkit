@@ -1,0 +1,48 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Click ",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "type": "hyperlink",
+          "url": "https://example.com",
+          "runs": [
+            {
+              "text": "Bold",
+              "bold": true,
+              "italic": false,
+              "underline": false
+            },
+            {
+              "text": " and ",
+              "bold": false,
+              "italic": false,
+              "underline": false
+            },
+            {
+              "text": "Italic",
+              "bold": false,
+              "italic": true,
+              "underline": false
+            }
+          ]
+        },
+        {
+          "type": "run",
+          "text": " to visit.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}

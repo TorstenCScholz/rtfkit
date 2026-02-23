@@ -3,8 +3,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "% Malformed RTF with deeply nested groups (valid but complex)% Tests parser's handling of deep nesting and group boundaries",
           "bold": false,
           "italic": false,
@@ -15,8 +16,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "First paragraph.",
           "bold": false,
           "italic": false,
@@ -27,8 +29,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "This bold text is in a group",
           "bold": true,
           "italic": false,
@@ -39,8 +42,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Normal text after group.",
           "bold": false,
           "italic": false,
@@ -51,8 +55,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Bold and italic",
           "bold": true,
           "italic": true,
@@ -63,8 +68,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Normal text.",
           "bold": false,
           "italic": false,
@@ -75,8 +81,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Double nested underline",
           "bold": false,
           "italic": false,
@@ -87,8 +94,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Normal text.",
           "bold": false,
           "italic": false,
@@ -99,8 +107,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Superscript bold italic",
           "bold": true,
           "italic": true,
@@ -111,8 +120,9 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Final paragraph.",
           "bold": false,
           "italic": false,

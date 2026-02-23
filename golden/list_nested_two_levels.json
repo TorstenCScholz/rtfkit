@@ -11,8 +11,9 @@
             {
               "type": "paragraph",
               "alignment": "left",
-              "runs": [
+              "inlines": [
                 {
+                  "type": "run",
                   "text": "Top level item one",
                   "bold": false,
                   "italic": false,
@@ -28,8 +29,9 @@
             {
               "type": "paragraph",
               "alignment": "left",
-              "runs": [
+              "inlines": [
                 {
+                  "type": "run",
                   "text": "Nested item one",
                   "bold": false,
                   "italic": false,
@@ -45,8 +47,9 @@
             {
               "type": "paragraph",
               "alignment": "left",
-              "runs": [
+              "inlines": [
                 {
+                  "type": "run",
                   "text": "Nested item two",
                   "bold": false,
                   "italic": false,
@@ -62,8 +65,9 @@
             {
               "type": "paragraph",
               "alignment": "left",
-              "runs": [
+              "inlines": [
                 {
+                  "type": "run",
                   "text": "Top level item two",
                   "bold": false,
                   "italic": false,
@@ -79,8 +83,9 @@
             {
               "type": "paragraph",
               "alignment": "left",
-              "runs": [
+              "inlines": [
                 {
+                  "type": "run",
                   "text": "Nested item three",
                   "bold": false,
                   "italic": false,
@@ -96,8 +101,9 @@
             {
               "type": "paragraph",
               "alignment": "left",
-              "runs": [
+              "inlines": [
                 {
+                  "type": "run",
                   "text": "Top level item three",
                   "bold": false,
                   "italic": false,

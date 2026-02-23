@@ -5,6 +5,33 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - Unreleased
+
+### Added
+
+#### Hyperlink Support
+- First-class hyperlink support in RTF-to-IR-to-output pipeline
+- New IR types: `Inline` enum with `Run` and `Hyperlink` variants, `Hyperlink` struct
+- HYPERLINK field parsing: `{\field{\*\fldinst HYPERLINK "url"}{\fldrslt text}}`
+- DOCX output: `<w:hyperlink>` elements with external relationship entries
+- HTML output: `<a href>` elements with `rtf-link` class and URL sanitization
+- PDF output: Typst `#link()` syntax for clickable links
+- URL sanitization for HTML output (blocks `javascript:`, `data:`, `vbscript:` schemes)
+- 6 new hyperlink test fixtures: simple, formatted, multiple, in_table, unsupported_field, missing_fldrslt
+- Golden IR snapshots for all hyperlink fixtures
+
+### Changed
+
+- `Paragraph.runs` renamed to `Paragraph.inlines` (breaking change to IR JSON format)
+- HYPERLINK fields no longer emit `DroppedContent` warnings in strict mode
+- Non-HYPERLINK fields continue to emit `DroppedContent` warnings
+
+### Migration Notes
+
+- IR JSON format has changed: `runs` array renamed to `inlines`, containing `{"type": "run", ...}` or `{"type": "hyperlink", ...}` objects
+- External consumers of IR JSON should handle the new `inlines` field and `hyperlink` type
+- Golden IR snapshots need regeneration: `UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests`
+
 ## [0.6.0] - Unreleased
 
 ### Added

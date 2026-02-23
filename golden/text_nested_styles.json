@@ -3,38 +3,44 @@
     {
       "type": "paragraph",
       "alignment": "left",
-      "runs": [
+      "inlines": [
         {
+          "type": "run",
           "text": "Normal text ",
           "bold": false,
           "italic": false,
           "underline": false
         },
         {
+          "type": "run",
           "text": "bold text ",
           "bold": true,
           "italic": false,
           "underline": false
         },
         {
+          "type": "run",
           "text": "bold and italic",
           "bold": true,
           "italic": true,
           "underline": false
         },
         {
+          "type": "run",
           "text": " back to bold ",
           "bold": false,
           "italic": false,
           "underline": false
         },
         {
+          "type": "run",
           "text": "just italic",
           "bold": false,
           "italic": true,
           "underline": false
         },
         {
+          "type": "run",
           "text": " normal again",
           "bold": false,
           "italic": false,

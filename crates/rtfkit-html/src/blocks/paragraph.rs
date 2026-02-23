@@ -3,21 +3,29 @@
 //! This module handles converting IR paragraphs to HTML with proper
 //! semantic tags and run merging.
 
-use rtfkit_core::{Paragraph, Run};
+use rtfkit_core::{Hyperlink, Inline, Paragraph, Run};
 
+use crate::escape::escape_attribute;
 use crate::serialize::HtmlBuffer;
 use crate::style::alignment_class;
 #[cfg(test)]
 use rtfkit_core::Alignment;
 
+/// Checks if a URL scheme is safe for HTML href attributes.
+///
+/// Only allows http, https, and mailto schemes to prevent XSS attacks.
+fn is_safe_url(url: &str) -> bool {
+    let url_lower = url.trim().to_ascii_lowercase();
+    url_lower.starts_with("http://")
+        || url_lower.starts_with("https://")
+        || url_lower.starts_with("mailto:")
+}
+
 /// Converts a paragraph to HTML.
 ///
 /// Emits a `<p>` element with `rtf-p` class and appropriate alignment class if needed.
-/// Runs are merged when they have identical formatting to reduce noise.
+/// Inlines are processed in order, with hyperlinks emitting `<a href>` tags.
 pub fn paragraph_to_html(para: &Paragraph, buf: &mut HtmlBuffer) {
-    // Merge adjacent runs with identical formatting
-    let merged_runs = merge_runs(&para.runs);
-
     // Build class attribute - always include rtf-p, add alignment if non-default
     let mut classes: Vec<&'static str> = vec!["rtf-p"];
     if let Some(align_class) = alignment_class(para.alignment) {
@@ -28,46 +36,48 @@ pub fn paragraph_to_html(para: &Paragraph, buf: &mut HtmlBuffer) {
 
     buf.push_open_tag("p", &attrs);
 
-    // Emit merged runs
-    for run in &merged_runs {
-        run_to_html(run, buf);
+    // Emit inlines in order, handling hyperlinks specially
+    for inline in &para.inlines {
+        match inline {
+            Inline::Run(run) => {
+                run_to_html(run, buf);
+            }
+            Inline::Hyperlink(hyperlink) => {
+                hyperlink_to_html(hyperlink, buf);
+            }
+        }
     }
 
     buf.push_close_tag("p");
 }
 
-/// Merges adjacent runs with identical formatting.
+/// Converts a hyperlink to HTML.
 ///
-/// This reduces noisy output by combining consecutive runs that have
-/// the same bold, italic, underline, font_size, and color attributes.
-fn merge_runs(runs: &[Run]) -> Vec<Run> {
-    if runs.is_empty() {
-        return Vec::new();
-    }
+/// Emits an `<a href="...">` element with `rtf-link` class.
+/// URLs are sanitized to reject dangerous schemes (javascript:, data:, vbscript:).
+/// If the URL is unsafe, the hyperlink content is emitted as plain text.
+fn hyperlink_to_html(hyperlink: &Hyperlink, buf: &mut HtmlBuffer) {
+    let normalized_url = hyperlink.url.trim();
 
-    let mut result = Vec::new();
-    let mut current = runs[0].clone();
-
-    for run in runs.iter().skip(1) {
-        // Check if formatting is identical
-        if current.bold == run.bold
-            && current.italic == run.italic
-            && current.underline == run.underline
-            && current.font_size == run.font_size
-            && current.color == run.color
-        {
-            // Merge: append text to current run
-            current.text.push_str(&run.text);
-        } else {
-            // Different formatting: push current and start new
-            result.push(current);
-            current = run.clone();
+    // Check if URL is safe
+    if !is_safe_url(normalized_url) {
+        // Unsafe URL: emit content as plain text (security fallback)
+        for run in &hyperlink.runs {
+            run_to_html(run, buf);
         }
+        return;
     }
 
-    // Don't forget the last run
-    result.push(current);
-    result
+    // Safe URL: emit proper hyperlink
+    let escaped_url = escape_attribute(normalized_url);
+    buf.push_raw(&format!("<a href=\"{}\" class=\"rtf-link\">", escaped_url));
+
+    // Emit runs inside the hyperlink
+    for run in &hyperlink.runs {
+        run_to_html(run, buf);
+    }
+
+    buf.push_raw("</a>");
 }
 
 /// Converts a run to HTML with semantic tags.
@@ -185,7 +195,7 @@ mod tests {
     fn paragraph_with_center_alignment() {
         let para = Paragraph {
             alignment: Alignment::Center,
-            runs: vec![Run::new("centered")],
+            inlines: vec![Inline::Run(Run::new("centered"))],
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -199,7 +209,7 @@ mod tests {
     fn paragraph_with_right_alignment() {
         let para = Paragraph {
             alignment: Alignment::Right,
-            runs: vec![Run::new("right")],
+            inlines: vec![Inline::Run(Run::new("right"))],
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -213,7 +223,7 @@ mod tests {
     fn paragraph_with_justify_alignment() {
         let para = Paragraph {
             alignment: Alignment::Justify,
-            runs: vec![Run::new("justified")],
+            inlines: vec![Inline::Run(Run::new("justified"))],
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -227,7 +237,7 @@ mod tests {
     fn paragraph_with_left_alignment_no_class() {
         let para = Paragraph {
             alignment: Alignment::Left,
-            runs: vec![Run::new("left")],
+            inlines: vec![Inline::Run(Run::new("left"))],
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -248,25 +258,25 @@ mod tests {
     }
 
     #[test]
-    fn run_merging_identical_formatting() {
+    fn consecutive_runs_same_formatting() {
         let run1 = Run::new("Hello ");
         let run2 = Run::new("World");
         let para = Paragraph::from_runs(vec![run1, run2]);
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
-        // Should merge into single text node
+        // Runs are emitted separately (no merging at paragraph level)
         assert_eq!(buf.as_str(), r#"<p class="rtf-p">Hello World</p>"#);
     }
 
     #[test]
-    fn run_merging_different_formatting() {
+    fn consecutive_runs_different_formatting() {
         let run1 = Run::new("Hello ");
         let mut run2 = Run::new("World");
         run2.bold = true;
         let para = Paragraph::from_runs(vec![run1, run2]);
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
-        // Should NOT merge - different formatting
+        // Different formatting - separate elements
         assert_eq!(
             buf.as_str(),
             r#"<p class="rtf-p">Hello <strong>World</strong></p>"#
@@ -274,7 +284,7 @@ mod tests {
     }
 
     #[test]
-    fn run_merging_mixed_formatting() {
+    fn mixed_formatting_runs() {
         let run1 = Run::new("normal ");
         let mut run2 = Run::new("bold ");
         run2.bold = true;
@@ -290,7 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn run_merging_consecutive_bold() {
+    fn consecutive_bold_runs() {
         let mut run1 = Run::new("Hello ");
         run1.bold = true;
         let mut run2 = Run::new("World");
@@ -298,46 +308,200 @@ mod tests {
         let para = Paragraph::from_runs(vec![run1, run2]);
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
-        // Should merge into single strong element
+        // Both runs are bold - emitted as separate strong elements
         assert_eq!(
             buf.as_str(),
-            r#"<p class="rtf-p"><strong>Hello World</strong></p>"#
+            r#"<p class="rtf-p"><strong>Hello </strong><strong>World</strong></p>"#
+        );
+    }
+
+    // =========================================================================
+    // Hyperlink tests
+    // =========================================================================
+
+    #[test]
+    fn simple_hyperlink() {
+        let hyperlink = Hyperlink {
+            url: "https://example.com".to_string(),
+            runs: vec![Run::new("Example Site")],
+        };
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Hyperlink(hyperlink)],
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><a href="https://example.com" class="rtf-link">Example Site</a></p>"#
         );
     }
 
     #[test]
-    fn merge_runs_empty() {
-        let runs: Vec<Run> = Vec::new();
-        let merged = merge_runs(&runs);
-        assert!(merged.is_empty());
+    fn hyperlink_with_formatted_text() {
+        let mut bold_run = Run::new("Bold");
+        bold_run.bold = true;
+        let mut italic_run = Run::new("Italic");
+        italic_run.italic = true;
+        let hyperlink = Hyperlink {
+            url: "https://example.com".to_string(),
+            runs: vec![bold_run, italic_run],
+        };
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Hyperlink(hyperlink)],
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><a href="https://example.com" class="rtf-link"><strong>Bold</strong><em>Italic</em></a></p>"#
+        );
     }
 
     #[test]
-    fn merge_runs_single() {
-        let runs = vec![Run::new("single")];
-        let merged = merge_runs(&runs);
-        assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].text, "single");
+    fn hyperlink_mixed_with_text() {
+        let hyperlink = Hyperlink {
+            url: "https://example.com".to_string(),
+            runs: vec![Run::new("link")],
+        };
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![
+                Inline::Run(Run::new("Visit ")),
+                Inline::Hyperlink(hyperlink),
+                Inline::Run(Run::new(" for more.")),
+            ],
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p">Visit <a href="https://example.com" class="rtf-link">link</a> for more.</p>"#
+        );
     }
 
     #[test]
-    fn merge_runs_all_same() {
-        let runs = vec![Run::new("a"), Run::new("b"), Run::new("c")];
-        let merged = merge_runs(&runs);
-        assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].text, "abc");
+    fn hyperlink_javascript_blocked() {
+        let hyperlink = Hyperlink {
+            url: "javascript:alert('xss')".to_string(),
+            runs: vec![Run::new("Evil Link")],
+        };
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Hyperlink(hyperlink)],
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        // JavaScript URL should be blocked - content emitted as plain text
+        assert_eq!(buf.as_str(), r#"<p class="rtf-p">Evil Link</p>"#);
     }
 
     #[test]
-    fn merge_runs_alternating() {
-        let mut run1 = Run::new("a");
-        run1.bold = true;
-        let run2 = Run::new("b");
-        let mut run3 = Run::new("c");
-        run3.bold = true;
-        let runs = vec![run1, run2, run3];
-        let merged = merge_runs(&runs);
-        // run1 and run3 should NOT merge (run2 in between with different formatting)
-        assert_eq!(merged.len(), 3);
+    fn hyperlink_data_uri_blocked() {
+        let hyperlink = Hyperlink {
+            url: "data:text/html,<script>alert('xss')</script>".to_string(),
+            runs: vec![Run::new("Data Link")],
+        };
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Hyperlink(hyperlink)],
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        // Data URL should be blocked - content emitted as plain text
+        assert_eq!(buf.as_str(), r#"<p class="rtf-p">Data Link</p>"#);
+    }
+
+    #[test]
+    fn hyperlink_mailto_allowed() {
+        let hyperlink = Hyperlink {
+            url: "mailto:test@example.com".to_string(),
+            runs: vec![Run::new("Email Us")],
+        };
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Hyperlink(hyperlink)],
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        // mailto: should be allowed
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><a href="mailto:test@example.com" class="rtf-link">Email Us</a></p>"#
+        );
+    }
+
+    #[test]
+    fn hyperlink_url_escaping() {
+        let hyperlink = Hyperlink {
+            url: "https://example.com/search?q=hello&lang=en".to_string(),
+            runs: vec![Run::new("Search")],
+        };
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Hyperlink(hyperlink)],
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        // URL should be escaped in href attribute
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><a href="https://example.com/search?q=hello&amp;lang=en" class="rtf-link">Search</a></p>"#
+        );
+    }
+
+    // =========================================================================
+    // URL safety tests
+    // =========================================================================
+
+    #[test]
+    fn safe_url_http() {
+        assert!(is_safe_url("http://example.com"));
+    }
+
+    #[test]
+    fn safe_url_https() {
+        assert!(is_safe_url("https://example.com"));
+    }
+
+    #[test]
+    fn safe_url_mailto() {
+        assert!(is_safe_url("mailto:test@example.com"));
+    }
+
+    #[test]
+    fn unsafe_url_relative() {
+        assert!(!is_safe_url("/page"));
+        assert!(!is_safe_url("page.html"));
+    }
+
+    #[test]
+    fn unsafe_url_javascript() {
+        assert!(!is_safe_url("javascript:alert(1)"));
+        assert!(!is_safe_url("JAVASCRIPT:alert(1)"));
+        assert!(!is_safe_url("JavaScript:alert(1)"));
+    }
+
+    #[test]
+    fn unsafe_url_data() {
+        assert!(!is_safe_url("data:text/html,<script>"));
+        assert!(!is_safe_url("DATA:text/html,<script>"));
+    }
+
+    #[test]
+    fn unsafe_url_vbscript() {
+        assert!(!is_safe_url("vbscript:msgbox(1)"));
+        assert!(!is_safe_url("VBSCRIPT:msgbox(1)"));
+    }
+
+    #[test]
+    fn unsafe_url_with_leading_space() {
+        assert!(!is_safe_url(" javascript:alert(1)"));
+    }
+
+    #[test]
+    fn unsafe_url_ftp() {
+        assert!(!is_safe_url("ftp://example.com/file"));
     }
 }
