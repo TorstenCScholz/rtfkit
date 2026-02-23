@@ -22,6 +22,15 @@ fn save_snapshot(name: &str, content: &str) {
         .unwrap_or_else(|_| panic!("Failed to save snapshot: {}", name));
 }
 
+fn assert_snapshot(name: &str, actual: &str) {
+    if std::env::var("UPDATE_SNAPSHOTS").ok().as_deref() == Some("1") {
+        save_snapshot(name, actual);
+        return;
+    }
+    let expected = load_snapshot(name);
+    assert_eq!(actual, expected);
+}
+
 #[test]
 fn test_snapshot_simple_paragraph() {
     let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
@@ -31,8 +40,7 @@ fn test_snapshot_simple_paragraph() {
     let options = RenderOptions::default();
     let output = map_document(&doc, &options);
 
-    let expected = load_snapshot("simple_paragraph");
-    assert_eq!(output.typst_source, expected);
+    assert_snapshot("simple_paragraph", &output.typst_source);
 }
 
 #[test]
@@ -59,8 +67,7 @@ fn test_snapshot_formatted_paragraph() {
     let options = RenderOptions::default();
     let output = map_document(&doc, &options);
 
-    let expected = load_snapshot("formatted_paragraph");
-    assert_eq!(output.typst_source, expected);
+    assert_snapshot("formatted_paragraph", &output.typst_source);
 }
 
 #[test]
@@ -84,8 +91,7 @@ fn test_snapshot_aligned_paragraphs() {
     let options = RenderOptions::default();
     let output = map_document(&doc, &options);
 
-    let expected = load_snapshot("aligned_paragraphs");
-    assert_eq!(output.typst_source, expected);
+    assert_snapshot("aligned_paragraphs", &output.typst_source);
 }
 
 #[test]
@@ -109,8 +115,7 @@ fn test_snapshot_bullet_list() {
     let options = RenderOptions::default();
     let output = map_document(&doc, &options);
 
-    let expected = load_snapshot("bullet_list");
-    assert_eq!(output.typst_source, expected);
+    assert_snapshot("bullet_list", &output.typst_source);
 }
 
 #[test]
@@ -134,8 +139,7 @@ fn test_snapshot_ordered_list() {
     let options = RenderOptions::default();
     let output = map_document(&doc, &options);
 
-    let expected = load_snapshot("ordered_list");
-    assert_eq!(output.typst_source, expected);
+    assert_snapshot("ordered_list", &output.typst_source);
 }
 
 #[test]
@@ -167,8 +171,7 @@ fn test_snapshot_nested_list() {
     let options = RenderOptions::default();
     let output = map_document(&doc, &options);
 
-    let expected = load_snapshot("nested_list");
-    assert_eq!(output.typst_source, expected);
+    assert_snapshot("nested_list", &output.typst_source);
 }
 
 #[test]
@@ -189,8 +192,7 @@ fn test_snapshot_simple_table() {
     let options = RenderOptions::default();
     let output = map_document(&doc, &options);
 
-    let expected = load_snapshot("simple_table");
-    assert_eq!(output.typst_source, expected);
+    assert_snapshot("simple_table", &output.typst_source);
 }
 
 #[test]
@@ -221,8 +223,7 @@ fn test_snapshot_table_with_merges() {
     let options = RenderOptions::default();
     let output = map_document(&doc, &options);
 
-    let expected = load_snapshot("table_with_merges");
-    assert_eq!(output.typst_source, expected);
+    assert_snapshot("table_with_merges", &output.typst_source);
 }
 
 #[test]
@@ -254,8 +255,7 @@ fn test_snapshot_mixed_document() {
     let options = RenderOptions::default();
     let output = map_document(&doc, &options);
 
-    let expected = load_snapshot("mixed_document");
-    assert_eq!(output.typst_source, expected);
+    assert_snapshot("mixed_document", &output.typst_source);
 }
 
 #[test]
@@ -269,8 +269,7 @@ fn test_snapshot_special_characters() {
     let options = RenderOptions::default();
     let output = map_document(&doc, &options);
 
-    let expected = load_snapshot("special_characters");
-    assert_eq!(output.typst_source, expected);
+    assert_snapshot("special_characters", &output.typst_source);
 }
 
 #[test]
@@ -303,6 +302,5 @@ fn test_snapshot_determinism_verification() {
     assert_eq!(output2.typst_source, output3.typst_source);
 
     // Also verify against snapshot
-    let expected = load_snapshot("determinism_verification");
-    assert_eq!(output1.typst_source, expected);
+    assert_snapshot("determinism_verification", &output1.typst_source);
 }

@@ -13,6 +13,7 @@ rtfkit provides a complete RTF-to-DOCX, RTF-to-HTML, and RTF-to-PDF conversion p
 - **Table support** - rows, cells, horizontal/vertical merges, cell alignment
 - **HTML output** - semantic-first HTML5 output with `--to html`
 - **PDF output** - In-process PDF generation via embedded Typst renderer with `--to pdf`
+- **Style profiles** - Consistent cross-format styling with `--style-profile` (classic, report, compact)
 - **Conversion reports** - JSON or text format with warnings and statistics
 - **IR emission** - `--emit-ir` for snapshot/debug workflows
 - **Parser limits** - safety limits for input size, depth, and warnings
@@ -69,6 +70,23 @@ rtfkit convert document.rtf --to html --html-css none --output document.html
 # Append custom CSS
 rtfkit convert document.rtf --to html --html-css-file custom.css --output document.html
 ```
+
+### Style Profiles
+
+Use `--style-profile` for consistent styling across HTML and PDF outputs:
+
+```bash
+# Use the report profile (default) - optimized for long-form documents
+rtfkit convert document.rtf --to html --style-profile report --output document.html
+
+# Use the classic profile - conservative, neutral styling
+rtfkit convert document.rtf --to pdf --style-profile classic --output document.pdf
+
+# Use the compact profile - dense styling for enterprise output
+rtfkit convert document.rtf --to pdf --style-profile compact --output document.pdf
+```
+
+Built-in profiles: `classic`, `report` (default), `compact`
 
 See [HTML Styling Reference](docs/reference/html-styling.md) for CSS classes and customization options.
 

@@ -3,6 +3,8 @@
 //! This module provides [`RenderOptions`], [`PageSize`], and [`Margins`]
 //! for controlling PDF output behavior.
 
+use rtfkit_style_tokens::StyleProfileName;
+
 /// Page size options for PDF output.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum PageSize {
@@ -85,8 +87,9 @@ pub struct DeterminismOptions {
 ///
 /// ```rust
 /// use rtfkit_render_typst::{RenderOptions, PageSize, Margins, DeterminismOptions};
+/// use rtfkit_style_tokens::StyleProfileName;
 ///
-/// // Default options: A4 page size, 1-inch margins
+/// // Default options: A4 page size, 1-inch margins, Report style profile
 /// let options = RenderOptions::default();
 ///
 /// // Custom options for deterministic output
@@ -102,6 +105,7 @@ pub struct DeterminismOptions {
 ///         fixed_timestamp: Some("2024-01-01T00:00:00Z".to_string()),
 ///         normalize_metadata: true,
 ///     },
+///     style_profile: StyleProfileName::Report,
 /// };
 /// ```
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -110,10 +114,19 @@ pub struct RenderOptions {
     pub page_size: PageSize,
 
     /// Page margins in millimeters.
+    ///
+    /// When set to [`Margins::default()`], profile layout margins are used.
+    /// Any non-default value is treated as an explicit override.
     pub margins: Margins,
 
     /// Determinism controls for reproducible output.
     pub determinism: DeterminismOptions,
+
+    /// Style profile for Typst preamble generation (default: Report).
+    ///
+    /// The style profile controls typography, colors, spacing, and component
+    /// styles in the generated Typst output.
+    pub style_profile: StyleProfileName,
 }
 
 #[cfg(test)]
@@ -126,6 +139,7 @@ mod tests {
         assert_eq!(options.page_size, PageSize::A4);
         assert!(options.determinism.fixed_timestamp.is_none());
         assert!(!options.determinism.normalize_metadata);
+        assert_eq!(options.style_profile, StyleProfileName::Report);
     }
 
     #[test]

@@ -61,6 +61,9 @@ pub use error::HtmlWriterError;
 pub use options::{CssMode, HtmlWriterOptions};
 pub use writer::{HtmlWriterOutput, document_to_html, document_to_html_with_warnings};
 
+// Re-export style profile types for convenience
+pub use rtfkit_style_tokens::StyleProfileName;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,6 +106,7 @@ mod tests {
             emit_document_wrapper: false,
             css_mode: CssMode::None,
             custom_css: None,
+            style_profile: StyleProfileName::Report,
         };
 
         let html = document_to_html(&doc, &options).unwrap();

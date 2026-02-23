@@ -23,6 +23,61 @@ Or using the short flag:
 rtfkit convert input.rtf --to pdf -o output.pdf
 ```
 
+## Style Profiles
+
+PDF output uses **style profiles** to control typography, spacing, and layout. Style profiles ensure consistent visual identity between HTML and PDF outputs from the same source document.
+
+### Built-in Profiles
+
+Three built-in profiles are available:
+
+| Profile | Description |
+|---------|-------------|
+| `classic` | Conservative, neutral styling close to original RTF appearance |
+| `report` | Strong visual hierarchy optimized for long-form documents (default) |
+| `compact` | Dense styling for enterprise output with reduced whitespace |
+
+### CLI Usage
+
+Use the `--style-profile` flag to select a profile:
+
+```bash
+# Use the report profile (default)
+rtfkit convert document.rtf --to pdf --output document.pdf
+
+# Use the classic profile
+rtfkit convert document.rtf --to pdf --style-profile classic --output document.pdf
+
+# Use the compact profile
+rtfkit convert document.rtf --to pdf --style-profile compact --output document.pdf
+```
+
+### Typst Preamble Generation
+
+When generating PDF output, the style profile is converted to a Typst preamble that defines:
+
+- **Typography**: Body text font, size, and line height; heading fonts and sizes
+- **Heading hierarchy**: Spacing above and below headings, font weights
+- **List styling**: Indentation steps, item spacing, marker styles
+- **Table styling**: Border widths, cell padding, header emphasis, row striping
+- **Page layout**: Margins, content width
+
+The `report` profile provides particularly noticeable improvements for PDF output:
+- Clear visual hierarchy with distinct heading levels
+- Improved table readability with header styling
+- Consistent list indentation and spacing
+- Professional page margins
+
+### Cross-Format Consistency
+
+Using the same style profile for both HTML and PDF ensures visual consistency:
+
+```bash
+# Generate both outputs with the same profile
+rtfkit convert document.rtf --to html --style-profile report --output document.html
+rtfkit convert document.rtf --to pdf --style-profile report --output document.pdf
+```
+
 ## PDF-Specific Options
 
 ### `--pdf-page-size <size>`

@@ -6,7 +6,7 @@
 use crate::error::HtmlWriterError;
 use crate::options::{CssMode, HtmlWriterOptions};
 use crate::serialize::HtmlBuffer;
-use crate::style::default_stylesheet;
+use crate::style::stylesheet_for_profile;
 use rtfkit_core::{Block, Document};
 
 /// HTML rendering result with writer-level semantic degradation reasons.
@@ -83,7 +83,7 @@ fn emit_document_start(buf: &mut HtmlBuffer, options: &HtmlWriterOptions) {
     match options.css_mode {
         CssMode::Default => {
             buf.push_raw("<style>\n");
-            buf.push_raw(default_stylesheet());
+            buf.push_raw(&stylesheet_for_profile(&options.style_profile));
             buf.push_raw("\n</style>\n");
         }
         CssMode::None => {
@@ -148,6 +148,7 @@ fn emit_block(
 mod tests {
     use super::*;
     use rtfkit_core::{ListBlock, ListItem, ListKind, Paragraph, Run};
+    use rtfkit_style_tokens::StyleProfileName;
 
     #[test]
     fn empty_document_with_wrapper() {
@@ -171,6 +172,7 @@ mod tests {
             emit_document_wrapper: false,
             css_mode: CssMode::None,
             custom_css: None,
+            style_profile: StyleProfileName::Report,
         };
         let html = document_to_html(&doc, &options).unwrap();
 
@@ -197,6 +199,7 @@ mod tests {
             emit_document_wrapper: true,
             css_mode: CssMode::None,
             custom_css: None,
+            style_profile: StyleProfileName::Report,
         };
         let html = document_to_html(&doc, &options).unwrap();
 
@@ -210,6 +213,7 @@ mod tests {
             emit_document_wrapper: true,
             css_mode: CssMode::None,
             custom_css: Some("body { background: #fff; }".to_string()),
+            style_profile: StyleProfileName::Report,
         };
         let html = document_to_html(&doc, &options).unwrap();
 
@@ -228,6 +232,7 @@ mod tests {
             emit_document_wrapper: true,
             css_mode: CssMode::Default,
             custom_css: Some("body { color: red; }".to_string()),
+            style_profile: StyleProfileName::Report,
         };
         let html = document_to_html(&doc, &options).unwrap();
 
@@ -280,6 +285,7 @@ mod tests {
             emit_document_wrapper: true,
             css_mode: CssMode::None,
             custom_css: None,
+            style_profile: StyleProfileName::Report,
         };
         let html = document_to_html(&doc, &options).unwrap();
 
@@ -302,6 +308,7 @@ mod tests {
             emit_document_wrapper: true,
             css_mode: CssMode::Default,
             custom_css: Some("/* custom css */".to_string()),
+            style_profile: StyleProfileName::Report,
         };
         let html = document_to_html(&doc, &options).unwrap();
 
@@ -328,6 +335,7 @@ mod tests {
             emit_document_wrapper: true,
             css_mode: CssMode::Default,
             custom_css: Some(".custom { color: red; }".to_string()),
+            style_profile: StyleProfileName::Report,
         };
         let html = document_to_html(&doc, &options).unwrap();
 
@@ -353,6 +361,7 @@ mod tests {
             emit_document_wrapper: true,
             css_mode: CssMode::None,
             custom_css: Some(".my-style { margin: 0; }".to_string()),
+            style_profile: StyleProfileName::Report,
         };
         let html = document_to_html(&doc, &options).unwrap();
 
@@ -404,6 +413,7 @@ mod tests {
             emit_document_wrapper: true,
             css_mode: CssMode::Default,
             custom_css: Some(".custom {}".to_string()),
+            style_profile: StyleProfileName::Report,
         };
 
         let html1 = document_to_html(&doc, &options).unwrap();
@@ -413,5 +423,35 @@ mod tests {
             html1, html2,
             "HTML output with custom CSS should be deterministic"
         );
+    }
+
+    /// Test that different style profiles produce different CSS.
+    #[test]
+    fn different_style_profiles_produce_different_css() {
+        let doc = Document::new();
+
+        let classic_options = HtmlWriterOptions {
+            style_profile: StyleProfileName::Classic,
+            ..HtmlWriterOptions::default()
+        };
+        let report_options = HtmlWriterOptions::default();
+        let compact_options = HtmlWriterOptions {
+            style_profile: StyleProfileName::Compact,
+            ..HtmlWriterOptions::default()
+        };
+
+        let classic_html = document_to_html(&doc, &classic_options).unwrap();
+        let report_html = document_to_html(&doc, &report_options).unwrap();
+        let compact_html = document_to_html(&doc, &compact_options).unwrap();
+
+        // All profiles use Libertinus Serif as the body font
+        assert!(classic_html.contains("Libertinus Serif"));
+        assert!(report_html.contains("Libertinus Serif"));
+        // Classic uses 12pt body size
+        assert!(classic_html.contains("--rtfkit-size-body: 12pt;"));
+        // Report uses 11pt body size
+        assert!(report_html.contains("--rtfkit-size-body: 11pt;"));
+        // Compact uses 9pt body size
+        assert!(compact_html.contains("--rtfkit-size-body: 9pt;"));
     }
 }

@@ -20,9 +20,10 @@ mod paragraph;
 mod table;
 
 use rtfkit_core::{Block as IrBlock, Document};
+use rtfkit_style_tokens::{StyleProfile, StyleProfileName, builtins, serialize::to_typst_preamble};
 
 use crate::error::WarningKind;
-use crate::options::RenderOptions;
+use crate::options::{Margins, RenderOptions};
 
 pub use list::{ListOutput, map_list};
 pub use paragraph::{ParagraphOutput, map_paragraph};
@@ -79,6 +80,14 @@ pub struct BlockOutput {
     pub typst_source: String,
     /// Warnings generated during mapping.
     pub warnings: Vec<MappingWarning>,
+}
+
+/// Resolve a style profile name to an actual StyleProfile.
+///
+/// This function maps the profile name to the corresponding built-in profile.
+/// For custom profiles, it falls back to the Report profile (MVP behavior).
+pub fn resolve_style_profile(name: &StyleProfileName) -> StyleProfile {
+    builtins::resolve_profile(name)
 }
 
 /// Map a rtfkit-core Document to Typst source code.
@@ -154,8 +163,14 @@ pub fn map_block(block: &IrBlock) -> BlockOutput {
 fn generate_document_source(block_sources: &[String], options: &RenderOptions) -> String {
     let mut lines = Vec::new();
 
-    // Add page setup
-    lines.push(generate_page_setup(options));
+    // Add style preamble from profile
+    let profile = resolve_style_profile(&options.style_profile);
+    let preamble = to_typst_preamble(&profile);
+    lines.push(preamble);
+
+    // Apply page geometry in one place to avoid option/profile drift.
+    let margins = effective_margins(options, &profile);
+    lines.push(generate_page_setup(options, &margins));
     lines.push(String::new()); // Empty line after setup
 
     // Add content blocks
@@ -169,18 +184,29 @@ fn generate_document_source(block_sources: &[String], options: &RenderOptions) -
     lines.join("\n")
 }
 
-/// Generate Typst page setup directives.
-fn generate_page_setup(options: &RenderOptions) -> String {
+/// Generate Typst page size setup directives.
+///
+/// Note: Margins are set via the style preamble. This function only sets
+/// the page width and height.
+fn generate_page_setup(options: &RenderOptions, margins: &Margins) -> String {
     let (width_mm, height_mm) = options.page_size.dimensions_mm();
-    let margins = &options.margins;
-
-    // Convert mm to Typst units (1mm = 1mm in Typst)
-    // Note: We use width and height directly instead of "paper" parameter
-    // because the paper parameter requires the standard library to be available
     format!(
         "#set page(\n  width: {}mm,\n  height: {}mm,\n  margin: (top: {}mm, bottom: {}mm, left: {}mm, right: {}mm),\n)",
         width_mm, height_mm, margins.top, margins.bottom, margins.left, margins.right
     )
+}
+
+fn effective_margins(options: &RenderOptions, profile: &StyleProfile) -> Margins {
+    if options.margins == Margins::default() {
+        Margins {
+            top: profile.layout.page_margin_top_mm,
+            bottom: profile.layout.page_margin_bottom_mm,
+            left: profile.layout.page_margin_left_mm,
+            right: profile.layout.page_margin_right_mm,
+        }
+    } else {
+        options.margins
+    }
 }
 
 /// Convert PageSize to Typst paper name.
@@ -207,7 +233,9 @@ mod tests {
         let options = RenderOptions::default();
         let output = map_document(&doc, &options);
 
-        // Should have page setup even for empty document
+        // Should have style preamble
+        assert!(output.typst_source.contains("// rtfkit style profile:"));
+        // Should have page setup
         assert!(output.typst_source.contains("#set page("));
         assert!(output.warnings.is_empty());
     }
@@ -221,6 +249,12 @@ mod tests {
         let options = RenderOptions::default();
         let output = map_document(&doc, &options);
 
+        // Should have style preamble
+        assert!(
+            output
+                .typst_source
+                .contains("// rtfkit style profile: report")
+        );
         assert!(output.typst_source.contains("#set page("));
         assert!(output.typst_source.contains("Hello, World!"));
     }
@@ -313,7 +347,7 @@ mod tests {
             ..Default::default()
         };
 
-        let setup = generate_page_setup(&options);
+        let setup = generate_page_setup(&options, &Margins::default());
 
         // A4 dimensions
         assert!(setup.contains("210mm"));
@@ -327,7 +361,7 @@ mod tests {
             ..Default::default()
         };
 
-        let setup = generate_page_setup(&options);
+        let setup = generate_page_setup(&options, &Margins::default());
 
         // Letter dimensions
         assert!(setup.contains("215.9mm"));
@@ -347,12 +381,45 @@ mod tests {
             ..Default::default()
         };
 
-        let setup = generate_page_setup(&options);
+        let setup = generate_page_setup(&options, &options.margins);
 
         assert!(setup.contains("top: 10mm"));
         assert!(setup.contains("bottom: 15mm"));
         assert!(setup.contains("left: 20mm"));
         assert!(setup.contains("right: 25mm"));
+    }
+
+    #[test]
+    fn test_effective_margins_uses_profile_defaults() {
+        let options = RenderOptions {
+            style_profile: StyleProfileName::Compact,
+            ..Default::default()
+        };
+        let profile = resolve_style_profile(&options.style_profile);
+        let margins = effective_margins(&options, &profile);
+
+        assert_eq!(margins.top, profile.layout.page_margin_top_mm);
+        assert_eq!(margins.left, profile.layout.page_margin_left_mm);
+    }
+
+    #[test]
+    fn test_effective_margins_respects_explicit_override() {
+        let options = RenderOptions {
+            margins: Margins {
+                top: 11.0,
+                bottom: 12.0,
+                left: 13.0,
+                right: 14.0,
+            },
+            ..Default::default()
+        };
+        let profile = resolve_style_profile(&options.style_profile);
+        let margins = effective_margins(&options, &profile);
+
+        assert_eq!(margins.top, 11.0);
+        assert_eq!(margins.bottom, 12.0);
+        assert_eq!(margins.left, 13.0);
+        assert_eq!(margins.right, 14.0);
     }
 
     #[test]
@@ -382,11 +449,88 @@ mod tests {
         let options = RenderOptions::default();
         let output = map_document(&doc, &options);
 
-        // Should have page setup but no content
+        // Should have style preamble and page setup but no content
+        assert!(output.typst_source.contains("// rtfkit style profile:"));
         assert!(output.typst_source.contains("#set page("));
-        // The empty paragraph should not add any content
-        // Just page setup + trailing newline
-        let trimmed = output.typst_source.trim();
-        assert!(trimmed.starts_with("#set page("));
+    }
+
+    #[test]
+    fn test_style_preamble_included() {
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
+            Run::new("Test"),
+        ]))]);
+
+        let options = RenderOptions::default();
+        let output = map_document(&doc, &options);
+
+        // Should contain style preamble elements
+        assert!(
+            output
+                .typst_source
+                .contains("// rtfkit style profile: report")
+        );
+        assert!(output.typst_source.contains("#set text("));
+        assert!(output.typst_source.contains("#set par("));
+        assert!(output.typst_source.contains("#set table("));
+        assert!(output.typst_source.contains("#set list("));
+    }
+
+    #[test]
+    fn test_different_style_profiles() {
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
+            Run::new("Test"),
+        ]))]);
+
+        // Test Report profile (default)
+        let options_report = RenderOptions {
+            style_profile: StyleProfileName::Report,
+            ..Default::default()
+        };
+        let output_report = map_document(&doc, &options_report);
+        assert!(
+            output_report
+                .typst_source
+                .contains("// rtfkit style profile: report")
+        );
+
+        // Test Classic profile
+        let options_classic = RenderOptions {
+            style_profile: StyleProfileName::Classic,
+            ..Default::default()
+        };
+        let output_classic = map_document(&doc, &options_classic);
+        assert!(
+            output_classic
+                .typst_source
+                .contains("// rtfkit style profile: classic")
+        );
+
+        // Test Compact profile
+        let options_compact = RenderOptions {
+            style_profile: StyleProfileName::Compact,
+            ..Default::default()
+        };
+        let output_compact = map_document(&doc, &options_compact);
+        assert!(
+            output_compact
+                .typst_source
+                .contains("// rtfkit style profile: compact")
+        );
+    }
+
+    #[test]
+    fn test_resolve_style_profile() {
+        let classic = resolve_style_profile(&StyleProfileName::Classic);
+        assert_eq!(classic.name, StyleProfileName::Classic);
+
+        let report = resolve_style_profile(&StyleProfileName::Report);
+        assert_eq!(report.name, StyleProfileName::Report);
+
+        let compact = resolve_style_profile(&StyleProfileName::Compact);
+        assert_eq!(compact.name, StyleProfileName::Compact);
+
+        // Custom falls back to Report
+        let custom = resolve_style_profile(&StyleProfileName::Custom("my-theme".to_string()));
+        assert_eq!(custom.name, StyleProfileName::Report);
     }
 }

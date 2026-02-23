@@ -11,6 +11,7 @@ use rtfkit_html::{CssMode, HtmlWriterOptions, document_to_html_with_warnings};
 use rtfkit_render_typst::{
     DeterminismOptions, Margins, PageSize, RenderOptions, document_to_pdf_with_warnings,
 };
+use rtfkit_style_tokens::StyleProfileName;
 use tracing::debug;
 
 /// RTF conversion toolkit - convert RTF files to various formats.
@@ -115,6 +116,10 @@ enum Commands {
         /// Fixed RFC3339 timestamp for deterministic PDF metadata
         #[arg(long, value_name = "RFC3339")]
         fixed_timestamp: Option<String>,
+
+        /// Style profile for HTML and PDF output (default: report)
+        #[arg(long, value_name = "PROFILE")]
+        style_profile: Option<String>,
     },
 }
 
@@ -124,6 +129,23 @@ const EXIT_PARSE_ERROR: u8 = 2;
 const EXIT_CONVERSION_ERROR: u8 = 3;
 const EXIT_STRICT_MODE: u8 = 4;
 const MAX_CUSTOM_CSS_BYTES: u64 = 1024 * 1024; // 1 MiB
+
+/// Parse and validate a style profile name.
+/// Returns the resolved StyleProfileName or an error message.
+fn parse_style_profile(input: &Option<String>) -> Result<StyleProfileName, String> {
+    match input {
+        None => Ok(StyleProfileName::default()), // Report
+        Some(s) => match s.to_lowercase().as_str() {
+            "classic" => Ok(StyleProfileName::Classic),
+            "report" => Ok(StyleProfileName::Report),
+            "compact" => Ok(StyleProfileName::Compact),
+            _ => Err(format!(
+                "Unknown style profile: '{}'. Valid options: classic, report, compact",
+                s
+            )),
+        },
+    }
+}
 
 struct ConvertRequest {
     input: PathBuf,
@@ -138,6 +160,7 @@ struct ConvertRequest {
     html_css_file: Option<PathBuf>,
     pdf_page_size: Option<String>,
     fixed_timestamp: Option<String>,
+    style_profile: Option<String>,
 }
 
 fn run() -> Result<ExitCode> {
@@ -164,6 +187,7 @@ fn run() -> Result<ExitCode> {
             html_css_file,
             pdf_page_size,
             fixed_timestamp,
+            style_profile,
         } => handle_convert(ConvertRequest {
             input,
             output,
@@ -177,6 +201,7 @@ fn run() -> Result<ExitCode> {
             html_css_file,
             pdf_page_size,
             fixed_timestamp,
+            style_profile,
         }),
     }
 }
@@ -195,7 +220,17 @@ fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
         html_css_file,
         pdf_page_size,
         fixed_timestamp,
+        style_profile,
     } = request;
+
+    // Parse and validate style profile if provided
+    let resolved_style_profile = match parse_style_profile(&style_profile) {
+        Ok(profile) => profile,
+        Err(error_msg) => {
+            eprintln!("Error: {}", error_msg);
+            return Ok(ExitCode::from(EXIT_PARSE_ERROR));
+        }
+    };
 
     // Resolve target format:
     // - Explicit --to takes precedence.
@@ -241,6 +276,12 @@ fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
     // PDF-specific flags are only valid with --to pdf.
     if resolved_to != Target::Pdf && (pdf_page_size.is_some() || fixed_timestamp.is_some()) {
         eprintln!("Error: --pdf-page-size and --fixed-timestamp are only valid with --to pdf");
+        return Ok(ExitCode::from(EXIT_PARSE_ERROR));
+    }
+
+    // Style profiles are not supported for DOCX output (MVP).
+    if resolved_to == Target::Docx && style_profile.is_some() {
+        eprintln!("Error: Style profiles are not supported for DOCX output");
         return Ok(ExitCode::from(EXIT_PARSE_ERROR));
     }
 
@@ -309,6 +350,7 @@ fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
                 strict,
                 html_css,
                 html_css_file.as_ref(),
+                resolved_style_profile,
             ),
             Target::Pdf => handle_pdf_output(
                 &document,
@@ -318,6 +360,7 @@ fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
                 strict,
                 pdf_page_size.as_deref(),
                 fixed_timestamp.as_deref(),
+                resolved_style_profile,
             ),
         };
     }
@@ -421,6 +464,7 @@ fn handle_docx_output(
 }
 
 /// Handle writing HTML output with validation and error handling
+#[allow(clippy::too_many_arguments)]
 fn handle_html_output(
     document: &Document,
     output_path: &Path,
@@ -429,6 +473,7 @@ fn handle_html_output(
     strict: bool,
     html_css: Option<CssModeArg>,
     html_css_file: Option<&PathBuf>,
+    style_profile: StyleProfileName,
 ) -> Result<ExitCode> {
     if let Some(code) = validate_output_path(
         output_path,
@@ -444,6 +489,7 @@ fn handle_html_output(
     // Build HTML writer options
     let mut html_options = HtmlWriterOptions {
         css_mode: html_css.unwrap_or(CssModeArg::Default).into(),
+        style_profile,
         ..Default::default()
     };
 
@@ -508,6 +554,7 @@ fn handle_html_output(
 }
 
 /// Handle writing PDF output with validation and error handling
+#[allow(clippy::too_many_arguments)]
 fn handle_pdf_output(
     document: &Document,
     output_path: &Path,
@@ -516,6 +563,7 @@ fn handle_pdf_output(
     strict: bool,
     pdf_page_size: Option<&str>,
     fixed_timestamp: Option<&str>,
+    style_profile: StyleProfileName,
 ) -> Result<ExitCode> {
     if let Some(code) = validate_output_path(output_path, force, verbose, "PDF", &["pdf"], ".pdf") {
         return Ok(code);
@@ -532,6 +580,7 @@ fn handle_pdf_output(
             fixed_timestamp: fixed_timestamp.map(str::to_owned),
             normalize_metadata: fixed_timestamp.is_some(),
         },
+        style_profile,
     };
 
     // Generate PDF using in-process Typst renderer

@@ -1279,16 +1279,16 @@ mod html_determinism {
 
         // Verify CSS custom properties are present
         assert!(
-            html.contains("--rtf-font-body"),
-            "HTML should contain --rtf-font-body token"
+            html.contains("--rtfkit-font-body"),
+            "HTML should contain --rtfkit-font-body token"
         );
         assert!(
-            html.contains("--rtf-color-text"),
-            "HTML should contain --rtf-color-text token"
+            html.contains("--rtfkit-color-text-primary"),
+            "HTML should contain --rtfkit-color-text-primary token"
         );
         assert!(
-            html.contains("--rtf-space-md"),
-            "HTML should contain --rtf-space-md token"
+            html.contains("--rtfkit-space-md"),
+            "HTML should contain --rtfkit-space-md token"
         );
 
         // Verify CSS classes are present

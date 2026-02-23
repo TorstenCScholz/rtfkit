@@ -96,6 +96,18 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | Report JSON | ✅ Supported | Via `--format json` |
 | Report Text | ✅ Supported | Default output |
 
+### Style Profiles
+
+Style profiles provide consistent visual styling across output formats:
+
+| Format | Style Profiles | Notes |
+|--------|----------------|-------|
+| HTML | ✅ Supported | CSS variables generated from profile |
+| PDF | ✅ Supported | Typst preamble generated from profile |
+| DOCX | ❌ Not Supported | Future support planned |
+
+Built-in profiles: `classic`, `report` (default), `compact`
+
 ### HTML Output Details
 
 HTML output is selected with `--to html` and produces semantic HTML5:
@@ -118,6 +130,7 @@ HTML output is selected with `--to html` and produces semantic HTML5:
 | Colors | ❌ Not Supported | Semantic-first design |
 | Borders | ❌ Not Supported | Semantic-first design |
 | Images | ❌ Not Supported | No IR image blocks |
+| Style Profiles | ✅ Supported | `--style-profile` flag (classic, report, compact) |
 
 ### PDF Output Details
 
@@ -142,6 +155,7 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 | Images | ❌ Not Supported | No IR image blocks |
 | Hyperlinks | ❌ Not Supported | Rendered as plain text |
 | Custom fonts | ❌ Not Supported | Uses embedded fonts |
+| Style Profiles | ✅ Supported | `--style-profile` flag (classic, report, compact) |
 
 ## Safety Features
 

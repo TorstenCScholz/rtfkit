@@ -8,6 +8,7 @@ description = "Typst-based PDF renderer for rtfkit IR documents"
 
 [dependencies]
 rtfkit-core = { path = "../rtfkit-core" }
+rtfkit-style-tokens = { path = "../rtfkit-style-tokens" }
 thiserror = "2.0"
 typst = "0.14"
 typst-pdf = "0.14"

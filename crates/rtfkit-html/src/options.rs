@@ -2,6 +2,8 @@
 //!
 //! This module provides [`HtmlWriterOptions`] and [`CssMode`] for controlling HTML output behavior.
 
+use rtfkit_style_tokens::StyleProfileName;
+
 /// CSS output mode for HTML writer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CssMode {
@@ -20,6 +22,7 @@ pub enum CssMode {
 ///
 /// ```rust
 /// use rtfkit_html::{HtmlWriterOptions, CssMode};
+/// use rtfkit_style_tokens::StyleProfileName;
 ///
 /// // Default options: full HTML document with embedded CSS
 /// let options = HtmlWriterOptions::default();
@@ -29,6 +32,7 @@ pub enum CssMode {
 ///     emit_document_wrapper: false,
 ///     css_mode: CssMode::None,
 ///     custom_css: None,
+///     style_profile: StyleProfileName::Report,
 /// };
 ///
 /// // Custom CSS only (no built-in styles)
@@ -67,6 +71,15 @@ pub struct HtmlWriterOptions {
     /// and appended after any built-in CSS (or as the only CSS if
     /// `css_mode` is `CssMode::None`).
     pub custom_css: Option<String>,
+
+    /// Style profile for CSS generation (default: Report).
+    ///
+    /// The style profile determines the CSS custom properties (variables)
+    /// that are generated for theming. Built-in profiles include:
+    /// - `Classic`: Conservative style, close to current behavior
+    /// - `Report`: Professional style with strong hierarchy (DEFAULT)
+    /// - `Compact`: Dense style for enterprise output
+    pub style_profile: StyleProfileName,
 }
 
 impl Default for HtmlWriterOptions {
@@ -75,6 +88,7 @@ impl Default for HtmlWriterOptions {
             emit_document_wrapper: true,
             css_mode: CssMode::Default,
             custom_css: None,
+            style_profile: StyleProfileName::default(), // Report
         }
     }
 }
@@ -97,6 +111,7 @@ mod tests {
             emit_document_wrapper: false,
             css_mode: CssMode::None,
             custom_css: None,
+            style_profile: StyleProfileName::Report,
         };
         assert!(!options.emit_document_wrapper);
         assert_eq!(options.css_mode, CssMode::None);
@@ -179,6 +194,7 @@ mod tests {
             emit_document_wrapper: true,
             css_mode: CssMode::None,
             custom_css: Some(".my-style { color: blue; }".to_string()),
+            style_profile: StyleProfileName::Report,
         };
 
         assert!(options.emit_document_wrapper);
@@ -193,6 +209,7 @@ mod tests {
             emit_document_wrapper: true,
             css_mode: CssMode::Default,
             custom_css: Some(".override { margin: 0; }".to_string()),
+            style_profile: StyleProfileName::Report,
         };
 
         assert!(options.emit_document_wrapper);

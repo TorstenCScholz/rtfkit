@@ -87,39 +87,47 @@ The built-in stylesheet uses CSS custom properties (design tokens) for consisten
 ### Typography
 
 ```css
---rtf-font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
---rtf-font-mono: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+--rtfkit-font-body: "Libertinus Serif";
+--rtfkit-font-heading: "Libertinus Serif";
+--rtfkit-font-mono: "DejaVu Sans Mono";
+--rtfkit-size-body: 11pt;
+--rtfkit-size-h1: 26pt;
 ```
 
 ### Colors
 
 ```css
---rtf-color-text: #1a1a1a;
---rtf-color-text-muted: #5a5a5a;
---rtf-color-background: #ffffff;
---rtf-color-link: #0066cc;
---rtf-color-link-hover: #004499;
---rtf-color-border: #d0d0d0;
---rtf-color-border-light: #e8e8e8;
---rtf-color-table-header-bg: #f5f5f5;
---rtf-color-table-stripe-bg: #fafafa;
+--rtfkit-color-text-primary: #1A1A1A;
+--rtfkit-color-text-muted: #5A5A5A;
+--rtfkit-color-surface-page: #FFFFFF;
+--rtfkit-color-link-default: #2563EB;
+--rtfkit-color-link-hover: #1D4ED8;
+--rtfkit-color-border-default: #D1D5DB;
+--rtfkit-color-surface-table-header: #E6E9ED;
+--rtfkit-color-surface-table-stripe: #F4F6F8;
 ```
 
 ### Spacing Scale
 
 ```css
---rtf-space-xs: 0.25rem;
---rtf-space-sm: 0.5rem;
---rtf-space-md: 1rem;
---rtf-space-lg: 1.5rem;
---rtf-space-xl: 2rem;
+--rtfkit-space-xs: 3pt;
+--rtfkit-space-sm: 6pt;
+--rtfkit-space-md: 10pt;
+--rtfkit-space-lg: 18pt;
+--rtfkit-space-xl: 28pt;
+--rtfkit-paragraph-gap: 12pt;
+--rtfkit-list-item-gap: 6pt;
 ```
 
 ### Table Sizing
 
 ```css
---rtf-table-cell-padding: 0.5rem 0.75rem;
---rtf-table-border-width: 1px;
+--rtfkit-table-cell-padding-x: 8pt;
+--rtfkit-table-cell-padding-y: 5pt;
+--rtfkit-table-border-width: 0.5pt;
+--rtfkit-table-stripe-mode: alternate-rows;
+--rtfkit-table-stripe-fill: #F4F6F8;
+--rtfkit-table-header-font-weight: 600;
 ```
 
 ## Overriding Styles
@@ -129,9 +137,9 @@ To customize the default appearance, create a CSS file that overrides the design
 ```css
 /* custom.css */
 :root {
-  --rtf-color-link: #8b0000;
-  --rtf-color-table-header-bg: #e0e0ff;
-  --rtf-space-md: 1.25rem;
+  --rtfkit-color-link-default: #8b0000;
+  --rtfkit-color-surface-table-header: #e0e0ff;
+  --rtfkit-space-md: 12pt;
 }
 
 .rtf-doc {
@@ -144,6 +152,57 @@ Then use it with:
 ```bash
 rtfkit convert document.rtf --to html --html-css-file custom.css --output document.html
 ```
+
+## Style Profiles
+
+rtfkit uses **style profiles** to provide consistent visual styling across HTML and PDF output formats. A style profile defines typography, colors, spacing, and layout parameters that are translated to format-specific output (CSS for HTML, Typst preamble for PDF).
+
+### Built-in Profiles
+
+Three built-in profiles are available:
+
+| Profile | Description |
+|---------|-------------|
+| `classic` | Conservative, neutral styling close to original RTF appearance |
+| `report` | Strong visual hierarchy optimized for long-form documents (default) |
+| `compact` | Dense styling for enterprise output with reduced whitespace |
+
+### CLI Usage
+
+Use the `--style-profile` flag to select a profile:
+
+```bash
+# Use the report profile (default)
+rtfkit convert document.rtf --to html --output document.html
+
+# Use the classic profile
+rtfkit convert document.rtf --to html --style-profile classic --output document.html
+
+# Use the compact profile
+rtfkit convert document.rtf --to html --style-profile compact --output document.html
+```
+
+### CSS Variable Generation
+
+When generating HTML output, the style profile is converted to CSS custom properties (variables) that control the visual appearance. For example, the `report` profile generates CSS variables for:
+
+- **Typography**: Font families, sizes, weights for body text and headings
+- **Colors**: Text colors, background colors, link colors, border colors
+- **Spacing**: Paragraph gaps, list indentation, table cell padding
+- **Layout**: Content max-width, page margins
+
+The generated CSS variables follow the naming convention shown in the [Design Tokens](#design-tokens) section. Each profile produces different values for these variables, enabling consistent visual identity across documents.
+
+### Combining with Custom CSS
+
+Style profiles work together with the `--html-css` and `--html-css-file` options:
+
+```bash
+# Use a profile and append custom CSS overrides
+rtfkit convert document.rtf --to html --style-profile report --html-css-file custom.css --output document.html
+```
+
+Custom CSS is appended after the profile-generated CSS, allowing you to override specific variables or add additional styles.
 
 ## Print Styles
 

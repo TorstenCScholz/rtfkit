@@ -8,6 +8,7 @@ description = "HTML writer for rtfkit IR documents"
 
 [dependencies]
 rtfkit-core = { path = "../rtfkit-core" }
+rtfkit-style-tokens = { path = "../rtfkit-style-tokens" }
 thiserror = "2.0"
 
 [dev-dependencies]

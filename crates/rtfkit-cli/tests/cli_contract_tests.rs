@@ -1730,7 +1730,7 @@ mod html_css_tests {
             "HTML should contain built-in CSS classes"
         );
         assert!(
-            html.contains("--rtf-font-body"),
+            html.contains("--rtfkit-font-body"),
             "HTML should contain CSS custom properties"
         );
     }
@@ -2450,5 +2450,104 @@ mod pdf_output_tests {
 
         cmd.assert().success();
         assert!(output.exists(), "PDF file should be created");
+    }
+}
+
+mod style_profile_tests {
+    use super::*;
+
+    #[test]
+    fn unknown_style_profile_returns_parse_error() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/text_simple_paragraph.rtf");
+
+        let dir = tempdir().unwrap();
+        let output = dir.path().join("out.html");
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--to",
+            "html",
+            "--style-profile",
+            "unknown",
+            "-o",
+            output.to_str().unwrap(),
+        ]);
+        cmd.assert()
+            .failure()
+            .code(2)
+            .stderr(contains("Unknown style profile"));
+    }
+
+    #[test]
+    fn style_profile_rejected_for_docx_output() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/text_simple_paragraph.rtf");
+
+        let dir = tempdir().unwrap();
+        let output = dir.path().join("out.docx");
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--to",
+            "docx",
+            "--style-profile",
+            "report",
+            "-o",
+            output.to_str().unwrap(),
+        ]);
+        cmd.assert()
+            .failure()
+            .code(2)
+            .stderr(contains("Style profiles are not supported for DOCX output"));
+    }
+
+    #[test]
+    fn html_style_profile_changes_token_values() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/text_simple_paragraph.rtf");
+
+        let dir = tempdir().unwrap();
+        let classic_out = dir.path().join("classic.html");
+        let compact_out = dir.path().join("compact.html");
+
+        let mut classic = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        classic.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--to",
+            "html",
+            "--style-profile",
+            "classic",
+            "-o",
+            classic_out.to_str().unwrap(),
+        ]);
+        classic.assert().success();
+
+        let mut compact = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        compact.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--to",
+            "html",
+            "--style-profile",
+            "compact",
+            "-o",
+            compact_out.to_str().unwrap(),
+        ]);
+        compact.assert().success();
+
+        let classic_html = fs::read_to_string(&classic_out).unwrap();
+        let compact_html = fs::read_to_string(&compact_out).unwrap();
+
+        assert!(classic_html.contains("--rtfkit-size-body: 12pt;"));
+        assert!(compact_html.contains("--rtfkit-size-body: 9pt;"));
     }
 }

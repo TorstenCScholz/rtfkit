@@ -37,6 +37,15 @@ jobs:
       - name: Check legacy reference policy
         run: bash scripts/check_deprecated_references.sh
 
+      - name: Check style token usage policy
+        run: bash scripts/check_style_token_usage.sh
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Run cargo-deny policy checks
+        run: cargo deny check bans
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 

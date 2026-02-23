@@ -1,0 +1,17 @@
+[package]
+name = "rtfkit-style-tokens"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Cross-format style tokens for rtfkit HTML and PDF outputs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+thiserror = "2"
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[dev-dependencies]
