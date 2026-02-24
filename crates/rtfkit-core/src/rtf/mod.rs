@@ -20,6 +20,10 @@
 //! - `handlers_control_words`: Control word dispatch
 //! - `handlers_destinations`: Destination handling and skip-state processing
 //! - `handlers_text`: Text/run handling
+//! - `handlers_lists`: List controls and list-table destination parsing
+//! - `handlers_tables`: Table controls and row/cell event handling
+//! - `handlers_fields`: Field control/text/group handling
+//! - `handlers_resources`: Font/color controls and resource destinations
 //! - `finalize`: Document finalization
 //! - `pipeline`: Parsing orchestration
 //! - `api`: Public entrypoints
@@ -43,6 +47,10 @@ mod state_tables;
 // Internal modules - Phase 3 (handlers)
 mod handlers_control_words;
 mod handlers_destinations;
+mod handlers_fields;
+mod handlers_lists;
+mod handlers_resources;
+mod handlers_tables;
 mod handlers_text;
 
 // Internal modules - Phase 4 (finalization, pipeline, api)

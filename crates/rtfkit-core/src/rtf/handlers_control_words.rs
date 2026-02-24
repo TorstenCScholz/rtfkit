@@ -3,7 +3,7 @@
 //! This module contains control word dispatch and handling for RTF parsing.
 
 use super::state::RuntimeState;
-use crate::{Alignment, CellMerge, CellVerticalAlign, RowAlignment};
+use crate::Alignment;
 
 // =============================================================================
 // Main Control Word Handler
@@ -111,200 +111,6 @@ pub fn handle_control_word(state: &mut RuntimeState, word: &str, parameter: Opti
         }
 
         // =============================================================================
-        // List Control Words
-        // =============================================================================
-        // \lsN - List identifier reference (from listoverridetable)
-        "ls" => {
-            state.lists.pending_ls_id = parameter;
-        }
-        // \ilvlN - List level (0-indexed)
-        "ilvl" => {
-            let level = parameter.and_then(|p| u8::try_from(p).ok()).unwrap_or(0);
-
-            // Emit warning if level exceeds max
-            if level > 8 {
-                state.report_builder.unsupported_nesting_level(level, 8);
-            }
-
-            state.lists.pending_level = level.min(8); // Clamp to DOCX max
-        }
-        // Legacy paragraph numbering controls are intentionally unsupported.
-        "pnlvl" | "pnlvlblt" | "pnlvlbody" | "pnlvlcont" | "pnstart" | "pnindent" | "pntxta"
-        | "pntxtb" => {
-            state.report_builder.unsupported_list_control(word);
-            state
-                .report_builder
-                .dropped_content("Dropped legacy paragraph numbering content", None);
-        }
-
-        // =============================================================================
-        // Table Control Words
-        // =============================================================================
-        // \trowd - Start of a new table row definition
-        "trowd" => {
-            handle_trowd(state);
-        }
-        // \cellxN - Cell boundary position in twips
-        "cellx" => {
-            if let Some(boundary) = parameter {
-                state.tables.record_cellx(boundary);
-            }
-        }
-        // \intbl - Paragraph is inside a table
-        "intbl" => {
-            state.tables.seen_intbl_in_paragraph = true;
-        }
-        // \cell - End of a table cell
-        "cell" => {
-            // Note: cell handling will be done by the event processor
-        }
-        // \row - End of a table row
-        "row" => {
-            // Note: row handling will be done by the event processor
-        }
-
-        // =============================================================================
-        // Row Property Controls
-        // =============================================================================
-        // Row alignment
-        "trql" => {
-            state.tables.pending_row_props.alignment = Some(RowAlignment::Left);
-        }
-        "trqc" => {
-            state.tables.pending_row_props.alignment = Some(RowAlignment::Center);
-        }
-        "trqr" => {
-            state.tables.pending_row_props.alignment = Some(RowAlignment::Right);
-        }
-        // Row left indent (in twips)
-        "trleft" => {
-            if let Some(value) = parameter {
-                state.tables.pending_row_props.left_indent = Some(value);
-            }
-        }
-        // Row formatting controls - recognized but not fully supported
-        "trgaph" => {
-            state.report_builder.unsupported_table_control(word);
-        }
-
-        // =============================================================================
-        // Cell Vertical Alignment Controls
-        // =============================================================================
-        "clvertalt" => {
-            state.tables.pending_cell_v_align = Some(CellVerticalAlign::Top);
-        }
-        "clvertalc" => {
-            state.tables.pending_cell_v_align = Some(CellVerticalAlign::Center);
-        }
-        "clvertalb" => {
-            state.tables.pending_cell_v_align = Some(CellVerticalAlign::Bottom);
-        }
-
-        // =============================================================================
-        // Cell Merge Controls
-        // =============================================================================
-        // Horizontal merge start - this cell starts a merge
-        "clmgf" => {
-            // Mark this cell as merge start
-            // Span will be calculated when we see continuation markers
-            state.tables.pending_cell_merge = Some(CellMerge::HorizontalStart { span: 1 });
-        }
-        // Horizontal merge continuation - this cell is merged with previous
-        "clmrg" => {
-            state.tables.pending_cell_merge = Some(CellMerge::HorizontalContinue);
-        }
-        // Vertical merge start - this cell starts a vertical merge
-        "clvmgf" => {
-            state.tables.pending_cell_merge = Some(CellMerge::VerticalStart);
-        }
-        // Vertical merge continuation - this cell continues vertical merge
-        "clvmrg" => {
-            state.tables.pending_cell_merge = Some(CellMerge::VerticalContinue);
-        }
-
-        // =============================================================================
-        // Paragraph Shading Controls
-        // =============================================================================
-        // \cbpatN - Paragraph background color index
-        "cbpat" => {
-            state.style.paragraph_cbpat = parameter;
-        }
-        // \cfpatN - Paragraph pattern color index (for Slice B)
-        "cfpat" => {
-            state.style.paragraph_cfpat = parameter;
-        }
-        // \shadingN - Paragraph shading percentage (for Slice B)
-        "shading" => {
-            state.style.paragraph_shading = parameter;
-        }
-
-        // =============================================================================
-        // Cell Shading Controls
-        // =============================================================================
-        // \clcbpatN - Cell background color index
-        "clcbpat" => {
-            state.tables.pending_cell_cbpat = parameter;
-        }
-        // \clcfpatN - Cell pattern color index (for Slice B)
-        "clcfpat" => {
-            state.tables.pending_cell_cfpat = parameter;
-        }
-        // \clshdngN - Cell shading percentage (for Slice B)
-        "clshdng" => {
-            state.tables.pending_cell_shading = parameter;
-        }
-
-        // =============================================================================
-        // Row/Table Fallback Shading Controls
-        // =============================================================================
-        // \trcbpatN - Row background color index
-        "trcbpat" => {
-            // Capture for row-level shading (applied when row is finalized)
-            state.tables.pending_row_cbpat = parameter;
-            // Also capture for table-level shading if no table shading set yet
-            if state.tables.pending_table_cbpat.is_none() {
-                state.tables.pending_table_cbpat = parameter;
-            }
-        }
-        // \trcfpatN - Row pattern color index (for Slice B)
-        "trcfpat" => {
-            state.tables.pending_row_cfpat = parameter;
-            // Capture first-row value as table-level default
-            if state.tables.pending_table_cfpat.is_none() {
-                state.tables.pending_table_cfpat = parameter;
-            }
-        }
-        // \trshdngN - Row shading percentage (for Slice B)
-        "trshdng" => {
-            state.tables.pending_row_shading = parameter;
-            // Capture first-row value as table-level default
-            if state.tables.pending_table_shading.is_none() {
-                state.tables.pending_table_shading = parameter;
-            }
-        }
-
-        // =============================================================================
-        // Field Control Words
-        // =============================================================================
-        // \field - Start of a field group
-        "field" => {
-            // Flush any pending text to the paragraph before starting the field
-            // This ensures text like "Click " before a hyperlink stays outside the link
-            super::handlers_text::flush_current_text_as_run(state);
-            state
-                .fields
-                .start_field(state.current_depth, state.style.snapshot());
-        }
-        // \fldinst - Field instruction (contains HYPERLINK "url" for hyperlinks)
-        "fldinst" => {
-            state.fields.start_fldinst(state.current_depth);
-        }
-        // \fldrslt - Field result (visible content)
-        "fldrslt" => {
-            state.fields.start_fldrslt(state.current_depth);
-        }
-
-        // =============================================================================
         // RTF Header Control Words - Silently Ignored
         // =============================================================================
         "rtf" | "ansi" | "ansicpg" | "deflang" | "deflangfe" | "adeflang" | "result" | "hwid"
@@ -315,81 +121,32 @@ pub fn handle_control_word(state: &mut RuntimeState, word: &str, parameter: Opti
             // Silently ignore these structural/formatting control words
         }
 
-        // =============================================================================
-        // Font and Color Controls
-        // =============================================================================
-        // \deffN - Default font index
-        "deff" => {
-            if let Some(index) = parameter {
-                state.resources.default_font_index = Some(index);
-                // Also set as current font if no font is currently set
-                if state.style.font_index.is_none() {
-                    state.style.font_index = Some(index);
-                }
-            }
-        }
-        // \fN - Font index
-        "f" => {
-            state.style.font_index = parameter;
-        }
-        // \fsN - Font size in half-points
-        "fs" => {
-            state.style.font_size_half_points = parameter;
-        }
-        // \cfN - Foreground color index
-        "cf" => {
-            state.style.color_index = parameter;
-        }
-        // \highlightN - Highlight color index
-        "highlight" => {
-            state.style.highlight_color_index =
-                parameter.and_then(|n| if n > 0 { Some(n) } else { None });
-        }
-        // \cbN - Background color index
-        "cb" => {
-            state.style.background_color_index =
-                parameter.and_then(|n| if n > 0 { Some(n) } else { None });
-        }
         // \plain - Reset character formatting only
         "plain" => {
             state.reset_character_formatting();
         }
 
         // =============================================================================
-        // Unknown Control Words
+        // Domain Delegation + Unknown Control Words
         // =============================================================================
         _ => {
+            if super::handlers_lists::handle_paragraph_list_control_word(state, word, parameter) {
+                return;
+            }
+            if super::handlers_tables::handle_table_control_word(state, word, parameter) {
+                return;
+            }
+            if super::handlers_fields::handle_field_control_word(state, word) {
+                return;
+            }
+            if super::handlers_resources::handle_resource_control_word(state, word, parameter) {
+                return;
+            }
             state
                 .report_builder
                 .unsupported_control_word(word, parameter);
         }
     }
-}
-
-// =============================================================================
-// Table Row Definition Handler
-// =============================================================================
-
-/// Handle \trowd - start of a new table row definition.
-fn handle_trowd(state: &mut RuntimeState) {
-    // Finalize any dangling row/cell with warning.
-    if state.tables.current_row.is_some() {
-        super::finalize::auto_close_table_cell_if_needed(
-            state,
-            "Unclosed table cell at row boundary",
-        );
-        state.report_builder.unclosed_table_row();
-        state
-            .report_builder
-            .dropped_content("Unclosed table row at new row definition", None);
-        super::finalize::finalize_current_row(state);
-    }
-
-    // Start fresh row context
-    state.tables.reset_for_new_row();
-
-    // Ensure we have a table context
-    state.tables.ensure_table();
 }
 
 // =============================================================================
@@ -487,6 +244,7 @@ fn handle_text_internal(state: &mut RuntimeState, text: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::CellMerge;
     use crate::limits::ParserLimits;
 
     #[test]
