@@ -7,8 +7,8 @@ use crate::DocxError;
 use docx_rs::{
     AbstractNumbering, AlignmentType, Docx, Hyperlink as DocxHyperlink, HyperlinkType, IndentLevel,
     Level, LevelJc, LevelText, NumberFormat, Numbering, NumberingId, Numberings,
-    Paragraph as DocxParagraph, Run as DocxRun, Start, Table, TableCell, TableRow, VAlignType,
-    VMergeType, WidthType,
+    Paragraph as DocxParagraph, Run as DocxRun, RunFonts, Start, Table, TableCell, TableRow,
+    VAlignType, VMergeType, WidthType,
 };
 use indexmap::IndexMap;
 use rtfkit_core::{
@@ -381,16 +381,56 @@ fn convert_alignment(align: Alignment) -> AlignmentType {
 /// Converts an IR run to a docx-rs run.
 ///
 /// Handles whitespace preservation for runs with leading/trailing spaces.
+///
+/// Run property order follows OOXML convention:
+/// 1. Run style (if any)
+/// 2. Font family (`w:rFonts`)
+/// 3. Font size (`w:sz`, `w:szCs`)
+/// 4. Color (`w:color`)
+/// 5. Bold (`w:b`)
+/// 6. Italic (`w:i`)
+/// 7. Underline (`w:u`)
 fn convert_run(run: &Run) -> DocxRun {
     let mut r = DocxRun::new().add_text(&run.text);
 
-    // Apply formatting
+    // Apply font family (w:rFonts)
+    // Set w:ascii, w:hAnsi, and w:cs attributes to the font family name
+    if let Some(ref font_family) = run.font_family {
+        r = r.fonts(
+            RunFonts::new()
+                .ascii(font_family)
+                .hi_ansi(font_family)
+                .cs(font_family),
+        );
+    }
+
+    // Apply font size (w:sz, w:szCs)
+    // Size is in half-points (24 = 12pt)
+    // Clamp to OOXML spec bounds: 1-1638 half-points
+    if let Some(font_size) = run.font_size {
+        let half_points = (font_size * 2.0).round() as usize;
+        let clamped = half_points.clamp(1, 1638);
+        r = r.size(clamped);
+    }
+
+    // Apply color (w:color)
+    // Color is 6-character hex RGB (no alpha)
+    if let Some(ref color) = run.color {
+        let hex = format!("{:02X}{:02X}{:02X}", color.r, color.g, color.b);
+        r = r.color(hex);
+    }
+
+    // Apply bold
     if run.bold {
         r = r.bold();
     }
+
+    // Apply italic
     if run.italic {
         r = r.italic();
     }
+
+    // Apply underline
     if run.underline {
         r = r.underline("single");
     }
@@ -1560,5 +1600,159 @@ mod tests {
         assert!(document_xml.contains("Italic"));
         assert!(document_xml.contains("<w:b"));
         assert!(document_xml.contains("<w:i"));
+    }
+
+    // =========================================================================
+    // Font Family, Size, and Color Tests
+    // =========================================================================
+
+    #[test]
+    fn test_run_with_font_family_only() {
+        let mut run = Run::new("Font family text");
+        run.font_family = Some("Arial".to_string());
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        assert!(document_xml.contains(r#"w:ascii="Arial""#));
+        assert!(document_xml.contains(r#"w:hAnsi="Arial""#));
+        assert!(document_xml.contains(r#"w:cs="Arial""#));
+    }
+
+    #[test]
+    fn test_run_with_font_size_only() {
+        let mut run = Run::new("Font size text");
+        run.font_size = Some(12.0); // 12pt = 24 half-points
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        assert!(document_xml.contains(r#"<w:sz w:val="24" />"#));
+        assert!(document_xml.contains(r#"<w:szCs w:val="24" />"#));
+    }
+
+    #[test]
+    fn test_run_with_color_only() {
+        let mut run = Run::new("Colored text");
+        run.color = Some(rtfkit_core::Color::new(255, 0, 0)); // Red
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        assert!(document_xml.contains(r#"<w:color w:val="FF0000" />"#));
+    }
+
+    #[test]
+    fn test_run_with_all_font_properties() {
+        let mut run = Run::new("Styled text");
+        run.font_family = Some("Helvetica".to_string());
+        run.font_size = Some(14.0); // 14pt = 28 half-points
+        run.color = Some(rtfkit_core::Color::new(0, 128, 255)); // Blue
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Font family
+        assert!(document_xml.contains(r#"w:ascii="Helvetica""#));
+        assert!(document_xml.contains(r#"w:hAnsi="Helvetica""#));
+        assert!(document_xml.contains(r#"w:cs="Helvetica""#));
+        // Font size
+        assert!(document_xml.contains(r#"<w:sz w:val="28" />"#));
+        assert!(document_xml.contains(r#"<w:szCs w:val="28" />"#));
+        // Color
+        assert!(document_xml.contains(r#"<w:color w:val="0080FF" />"#));
+    }
+
+    #[test]
+    fn test_run_with_combined_formatting() {
+        let mut run = Run::new("Bold colored font text");
+        run.bold = true;
+        run.font_family = Some("Times New Roman".to_string());
+        run.font_size = Some(16.0); // 16pt = 32 half-points
+        run.color = Some(rtfkit_core::Color::new(0, 255, 0)); // Green
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Font family
+        assert!(document_xml.contains(r#"w:ascii="Times New Roman""#));
+        // Font size
+        assert!(document_xml.contains(r#"<w:sz w:val="32" />"#));
+        // Color
+        assert!(document_xml.contains(r#"<w:color w:val="00FF00" />"#));
+        // Bold
+        assert!(document_xml.contains("<w:b"));
+    }
+
+    #[test]
+    fn test_hyperlink_with_font_color_styling() {
+        let mut styled_run = Run::new("Styled Link");
+        styled_run.font_family = Some("Verdana".to_string());
+        styled_run.font_size = Some(10.0); // 10pt = 20 half-points
+        styled_run.color = Some(rtfkit_core::Color::new(0, 0, 255)); // Blue
+        styled_run.underline = true;
+
+        let para = Paragraph::from_inlines(vec![Inline::Hyperlink(IrHyperlink {
+            url: "https://example.com".to_string(),
+            runs: vec![styled_run],
+        })]);
+        let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Verify hyperlink is present
+        assert!(document_xml.contains("<w:hyperlink"));
+        // Verify font family
+        assert!(document_xml.contains(r#"w:ascii="Verdana""#));
+        // Verify font size
+        assert!(document_xml.contains(r#"<w:sz w:val="20" />"#));
+        // Verify color
+        assert!(document_xml.contains(r#"<w:color w:val="0000FF" />"#));
+        // Verify underline
+        assert!(document_xml.contains(r#"<w:u w:val="single""#));
+    }
+
+    #[test]
+    fn test_font_size_clamping_min() {
+        let mut run = Run::new("Tiny text");
+        run.font_size = Some(0.1); // Very small, should clamp to 1 half-point
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should be clamped to 1
+        assert!(document_xml.contains(r#"<w:sz w:val="1" />"#));
+    }
+
+    #[test]
+    fn test_font_size_clamping_max() {
+        let mut run = Run::new("Huge text");
+        run.font_size = Some(1000.0); // Very large, should clamp to 1638 half-points
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should be clamped to 1638
+        assert!(document_xml.contains(r#"<w:sz w:val="1638" />"#));
+    }
+
+    #[test]
+    fn test_font_size_rounding() {
+        let mut run = Run::new("Rounded text");
+        run.font_size = Some(12.4); // Should round to 25 half-points (12.5 * 2 = 25)
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // 12.4 * 2 = 24.8, rounds to 25
+        assert!(document_xml.contains(r#"<w:sz w:val="25" />"#));
     }
 }

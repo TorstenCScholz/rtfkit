@@ -31,9 +31,10 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | Italic (`\i`) | ✅ Supported | Mapped to DOCX `<w:i/>` |
 | Underline (`\ul`, `\ulnone`) | ✅ Supported | Mapped to DOCX `<w:u/>` |
 | Paragraph alignment (`\ql`, `\qc`, `\qr`, `\qj`) | ✅ Supported | Mapped to DOCX `<w:jc/>` |
-| Font family (`\fN`) | ❌ Not Supported | Parsed but not mapped |
-| Font size (`\fsN`) | ❌ Not Supported | Parsed but not mapped |
-| Text color (`\cfN`) | ❌ Not Supported | Parsed but not mapped |
+| Font family (`\fN`, `\fonttbl`, `\deffN`) | ✅ Supported | Mapped to DOCX `<w:rFonts>`, HTML `font-family`, Typst `#text(font: ...)` |
+| Font size (`\fsN`) | ✅ Supported | Mapped to DOCX `<w:sz>`, HTML `font-size`, Typst `#text(size: ...)` |
+| Text color (`\cfN`, `\colortbl`) | ✅ Supported | Mapped to DOCX `<w:color>`, HTML `color`, Typst `#text(fill: ...)` |
+| Formatting reset (`\plain`) | ✅ Supported | Resets character formatting to defaults |
 | Background color (`\cbN`, `\highlightN`) | ❌ Not Supported | Parsed but not mapped |
 | Strikethrough (`\strike`) | ❌ Not Supported | Warning emitted |
 | Small caps (`\scaps`) | ❌ Not Supported | Warning emitted |
@@ -74,8 +75,8 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | Destination | Support | Notes |
 |-------------|---------|-------|
 | Document body | ✅ Supported | Main content |
-| Font table (`\fonttbl`) | 🔸 Degraded | Skipped, fonts not mapped |
-| Color table (`\colortbl`) | 🔸 Degraded | Skipped, colors not mapped |
+| Font table (`\fonttbl`) | ✅ Supported | Parsed for font family mapping |
+| Color table (`\colortbl`) | ✅ Supported | Parsed for color mapping |
 | List table (`\listtable`) | ✅ Supported | Parsed for list definitions |
 | List override table (`\listoverridetable`) | ✅ Supported | Parsed for list references |
 | Header (`\header`) | 🔸 Degraded | Dropped with warning |
@@ -127,8 +128,9 @@ HTML output is selected with `--to html` and produces semantic HTML5:
 | Vertical merges | ✅ Supported | `rowspan` attribute |
 | Cell alignment | ✅ Supported | CSS classes |
 | Hyperlinks | ✅ Supported | `<a href>` with `rtf-link` class |
-| Font family/size | ❌ Not Supported | Semantic-first design |
-| Colors | ❌ Not Supported | Semantic-first design |
+| Font family | ✅ Supported | Inline `font-family` style (sanitized) |
+| Font size | ✅ Supported | Inline `font-size` style (pt) |
+| Colors | ✅ Supported | Inline `color` style (hex) |
 | Borders | ❌ Not Supported | Semantic-first design |
 | Images | ❌ Not Supported | No IR image blocks |
 | Style Profiles | ✅ Supported | `--style-profile` flag (classic, report, compact) |
@@ -154,6 +156,9 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 | Page size options | ✅ Supported | A4 (default) and US Letter |
 | Deterministic output | ✅ Supported | Byte-identical for same input |
 | Hyperlinks | ✅ Supported | Typst `#link()` syntax |
+| Font family | ✅ Supported | Typst `#text(font: ...)` wrapper |
+| Font size | ✅ Supported | Typst `#text(size: ...)` wrapper |
+| Text color | ✅ Supported | Typst `#text(fill: ...)` wrapper |
 | Images | ❌ Not Supported | No IR image blocks |
 | Custom fonts | ❌ Not Supported | Uses embedded fonts |
 | Style Profiles | ✅ Supported | `--style-profile` flag (classic, report, compact) |
@@ -185,18 +190,17 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 ## Known Limitations
 
 1. **No image support** - Images are dropped with `DroppedContent` warning
-2. **Limited font/style fidelity** - Font family, size, and color are not mapped to output
-3. **Row alignment cosmetic loss** - Row alignment is parsed but not fully emitted by docx-rs
-4. **List nesting limit** - Maximum 8 levels due to DOCX compatibility
-5. **No nested tables** - Tables inside cells are not supported
-6. **HTML is semantic-first** - No font sizes, colors, or borders in HTML output
-7. **PDF uses embedded fonts** - Custom fonts not supported; uses Typst's embedded fonts
-8. **Limited hyperlink support** - Only external `http://`, `https://`, `mailto:` URLs; bookmark links not supported
+2. **Row alignment cosmetic loss** - Row alignment is parsed but not fully emitted by docx-rs
+3. **List nesting limit** - Maximum 8 levels due to DOCX compatibility
+4. **No nested tables** - Tables inside cells are not supported
+5. **PDF uses embedded fonts** - Custom fonts not supported; uses Typst's embedded fonts
+6. **Limited hyperlink support** - Only external `http://`, `https://`, `mailto:` URLs; bookmark links not supported
 
 ## Version History
 
 | Version | Changes |
 |---------|---------|
+| 0.8.0 | Added font family, font size, and foreground color support (DOCX, HTML, PDF); added `\plain` reset support |
 | 0.7.0 | Added hyperlink support (DOCX, HTML, PDF), URL sanitization for HTML output |
 | 0.6.0 | Added HTML output support, PDF output support, feature support matrix documentation |
 | 0.5.0 | Added table merge and alignment support |

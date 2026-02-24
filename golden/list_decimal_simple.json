@@ -17,7 +17,8 @@
                   "text": "First item",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }
@@ -35,7 +36,8 @@
                   "text": "Second item",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }
@@ -53,7 +55,8 @@
                   "text": "Third item",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }

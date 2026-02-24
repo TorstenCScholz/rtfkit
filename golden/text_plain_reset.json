@@ -1,0 +1,38 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Bold italic underlined red large.",
+          "bold": true,
+          "italic": true,
+          "underline": true,
+          "font_family": "Arial",
+          "font_size": 16.0,
+          "color": {
+            "r": 255,
+            "g": 0,
+            "b": 0
+          }
+        },
+        {
+          "type": "run",
+          "text": "Back to default formatting (not bold, italic, underlined, or red).",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "type": "run",
+          "text": "Bold again after plain.",
+          "bold": true,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}

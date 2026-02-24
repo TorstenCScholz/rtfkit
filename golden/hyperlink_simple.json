@@ -9,7 +9,9 @@
           "text": "Visit ",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0
         },
         {
           "type": "hyperlink",
@@ -19,7 +21,9 @@
               "text": "Example Site",
               "bold": false,
               "italic": false,
-              "underline": false
+              "underline": false,
+              "font_family": "Arial",
+              "font_size": 12.0
             }
           ]
         },
@@ -28,7 +32,9 @@
           "text": " for more info.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0
         }
       ]
     }

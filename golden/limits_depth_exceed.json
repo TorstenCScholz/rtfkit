@@ -9,14 +9,18 @@
           "text": "% Limits test: Group nesting exceeding max_group_depth (256)% This fixture should cause a parse error (exit code 2)% Note: Actual exceed fixture would have 257 nested groups - this is a placeholder",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         },
         {
           "type": "run",
           "text": "Text in nested groups",
           "bold": true,
           "italic": true,
-          "underline": true
+          "underline": true,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     }

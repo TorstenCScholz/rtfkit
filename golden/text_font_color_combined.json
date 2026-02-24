@@ -1,0 +1,61 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Bold red Arial.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0,
+          "color": {
+            "r": 255,
+            "g": 0,
+            "b": 0
+          }
+        },
+        {
+          "type": "run",
+          "text": "Green Helvetica.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Helvetica",
+          "font_size": 18.0,
+          "color": {
+            "r": 0,
+            "g": 128,
+            "b": 0
+          }
+        },
+        {
+          "type": "run",
+          "text": "Blue Times New Roman.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 24.0,
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 255
+          }
+        },
+        {
+          "type": "run",
+          "text": "Normal Arial in auto color.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0
+        }
+      ]
+    }
+  ]
+}

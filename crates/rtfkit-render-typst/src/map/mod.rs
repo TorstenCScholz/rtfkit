@@ -32,8 +32,6 @@ pub use table::{TableOutput, map_table};
 /// Structured mapping warnings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MappingWarning {
-    FontSizeDropped,
-    ColorDropped,
     ListMixedKindFallbackToBullet,
     ListLevelSkip { from: u8, to: u8 },
     OrphanHorizontalContinue,
@@ -44,8 +42,6 @@ impl MappingWarning {
     /// Stable machine-readable warning code.
     pub fn code(&self) -> String {
         match self {
-            Self::FontSizeDropped => "font_size_dropped".to_string(),
-            Self::ColorDropped => "color_dropped".to_string(),
             Self::ListMixedKindFallbackToBullet => "list_mixed_kind_fallback_to_bullet".to_string(),
             Self::ListLevelSkip { from, to } => format!("list_level_skip_{}_to_{}", from, to),
             Self::OrphanHorizontalContinue => "orphan_horizontal_continue".to_string(),

@@ -16,7 +16,9 @@
                       "text": "% Limits test: Merge span near max_merge_span (1000)% This fixture has a small merge as a representative test% Tests that the parser handles merge spans correctlyMerged cell",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }

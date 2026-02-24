@@ -9,7 +9,9 @@
           "text": "% Mixed content document: prose, list, and table interleave% Tests the parser's ability to handle mixed block types in sequence",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -22,7 +24,9 @@
           "text": "Introduction paragraph before any structured content.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -35,7 +39,9 @@
           "text": "First list item",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -48,7 +54,9 @@
           "text": "Second list item",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -61,7 +69,9 @@
           "text": "Third list item",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -74,7 +84,9 @@
           "text": "Intermediate paragraph between list and table.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -94,7 +106,9 @@
                       "text": "Cell 1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -112,7 +126,9 @@
                       "text": "Cell 2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -134,7 +150,9 @@
                       "text": "Cell 3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -152,7 +170,9 @@
                       "text": "Cell 4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -172,7 +192,9 @@
           "text": "Concluding paragraph after the table.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     }

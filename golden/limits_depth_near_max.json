@@ -9,14 +9,18 @@
           "text": "% Limits test: Group nesting near max_group_depth (256)% This fixture has 10 nested groups as a representative test (actual near-limit would be 255)% Tests that the parser handles deep nesting correctly",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         },
         {
           "type": "run",
           "text": "Deeply nested text",
           "bold": true,
           "italic": true,
-          "underline": true
+          "underline": true,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     }

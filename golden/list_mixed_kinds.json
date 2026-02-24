@@ -9,7 +9,8 @@
           "text": "Bullet List:",
           "bold": true,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_size": 12.0
         }
       ]
     },
@@ -30,7 +31,8 @@
                   "text": "Bullet item one",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }
@@ -48,7 +50,8 @@
                   "text": "Bullet item two",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }
@@ -66,7 +69,8 @@
                   "text": "Bullet item three",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }
@@ -83,7 +87,8 @@
           "text": "Ordered List:",
           "bold": true,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_size": 12.0
         }
       ]
     },
@@ -104,7 +109,8 @@
                   "text": "Numbered item one",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }
@@ -122,7 +128,8 @@
                   "text": "Numbered item two",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }
@@ -140,7 +147,8 @@
                   "text": "Numbered item three",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }

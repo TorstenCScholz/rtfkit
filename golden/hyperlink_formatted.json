@@ -9,7 +9,9 @@
           "text": "Click ",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0
         },
         {
           "type": "hyperlink",
@@ -19,19 +21,25 @@
               "text": "Bold",
               "bold": true,
               "italic": false,
-              "underline": false
+              "underline": false,
+              "font_family": "Arial",
+              "font_size": 12.0
             },
             {
               "text": " and ",
               "bold": false,
               "italic": false,
-              "underline": false
+              "underline": false,
+              "font_family": "Arial",
+              "font_size": 12.0
             },
             {
               "text": "Italic",
               "bold": false,
               "italic": true,
-              "underline": false
+              "underline": false,
+              "font_family": "Arial",
+              "font_size": 12.0
             }
           ]
         },
@@ -40,7 +48,9 @@
           "text": " to visit.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0
         }
       ]
     }

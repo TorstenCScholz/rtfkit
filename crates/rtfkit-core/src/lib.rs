@@ -180,6 +180,7 @@ pub struct TableProps {
 ///     bold: true,
 ///     italic: false,
 ///     underline: false,
+///     font_family: Some("Arial".to_string()),
 ///     font_size: Some(12.0),
 ///     color: None,
 /// };
@@ -197,6 +198,9 @@ pub struct Run {
     /// Whether the text is underlined
     #[serde(default)]
     pub underline: bool,
+    /// Font family name (if specified)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub font_family: Option<String>,
     /// Font size in points (if specified)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub font_size: Option<f32>,
@@ -219,6 +223,7 @@ impl Run {
             bold: false,
             italic: false,
             underline: false,
+            font_family: None,
             font_size: None,
             color: None,
         }

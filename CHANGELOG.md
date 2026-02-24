@@ -5,6 +5,38 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - Unreleased
+
+### Added
+
+#### Font and Color Support
+- First-class font family, font size, and foreground color support in RTF-to-IR-to-output pipeline
+- New IR fields: `Run.font_family` (`Option<String>`), `Run.font_size` (`Option<f32>`, points), `Run.color` (`Option<Color>`)
+- Font table parsing: `{\fonttbl{\f0\fnil Arial;}{\f1\fswiss Helvetica;}}`
+- Color table parsing: `{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}`
+- Default font support: `\deffN` sets the default font index
+- Font switching: `\fN` switches to font index N
+- Font size: `\fsN` sets font size in half-points (e.g., `\fs24` = 12pt)
+- Foreground color: `\cfN` switches to color index N
+- Formatting reset: `\plain` resets character formatting to defaults (preserves paragraph alignment)
+- DOCX output: `<w:rFonts>`, `<w:sz>`, `<w:color>` elements
+- HTML output: inline `font-family`, `font-size`, `color` styles (sanitized)
+- PDF output: Typst `#text(font: ..., size: ..., fill: ...)` wrappers
+- 6 new font/color test fixtures: font_family, font_size, color, font_color_combined, plain_reset, default_font_deff
+- Golden IR and HTML snapshots for all font/color fixtures
+
+### Changed
+
+- Font table (`\fonttbl`) and color table (`\colortbl`) destinations are now parsed and used (previously degraded)
+- Unresolved font or color indexes degrade gracefully without warnings (text content preserved)
+- `\plain` now properly resets character formatting while preserving paragraph properties
+
+### Migration Notes
+
+- IR JSON format extended: `Run` objects may now include `font_family`, `font_size`, and `color` fields
+- External consumers of IR JSON should handle the new optional fields
+- Golden IR snapshots need regeneration: `UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests`
+
 ## [0.7.0] - Unreleased
 
 ### Added

@@ -16,7 +16,8 @@
                       "text": "Regular cell",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -42,7 +43,8 @@
                               "text": "Item A",
                               "bold": false,
                               "italic": false,
-                              "underline": false
+                              "underline": false,
+                              "font_size": 12.0
                             }
                           ]
                         }
@@ -60,7 +62,8 @@
                               "text": "Item B",
                               "bold": false,
                               "italic": false,
-                              "underline": false
+                              "underline": false,
+                              "font_size": 12.0
                             }
                           ]
                         }
@@ -86,7 +89,8 @@
                       "text": "Another cell",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -104,7 +108,8 @@
                       "text": "Last cell",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_size": 12.0
                     }
                   ]
                 }

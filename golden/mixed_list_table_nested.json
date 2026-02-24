@@ -9,7 +9,9 @@
           "text": "% Mixed content with nested structures: table with lists in multiple cells% Tests nested list inside table cells",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -22,7 +24,9 @@
           "text": "Document with nested list in table:",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -42,7 +46,9 @@
                       "text": "Simple cell",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -60,7 +66,9 @@
                       "text": "Item A",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 },
@@ -73,7 +81,9 @@
                       "text": "Item B",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 },
@@ -86,7 +96,9 @@
                       "text": "Item C",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -104,7 +116,9 @@
                       "text": "Another simple cell",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -126,7 +140,9 @@
                       "text": "Row 2 Cell 1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -144,7 +160,9 @@
                       "text": "Nested item 1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 },
@@ -157,7 +175,9 @@
                       "text": "Nested item 2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -175,7 +195,9 @@
                       "text": "Row 2 Cell 3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -195,7 +217,9 @@
           "text": "Paragraph after table.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     }

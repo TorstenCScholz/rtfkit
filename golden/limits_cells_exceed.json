@@ -16,7 +16,9 @@
                       "text": "% Limits test: Row exceeding max_cells_per_row (1000)% This fixture should cause a parse error (exit code 2)% Note: Actual exceed fixture would have 1001 cells - this is a placeholderC1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -34,7 +36,9 @@
                       "text": "C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -52,7 +56,9 @@
                       "text": "C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }

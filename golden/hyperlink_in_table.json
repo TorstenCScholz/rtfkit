@@ -16,7 +16,9 @@
                       "text": "Cell 1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Arial",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -37,7 +39,9 @@
                           "text": "Link in cell",
                           "bold": false,
                           "italic": false,
-                          "underline": false
+                          "underline": false,
+                          "font_family": "Arial",
+                          "font_size": 12.0
                         }
                       ]
                     }
@@ -61,7 +65,9 @@
                       "text": "Cell 3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Arial",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -79,7 +85,9 @@
                       "text": "Cell 4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Arial",
+                      "font_size": 12.0
                     }
                   ]
                 }

@@ -1,0 +1,42 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Text uses default font (Helvetica via deff1).",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Helvetica"
+        },
+        {
+          "type": "run",
+          "text": "Now Arial.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Arial"
+        },
+        {
+          "type": "run",
+          "text": "Now Times New Roman.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Times New Roman"
+        },
+        {
+          "type": "run",
+          "text": "Back to default font (Helvetica).",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Helvetica"
+        }
+      ]
+    }
+  ]
+}

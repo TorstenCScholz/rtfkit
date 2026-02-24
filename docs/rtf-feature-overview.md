@@ -12,7 +12,15 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
   - bold (`\b`)
   - italic (`\i`)
   - underline (`\ul`)
+- **Font and color styling**:
+  - font family (`\fN`, `\fonttbl`, `\deffN`)
+  - font size (`\fsN`)
+  - foreground color (`\cfN`, `\colortbl`)
+  - formatting reset (`\plain`)
 - **Unicode escape handling** (`\uN` with `\ucN`)
+- **Hyperlinks**:
+  - external URLs (`http://`, `https://`, `mailto:`)
+  - formatted link text
 - **Lists**:
   - list references (`\lsN`)
   - nesting levels (`\ilvlN`, clamped to 0..8)
@@ -34,20 +42,16 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
 
 ## Not yet supported
 
-- **Hyperlinks/fields** as first-class output:
-  - `\field`, `\fldinst`, `\fldrslt` currently treated as unsupported destination content
 - **Images/embedded objects** as first-class output:
   - `\pict`, `\obj`, related object destinations are currently dropped with warnings
-- **Full font/style fidelity** from RTF controls (currently ignored in parser):
-  - font family (`\fN`)
-  - font size (`\fsN`)
-  - color/highlight (`\cfN`, `\cbN`, `\highlightN`)
+- **Background color** (`\cbN`, `\highlightN`) - parsed but not mapped
 - **Full RTF table styling parity** (complex borders/layout behavior)
 
 ## Notes
 
 - In `--strict` mode, any `DroppedContent` warning fails conversion with exit code `4`.
 - Parser safety limits are enforced (input size, group depth, warnings, and table-specific hard limits).
+- Unresolved font or color indexes degrade gracefully without warnings (text content is preserved).
 - See [Limits Policy](limits-policy.md) for details on safety limits.
 - See [Warning Reference](warning-reference.md) for warning documentation.
 

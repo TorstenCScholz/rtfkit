@@ -106,6 +106,12 @@ pub struct StyleState {
     pub underline: bool,
     /// Paragraph alignment
     pub alignment: Alignment,
+    /// Current font index (from \fN)
+    pub font_index: Option<i32>,
+    /// Font size in half-points (from \fsN)
+    pub font_size_half_points: Option<i32>,
+    /// Current color index (from \cfN)
+    pub color_index: Option<i32>,
 }
 
 impl StyleState {
@@ -226,6 +232,10 @@ enum DestinationBehavior {
     FldInst,
     /// Field result destination - handled specially for hyperlink parsing
     FldRslt,
+    /// Font table destination - parse font definitions
+    FontTable,
+    /// Color table destination - parse color definitions
+    ColorTable,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -283,6 +293,15 @@ pub struct Interpreter {
     /// Current group depth (for limit enforcement)
     current_depth: usize,
     // =============================================================================
+    // Document Style Resources (Font/Color)
+    // =============================================================================
+    /// Default font index (from \deffN)
+    default_font_index: Option<i32>,
+    /// Font table mapping font index to font family name
+    font_table: HashMap<i32, String>,
+    /// Color table (index 0 is auto/default, represented as None)
+    color_table: Vec<Option<crate::Color>>,
+    // =============================================================================
     // List Parsing State (Phase 3)
     // =============================================================================
     /// Parsed list definitions from \listtable
@@ -308,6 +327,28 @@ pub struct Interpreter {
     current_list_level: Option<ParsedListLevel>,
     /// Current list override being parsed (for listoverridetable)
     current_list_override: Option<ParsedListOverride>,
+    // =============================================================================
+    // Font Table Parsing State
+    // =============================================================================
+    /// Whether we're currently parsing a font table destination
+    parsing_font_table: bool,
+    /// Current font index being parsed (from \fN)
+    current_font_index: Option<i32>,
+    /// Current font name being accumulated
+    current_font_name: String,
+    // =============================================================================
+    // Color Table Parsing State
+    // =============================================================================
+    /// Whether we're currently parsing a color table destination
+    parsing_color_table: bool,
+    /// Current red component (from \redN)
+    current_red: u8,
+    /// Current green component (from \greenN)
+    current_green: u8,
+    /// Current blue component (from \blueN)
+    current_blue: u8,
+    /// Whether any color component has been set since last semicolon
+    color_components_seen: bool,
     // =============================================================================
     // Table Parsing State (Phase 4)
     // =============================================================================
@@ -391,6 +432,10 @@ impl Interpreter {
             group_can_start_destination: Vec::new(),
             limits,
             current_depth: 0,
+            // Document style resources
+            default_font_index: None,
+            font_table: HashMap::new(),
+            color_table: Vec::new(),
             // List parsing state
             list_table: HashMap::new(),
             list_overrides: HashMap::new(),
@@ -403,6 +448,16 @@ impl Interpreter {
             current_list_def: None,
             current_list_level: None,
             current_list_override: None,
+            // Font table parsing state
+            parsing_font_table: false,
+            current_font_index: None,
+            current_font_name: String::new(),
+            // Color table parsing state
+            parsing_color_table: false,
+            current_red: 0,
+            current_green: 0,
+            current_blue: 0,
+            color_components_seen: false,
             // Table parsing state
             current_table: None,
             current_row: None,
@@ -604,6 +659,12 @@ impl Interpreter {
                 if self.parsing_list_override_table && self.skip_destination_depth == 2 {
                     // Starting a new \listoverride group
                 }
+                // Handle nested groups in font table parsing (each font entry is in a group)
+                if self.parsing_font_table && self.skip_destination_depth == 2 {
+                    // Starting a new font entry group - reset font parsing state
+                    self.current_font_index = None;
+                    self.current_font_name.clear();
+                }
             }
             RtfEvent::GroupEnd => {
                 // Finalize list definition when closing a \list group
@@ -632,6 +693,24 @@ impl Interpreter {
                     list_def.levels.push(level);
                 }
 
+                // Finalize font entry when closing a font group
+                if self.parsing_font_table
+                    && self.skip_destination_depth == 2
+                    && let Some(font_idx) = self.current_font_index.take()
+                    && !self.current_font_name.is_empty()
+                {
+                    // Clean up font name: trim whitespace and remove trailing semicolon if present
+                    let mut name = self.current_font_name.trim().to_string();
+                    if name.ends_with(';') {
+                        name.pop();
+                    }
+                    let name = name.trim().to_string();
+                    if !name.is_empty() {
+                        self.font_table.insert(font_idx, name);
+                    }
+                    self.current_font_name.clear();
+                }
+
                 if let Some(previous_style) = self.group_stack.pop() {
                     self.current_style = previous_style;
                 }
@@ -643,12 +722,48 @@ impl Interpreter {
                     self.destination_marker = false;
                     self.parsing_list_table = false;
                     self.parsing_list_override_table = false;
+                    self.parsing_font_table = false;
+                    self.parsing_color_table = false;
                 }
             }
             RtfEvent::ControlWord { word, parameter } => {
-                self.handle_list_table_control_word(&word, parameter);
+                self.handle_destination_control_word(&word, parameter);
             }
-            RtfEvent::ControlSymbol(_) | RtfEvent::Text(_) | RtfEvent::BinaryData(_) => {}
+            RtfEvent::Text(text) => {
+                // Handle text in font/color table destinations
+                if self.parsing_font_table {
+                    // Accumulate font name text
+                    self.current_font_name.push_str(&text);
+                } else if self.parsing_color_table {
+                    // Handle semicolons in color table
+                    // Semicolons separate color entries
+                    for ch in text.chars() {
+                        if ch == ';' {
+                            // First semicolon marks auto/default color slot (index 0)
+                            // Subsequent semicolons mark end of color definitions
+                            if self.color_components_seen {
+                                // We have RGB components, push the defined color
+                                let color = crate::Color {
+                                    r: self.current_red,
+                                    g: self.current_green,
+                                    b: self.current_blue,
+                                };
+                                self.color_table.push(Some(color));
+                            } else {
+                                // No RGB components seen - this is auto/default slot
+                                self.color_table.push(None);
+                            }
+                            // Reset for next color
+                            self.current_red = 0;
+                            self.current_green = 0;
+                            self.current_blue = 0;
+                            self.color_components_seen = false;
+                        }
+                    }
+                }
+                // Other destinations ignore text
+            }
+            RtfEvent::ControlSymbol(_) | RtfEvent::BinaryData(_) => {}
         }
 
         if let Some(err) = self.hard_failure.take() {
@@ -658,10 +773,93 @@ impl Interpreter {
         Ok(())
     }
 
+    /// Handle control words within destination parsing (list table, font table, color table).
+    fn handle_destination_control_word(&mut self, word: &str, parameter: Option<i32>) {
+        // Font table control words
+        if self.parsing_font_table {
+            match word {
+                "f" => {
+                    // Font index
+                    self.current_font_index = parameter;
+                }
+                // Font property controls - we skip these but don't warn
+                "fnil" | "froman" | "fswiss" | "fmodern" | "fscript" | "fdecor" | "ftech"
+                | "fbidi" => {
+                    // Font family - ignore
+                }
+                "fcharset" => {
+                    // Character set - ignore
+                }
+                "fprq" => {
+                    // Font pitch - ignore
+                }
+                "panose" | "ftnil" | "fttruetype" => {
+                    // Font technology - ignore
+                }
+                _ => {
+                    // For font table, we don't warn on unknown controls
+                    // They're likely font-specific properties we don't need
+                }
+            }
+            return;
+        }
+
+        // Color table control words
+        if self.parsing_color_table {
+            match word {
+                "red" => {
+                    if let Some(val) = parameter {
+                        self.current_red = val.clamp(0, 255) as u8;
+                        self.color_components_seen = true;
+                    }
+                }
+                "green" => {
+                    if let Some(val) = parameter {
+                        self.current_green = val.clamp(0, 255) as u8;
+                        self.color_components_seen = true;
+                    }
+                }
+                "blue" => {
+                    if let Some(val) = parameter {
+                        self.current_blue = val.clamp(0, 255) as u8;
+                        self.color_components_seen = true;
+                    }
+                }
+                _ => {
+                    // Unknown control in color table - ignore silently
+                }
+            }
+            return;
+        }
+
+        // List table control words (existing logic)
+        self.handle_list_table_control_word(word, parameter);
+    }
+
     fn set_hard_failure(&mut self, err: ParseError) {
         if self.hard_failure.is_none() {
             self.hard_failure = Some(err);
         }
+    }
+
+    /// Reset character formatting to defaults (called by \plain).
+    ///
+    /// This resets ONLY character-style fields:
+    /// - bold, italic, underline
+    /// - font_index, font_size_half_points, color_index
+    ///
+    /// It does NOT reset:
+    /// - paragraph alignment
+    /// - list state
+    /// - table state
+    fn reset_character_formatting(&mut self) {
+        self.current_style.bold = false;
+        self.current_style.italic = false;
+        self.current_style.underline = false;
+        // Reset font to default font index if available
+        self.current_style.font_index = self.default_font_index;
+        self.current_style.font_size_half_points = None;
+        self.current_style.color_index = None;
     }
 
     /// Handle control words within list table/override table destinations.
@@ -820,10 +1018,14 @@ impl Interpreter {
             // Field destinations - handled specially for hyperlink parsing
             "fldinst" => Some(DestinationBehavior::FldInst),
             "fldrslt" => Some(DestinationBehavior::FldRslt),
+            // Font table - parse font definitions
+            "fonttbl" => Some(DestinationBehavior::FontTable),
+            // Color table - parse color definitions
+            "colortbl" => Some(DestinationBehavior::ColorTable),
             // Metadata destinations that are intentionally excluded from body content.
-            "fonttbl" | "colortbl" | "stylesheet" | "info" | "title" | "author" | "operator"
-            | "keywords" | "comment" | "version" | "vern" | "creatim" | "revtim" | "printim"
-            | "buptim" | "edmins" | "nofpages" | "nofwords" | "nofchars" | "nofcharsws" | "id" => {
+            "stylesheet" | "info" | "title" | "author" | "operator" | "keywords" | "comment"
+            | "version" | "vern" | "creatim" | "revtim" | "printim" | "buptim" | "edmins"
+            | "nofpages" | "nofwords" | "nofchars" | "nofcharsws" | "id" => {
                 Some(DestinationBehavior::Metadata)
             }
             // Destinations that represent currently unsupported visible content.
@@ -859,6 +1061,25 @@ impl Interpreter {
                 }
                 DestinationBehavior::ListOverrideTable => {
                     self.parsing_list_override_table = true;
+                    self.skip_destination_depth = 1;
+                }
+                DestinationBehavior::FontTable => {
+                    self.parsing_font_table = true;
+                    // Use the latest font table definition if multiple are present.
+                    self.font_table.clear();
+                    self.current_font_index = None;
+                    self.current_font_name.clear();
+                    self.skip_destination_depth = 1;
+                }
+                DestinationBehavior::ColorTable => {
+                    self.parsing_color_table = true;
+                    // Use the latest color table definition if multiple are present.
+                    self.color_table.clear();
+                    self.current_red = 0;
+                    self.current_green = 0;
+                    self.current_blue = 0;
+                    self.color_components_seen = false;
+                    // Don't pre-initialize - first semicolon marks auto/default color
                     self.skip_destination_depth = 1;
                 }
                 DestinationBehavior::FldInst => {
@@ -1126,13 +1347,39 @@ impl Interpreter {
                 }
             }
             // RTF header control words - silently ignored (not user-facing)
-            "rtf" | "ansi" | "ansicpg" | "deff" | "deflang" | "deflangfe" | "adeflang"
-            | "result" | "hwid" | "emdash" | "endash" | "emspace" | "enspace" | "qmspace"
-            | "bullet" | "lquote" | "rquote" | "ldblquote" | "rdblquote" | "tab" | "plain"
-            | "f" | "fs" | "cf" | "cb" | "highlight" | "strike" | "striked" | "sub" | "super"
-            | "nosupersub" | "caps" | "scaps" | "outl" | "shad" | "expnd" | "expndtw"
-            | "kerning" | "charscalex" | "lang" | "langfe" | "langnp" | "langfenp" => {
+            "rtf" | "ansi" | "ansicpg" | "deflang" | "deflangfe" | "adeflang" | "result"
+            | "hwid" | "emdash" | "endash" | "emspace" | "enspace" | "qmspace" | "bullet"
+            | "lquote" | "rquote" | "ldblquote" | "rdblquote" | "tab" | "cb" | "highlight"
+            | "strike" | "striked" | "sub" | "super" | "nosupersub" | "caps" | "scaps" | "outl"
+            | "shad" | "expnd" | "expndtw" | "kerning" | "charscalex" | "lang" | "langfe"
+            | "langnp" | "langfenp" => {
                 // Silently ignore these structural/formatting control words
+            }
+            // \deffN - Default font index
+            "deff" => {
+                if let Some(index) = parameter {
+                    self.default_font_index = Some(index);
+                    // Also set as current font if no font is currently set
+                    if self.current_style.font_index.is_none() {
+                        self.current_style.font_index = Some(index);
+                    }
+                }
+            }
+            // \fN - Font index
+            "f" => {
+                self.current_style.font_index = parameter;
+            }
+            // \fsN - Font size in half-points
+            "fs" => {
+                self.current_style.font_size_half_points = parameter;
+            }
+            // \cfN - Foreground color index
+            "cf" => {
+                self.current_style.color_index = parameter;
+            }
+            // \plain - Reset character formatting only
+            "plain" => {
+                self.reset_character_formatting();
             }
             // Unknown control words - report as unsupported
             _ => {
@@ -1196,21 +1443,88 @@ impl Interpreter {
 
     /// Check if the current style differs from the run style.
     fn style_changed(&self) -> bool {
+        self.character_style_changed()
+    }
+
+    /// Check if character-level style differs from the active run style.
+    fn character_style_changed(&self) -> bool {
         self.current_style.bold != self.current_run_style.bold
             || self.current_style.italic != self.current_run_style.italic
             || self.current_style.underline != self.current_run_style.underline
+            || self.current_style.font_index != self.current_run_style.font_index
+            || self.current_style.font_size_half_points
+                != self.current_run_style.font_size_half_points
+            || self.current_style.color_index != self.current_run_style.color_index
     }
 
     /// Create a run from the current text and run style.
     fn create_run(&self) -> Run {
+        // Resolve font_family from font_index -> font_table
+        let font_family = self.resolve_font_family();
+
+        // Resolve font_size from half-points to points
+        let font_size = self.resolve_font_size();
+
+        // Resolve color from color_index -> color_table
+        let color = self.resolve_color();
+
         Run {
             text: self.current_text.clone(),
             bold: self.current_run_style.bold,
             italic: self.current_run_style.italic,
             underline: self.current_run_style.underline,
-            font_size: None,
-            color: None,
+            font_family,
+            font_size,
+            color,
         }
+    }
+
+    /// Resolve font size from current run style.
+    ///
+    /// Invalid non-positive half-point values degrade to None.
+    fn resolve_font_size(&self) -> Option<f32> {
+        self.current_run_style
+            .font_size_half_points
+            .and_then(|hp| if hp > 0 { Some(hp as f32 / 2.0) } else { None })
+    }
+
+    /// Resolve font family name from current font index.
+    ///
+    /// Falls back to default font index if current index is not set or not found.
+    fn resolve_font_family(&self) -> Option<String> {
+        // Try current font index first
+        if let Some(font_idx) = self.current_run_style.font_index {
+            if let Some(family) = self.font_table.get(&font_idx) {
+                return Some(family.clone());
+            }
+        }
+
+        // Fall back to default font index
+        if let Some(default_idx) = self.default_font_index {
+            if let Some(family) = self.font_table.get(&default_idx) {
+                return Some(family.clone());
+            }
+        }
+
+        None
+    }
+
+    /// Resolve color from current color index.
+    ///
+    /// \cf0 means auto/default color (represented as None).
+    /// Invalid indices degrade to None without warnings.
+    fn resolve_color(&self) -> Option<crate::Color> {
+        let color_idx = self.current_run_style.color_index?;
+
+        // cf0 is auto/default color, represented as None
+        if color_idx == 0 {
+            return None;
+        }
+
+        // Color table stores: [None (auto), color1, color2, ...]
+        // cf1 maps to color_table[1], cf2 to color_table[2], etc.
+        let table_index = color_idx as usize;
+        self.color_table.get(table_index).and_then(|c| c.clone())
     }
 
     fn flush_current_text_as_run(&mut self) {
@@ -1893,9 +2207,7 @@ impl Interpreter {
 
     /// Check if the current style differs from the run style (for field result).
     fn field_style_changed(&self) -> bool {
-        self.current_style.bold != self.current_run_style.bold
-            || self.current_style.italic != self.current_run_style.italic
-            || self.current_style.underline != self.current_run_style.underline
+        self.character_style_changed()
     }
 
     fn flush_current_text_as_field_run(&mut self) {
@@ -3524,5 +3836,372 @@ After table text.\par
                 if reason == "Nested fields are not supported"
             )
         }));
+    }
+
+    // ==========================================================================
+    // Font Table Parsing Tests (PR2)
+    // ==========================================================================
+
+    #[test]
+    fn test_fonttbl_single_font() {
+        // Need \deff0 to set default font, or \f0 to set current font
+        let input = r#"{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}Hello}"#;
+        let (doc, report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Hello");
+                    assert_eq!(r.font_family, Some("Arial".to_string()));
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+        assert!(report.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_fonttbl_multiple_fonts() {
+        let input = r#"{\rtf1\ansi{\fonttbl{\f0 Arial;}{\f1 Times New Roman;}{\f2 Courier New;}}\f0 Arial \f1 Times \f2 Courier}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.inlines.len(), 3);
+            match (&para.inlines[0], &para.inlines[1], &para.inlines[2]) {
+                (Inline::Run(r1), Inline::Run(r2), Inline::Run(r3)) => {
+                    assert_eq!(r1.font_family, Some("Arial".to_string()));
+                    assert_eq!(r2.font_family, Some("Times New Roman".to_string()));
+                    assert_eq!(r3.font_family, Some("Courier New".to_string()));
+                }
+                _ => panic!("Expected three Runs"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_fonttbl_with_font_properties() {
+        // Font entries often include font family and charset info
+        let input = r#"{\rtf1\ansi{\fonttbl{\f0\fnil\fcharset0 Arial;}{\f1\fswiss\fcharset0 Helvetica;}}\f0 Test}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.font_family, Some("Arial".to_string()));
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_fonttbl_empty() {
+        let input = r#"{\rtf1\ansi{\fonttbl}Hello}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Hello");
+                    // No font family should be set
+                    assert_eq!(r.font_family, None);
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_fonttbl_malformed_no_font_index() {
+        // Font entry without \fN - should be ignored
+        let input = r#"{\rtf1\ansi{\fonttbl{Arial;}}Hello}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Hello");
+                    // Font should not be registered
+                    assert_eq!(r.font_family, None);
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_fonttbl_malformed_no_font_name() {
+        // Font entry with index but no name - should be ignored
+        let input = r#"{\rtf1\ansi{\fonttbl{\f0;}}Hello}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Hello");
+                    // Font should not be registered (empty name)
+                    assert_eq!(r.font_family, None);
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_deff_default_font() {
+        // \deffN sets the default font index
+        let input = r#"{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}Hello}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Hello");
+                    // Should use default font
+                    assert_eq!(r.font_family, Some("Arial".to_string()));
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_fonttbl_redefinition_uses_latest_table() {
+        let input = r#"{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}{\fonttbl{\f0 Courier New;}}Hello}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.font_family, Some("Courier New".to_string()));
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_fs_zero_degrades_to_none() {
+        let input = r#"{\rtf1\ansi\fs0 Zero}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => assert_eq!(r.font_size, None),
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_fs_negative_degrades_to_none() {
+        let input = r#"{\rtf1\ansi\fs-8 Invalid}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => assert_eq!(r.font_size, None),
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    // ==========================================================================
+    // Color Table Parsing Tests (PR2)
+    // ==========================================================================
+
+    #[test]
+    fn test_colortbl_single_color() {
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\cf1 Red Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Red Text");
+                    assert_eq!(r.color, Some(crate::Color { r: 255, g: 0, b: 0 }));
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_colortbl_multiple_colors() {
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;\red0\green255\blue0;\red0\green0\blue255;}\cf1 Red \cf2 Green \cf3 Blue}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert_eq!(para.inlines.len(), 3);
+            match (&para.inlines[0], &para.inlines[1], &para.inlines[2]) {
+                (Inline::Run(r1), Inline::Run(r2), Inline::Run(r3)) => {
+                    assert_eq!(r1.color, Some(crate::Color { r: 255, g: 0, b: 0 }));
+                    assert_eq!(r2.color, Some(crate::Color { r: 0, g: 255, b: 0 }));
+                    assert_eq!(r3.color, Some(crate::Color { r: 0, g: 0, b: 255 }));
+                }
+                _ => panic!("Expected three Runs"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_colortbl_cf0_is_auto() {
+        // \cf0 means auto/default color (None)
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\cf0 Auto Color}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Auto Color");
+                    assert_eq!(r.color, None);
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_colortbl_empty() {
+        let input = r#"{\rtf1\ansi{\colortbl}Hello}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Hello");
+                    assert_eq!(r.color, None);
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_colortbl_rgb_clamping() {
+        // RGB values should be clamped to 0-255
+        let input = r#"{\rtf1\ansi{\colortbl;\red300\green-10\blue128;}\cf1 Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(
+                        r.color,
+                        Some(crate::Color {
+                            r: 255,
+                            g: 0,
+                            b: 128
+                        })
+                    );
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_colortbl_incomplete_color() {
+        // Color with missing components - should use 0 for missing
+        let input = r#"{\rtf1\ansi{\colortbl;\red255;}\cf1 Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    // Missing green and blue should be 0
+                    assert_eq!(r.color, Some(crate::Color { r: 255, g: 0, b: 0 }));
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_colortbl_unresolved_index() {
+        // Referencing a color index that doesn't exist
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\cf99 Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Text");
+                    // Unresolved index should degrade to None
+                    assert_eq!(r.color, None);
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_colortbl_redefinition_uses_latest_table() {
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}{\colortbl;\red0\green0\blue255;}\cf1 Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.color, Some(crate::Color { r: 0, g: 0, b: 255 }));
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_fonttbl_and_colortbl_combined() {
+        let input = r#"{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}{\colortbl;\red255\green0\blue0;}\cf1 Styled Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Styled Text");
+                    assert_eq!(r.font_family, Some("Arial".to_string()));
+                    assert_eq!(r.color, Some(crate::Color { r: 255, g: 0, b: 0 }));
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
     }
 }

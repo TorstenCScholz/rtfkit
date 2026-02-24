@@ -1,0 +1,42 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Text in Arial.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Arial"
+        },
+        {
+          "type": "run",
+          "text": "Text in Helvetica.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Helvetica"
+        },
+        {
+          "type": "run",
+          "text": "Text in Times New Roman.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Times New Roman"
+        },
+        {
+          "type": "run",
+          "text": "Back to Arial.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Arial"
+        }
+      ]
+    }
+  ]
+}

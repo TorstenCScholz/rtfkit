@@ -1,0 +1,58 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Normal size.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_size": 12.0
+        },
+        {
+          "type": "run",
+          "text": "Small text.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_size": 6.0
+        },
+        {
+          "type": "run",
+          "text": "Normal again.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_size": 12.0
+        },
+        {
+          "type": "run",
+          "text": "Large text.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_size": 24.0
+        },
+        {
+          "type": "run",
+          "text": "Huge text.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_size": 36.0
+        },
+        {
+          "type": "run",
+          "text": "Back to normal.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_size": 12.0
+        }
+      ]
+    }
+  ]
+}

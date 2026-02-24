@@ -9,7 +9,9 @@
           "text": "Item with unresolved list reference",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -22,7 +24,9 @@
           "text": "Normal paragraph after",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     }

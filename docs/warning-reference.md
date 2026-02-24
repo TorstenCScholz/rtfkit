@@ -6,6 +6,8 @@ This document provides comprehensive documentation for all warning types in rtfk
 
 Warnings are emitted during RTF interpretation to indicate issues that don't prevent parsing but may affect output quality or completeness. Warnings are included in the conversion report (JSON or text format).
 
+**Note on Font and Color Handling**: Font family, font size, and foreground color are now fully supported features. Unresolved font or color indexes (e.g., `\f999` referencing a non-existent font) degrade gracefully without generating warnings - the text is rendered with default formatting. This is not considered a semantic loss since the text content is preserved.
+
 ## Warning Severity Levels
 
 | Level | Description |

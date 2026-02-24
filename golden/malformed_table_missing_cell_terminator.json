@@ -16,7 +16,9 @@
                       "text": "Cell 1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -34,7 +36,9 @@
                       "text": "Cell 2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -56,7 +60,9 @@
                       "text": "Cell 3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }
@@ -74,7 +80,9 @@
                       "text": "Cell 4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
                     }
                   ]
                 }

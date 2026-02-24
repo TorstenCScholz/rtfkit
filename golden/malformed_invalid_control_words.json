@@ -9,7 +9,9 @@
           "text": "% Malformed RTF with invalid/unknown control words% Tests parser's handling of unknown control words with graceful degradation",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -22,7 +24,9 @@
           "text": "First normal paragraph.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -35,7 +39,9 @@
           "text": "Text with unknown control word.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -48,7 +54,9 @@
           "text": "Another invalid control.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -61,7 +69,9 @@
           "text": "Text after bogus param.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -74,7 +84,9 @@
           "text": "Custom formatted text.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -87,7 +99,9 @@
           "text": "Z-control test.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     },
@@ -100,7 +114,9 @@
           "text": "Final normal paragraph.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "font_family": "Times New Roman",
+          "font_size": 12.0
         }
       ]
     }

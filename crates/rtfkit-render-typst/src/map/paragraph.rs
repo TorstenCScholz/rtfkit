@@ -10,6 +10,9 @@
 //! | `Run.bold` | `*text*` |
 //! | `Run.italic` | `_text_` |
 //! | `Run.underline` | `#underline[text]` |
+//! | `Run.font_family` | `#text(font: "Name")[...]` |
+//! | `Run.font_size` | `#text(size: Npt)[...]` |
+//! | `Run.color` | `#text(fill: rgb(r, g, b))[...]` |
 //! | `Alignment::Left` | (default, no directive) |
 //! | `Alignment::Center` | `#align(center)[...]` |
 //! | `Alignment::Right` | `#align(right)[...]` |
@@ -26,7 +29,7 @@
 //! - `$` - Typst math mode marker
 //! - `~` - Typst non-breaking space
 
-use rtfkit_core::{Alignment, Hyperlink, Inline, Paragraph, Run};
+use rtfkit_core::{Alignment, Color, Hyperlink, Inline, Paragraph, Run};
 
 use super::MappingWarning;
 
@@ -152,93 +155,176 @@ fn escape_typst_string(s: &str) -> String {
     result
 }
 
+/// Style key for comparing runs during merging.
+///
+/// Two runs can be merged only if all style fields match.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RunStyle {
+    bold: bool,
+    italic: bool,
+    underline: bool,
+    font_family: Option<String>,
+    // Canonicalized to half-points for stable equality and output.
+    font_size_half_points: Option<i32>,
+    color: Option<ColorKey>,
+}
+
+/// Color comparison key that implements Eq for hashing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ColorKey {
+    r: u8,
+    g: u8,
+    b: u8,
+}
+
+impl From<&Color> for ColorKey {
+    fn from(color: &Color) -> Self {
+        Self {
+            r: color.r,
+            g: color.g,
+            b: color.b,
+        }
+    }
+}
+
+impl RunStyle {
+    /// Extract style key from a Run for comparison.
+    fn from_run(run: &Run) -> Self {
+        Self {
+            bold: run.bold,
+            italic: run.italic,
+            underline: run.underline,
+            font_family: run.font_family.clone(),
+            font_size_half_points: run.font_size.and_then(points_to_half_points),
+            color: run.color.as_ref().map(ColorKey::from),
+        }
+    }
+
+    /// Check if this style needs a `#text(...)` wrapper.
+    fn needs_text_wrapper(&self) -> bool {
+        self.font_family.is_some() || self.font_size_half_points.is_some() || self.color.is_some()
+    }
+}
+
+fn points_to_half_points(points: f32) -> Option<i32> {
+    if points.is_finite() && points > 0.0 {
+        Some((points * 2.0).round() as i32)
+    } else {
+        None
+    }
+}
+
+fn format_half_points(half_points: i32) -> String {
+    if half_points % 2 == 0 {
+        format!("{}", half_points / 2)
+    } else {
+        format!("{}.5", half_points / 2)
+    }
+}
+
 /// Map runs to Typst text content.
 ///
 /// Adjacent runs with identical formatting are merged for cleaner output.
-fn map_runs(runs: &[Run], warnings: &mut Vec<MappingWarning>) -> String {
+fn map_runs(runs: &[Run], _warnings: &mut Vec<MappingWarning>) -> String {
     if runs.is_empty() {
         return String::new();
     }
 
     let mut result = String::new();
     let mut current_text = String::new();
-    let mut current_bold = false;
-    let mut current_italic = false;
-    let mut current_underline = false;
+    let mut current_style: Option<RunStyle> = None;
 
-    for (i, run) in runs.iter().enumerate() {
-        // Check for dropped formatting
-        if run.font_size.is_some() {
-            warnings.push(MappingWarning::FontSizeDropped);
-        }
-        if run.color.is_some() {
-            warnings.push(MappingWarning::ColorDropped);
-        }
+    for run in runs.iter() {
+        let style = RunStyle::from_run(run);
 
-        let same_formatting = i > 0
-            && current_bold == run.bold
-            && current_italic == run.italic
-            && current_underline == run.underline;
+        let same_formatting = current_style.as_ref() == Some(&style);
 
-        if i == 0 {
+        if current_style.is_none() {
+            // First run
             current_text = escape_typst_text(&run.text);
-            current_bold = run.bold;
-            current_italic = run.italic;
-            current_underline = run.underline;
+            current_style = Some(style);
         } else if same_formatting {
             // Same formatting - merge
             current_text.push_str(&escape_typst_text(&run.text));
         } else {
             // Different formatting - push current and start new
-            result.push_str(&format_run(
-                &current_text,
-                current_bold,
-                current_italic,
-                current_underline,
-            ));
+            if let Some(style) = current_style.take() {
+                result.push_str(&format_run(&current_text, &style));
+            }
             current_text = escape_typst_text(&run.text);
-            current_bold = run.bold;
-            current_italic = run.italic;
-            current_underline = run.underline;
+            current_style = Some(style);
         }
     }
 
     // Don't forget the last run
     if !current_text.is_empty() {
-        result.push_str(&format_run(
-            &current_text,
-            current_bold,
-            current_italic,
-            current_underline,
-        ));
+        if let Some(style) = current_style {
+            result.push_str(&format_run(&current_text, &style));
+        }
     }
 
     result
 }
 
 /// Format a single run with the given formatting.
-fn format_run(text: &str, bold: bool, italic: bool, underline: bool) -> String {
+///
+/// Applies formatting in order: #text(...) wrapper, then underline, italic, bold.
+/// This ensures proper nesting in Typst.
+fn format_run(text: &str, style: &RunStyle) -> String {
     if text.is_empty() {
         return String::new();
     }
 
     let mut result = text.to_string();
 
-    // Apply formatting in order: underline, italic, bold
-    // This ensures proper nesting in Typst
-    if underline {
+    // Apply #text(...) wrapper if font/size/color styling is needed
+    if style.needs_text_wrapper() {
+        result = format_text_wrapper(&result, style);
+    }
+
+    // Apply underline (Typst function call)
+    if style.underline {
         result = format!("#underline[{}]", result);
     }
 
-    if italic {
+    // Apply italic (Typst emphasis)
+    if style.italic {
         result = format!("_{}_", result);
     }
 
-    if bold {
+    // Apply bold (Typst strong emphasis)
+    if style.bold {
         result = format!("*{}*", result);
     }
 
     result
+}
+
+/// Format a `#text(...)` wrapper for font/size/color styling.
+fn format_text_wrapper(content: &str, style: &RunStyle) -> String {
+    let mut params = Vec::new();
+
+    // Add font family parameter
+    if let Some(ref font) = style.font_family {
+        let escaped_font = escape_typst_string(font);
+        params.push(format!("font: \"{}\"", escaped_font));
+    }
+
+    // Add font size parameter (convert points to Typst length)
+    if let Some(size_hp) = style.font_size_half_points {
+        params.push(format!("size: {}pt", format_half_points(size_hp)));
+    }
+
+    // Add fill color parameter
+    if let Some(ref color) = style.color {
+        params.push(format!("fill: rgb({}, {}, {})", color.r, color.g, color.b));
+    }
+
+    if params.is_empty() {
+        return content.to_string();
+    }
+
+    format!("#text({})[{}]", params.join(", "), content)
 }
 
 /// Escape special Typst characters in text content.
@@ -439,32 +525,237 @@ mod tests {
     }
 
     #[test]
-    fn test_font_size_dropped_warning() {
+    fn test_font_size_output() {
         let mut run = Run::new("text");
         run.font_size = Some(14.0);
 
         let paragraph = Paragraph::from_runs(vec![run]);
         let output = map_paragraph(&paragraph);
 
-        assert!(
-            output
-                .warnings
-                .contains(&crate::map::MappingWarning::FontSizeDropped)
-        );
+        assert_eq!(output.typst_source, "#text(size: 14pt)[text]");
+        assert!(output.warnings.is_empty());
     }
 
     #[test]
-    fn test_color_dropped_warning() {
+    fn test_font_size_half_point_output() {
         let mut run = Run::new("text");
-        run.color = Some(rtfkit_core::Color::new(255, 0, 0));
+        run.font_size = Some(12.5);
 
         let paragraph = Paragraph::from_runs(vec![run]);
         let output = map_paragraph(&paragraph);
 
-        assert!(
-            output
-                .warnings
-                .contains(&crate::map::MappingWarning::ColorDropped)
+        assert_eq!(output.typst_source, "#text(size: 12.5pt)[text]");
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_non_positive_font_size_is_omitted() {
+        let mut run = Run::new("text");
+        run.font_size = Some(0.0);
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        assert_eq!(output.typst_source, "text");
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_color_output() {
+        let mut run = Run::new("text");
+        run.color = Some(Color::new(255, 0, 0));
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        assert_eq!(output.typst_source, "#text(fill: rgb(255, 0, 0))[text]");
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_font_family_output() {
+        let mut run = Run::new("text");
+        run.font_family = Some("Arial".to_string());
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        assert_eq!(output.typst_source, "#text(font: \"Arial\")[text]");
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_font_family_with_special_chars() {
+        let mut run = Run::new("text");
+        run.font_family = Some("Font \"Name\"".to_string());
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        assert_eq!(
+            output.typst_source,
+            "#text(font: \"Font \\\"Name\\\"\")[text]"
+        );
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_combined_font_and_size() {
+        let mut run = Run::new("text");
+        run.font_family = Some("Arial".to_string());
+        run.font_size = Some(12.0);
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        assert_eq!(
+            output.typst_source,
+            "#text(font: \"Arial\", size: 12pt)[text]"
+        );
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_combined_font_size_color() {
+        let mut run = Run::new("text");
+        run.font_family = Some("Arial".to_string());
+        run.font_size = Some(12.0);
+        run.color = Some(Color::new(255, 0, 0));
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        assert_eq!(
+            output.typst_source,
+            "#text(font: \"Arial\", size: 12pt, fill: rgb(255, 0, 0))[text]"
+        );
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_bold_with_font_and_color() {
+        let mut run = Run::new("text");
+        run.bold = true;
+        run.font_family = Some("Arial".to_string());
+        run.color = Some(Color::new(255, 0, 0));
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        assert_eq!(
+            output.typst_source,
+            "*#text(font: \"Arial\", fill: rgb(255, 0, 0))[text]*"
+        );
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_all_formatting_with_font_size_color() {
+        let mut run = Run::new("text");
+        run.bold = true;
+        run.italic = true;
+        run.underline = true;
+        run.font_family = Some("Arial".to_string());
+        run.font_size = Some(14.0);
+        run.color = Some(Color::new(0, 128, 255));
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        // The #text(...) wrapper is inside #underline[], which is inside _italic_, which is inside *bold*
+        assert_eq!(
+            output.typst_source,
+            "*_#underline[#text(font: \"Arial\", size: 14pt, fill: rgb(0, 128, 255))[text]]_*"
+        );
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_run_merging_with_different_fonts() {
+        let mut run1 = Run::new("Hello ");
+        run1.font_family = Some("Arial".to_string());
+        let mut run2 = Run::new("World");
+        run2.font_family = Some("Times New Roman".to_string());
+
+        let paragraph = Paragraph::from_runs(vec![run1, run2]);
+        let output = map_paragraph(&paragraph);
+
+        // Should NOT merge - different fonts
+        assert_eq!(
+            output.typst_source,
+            "#text(font: \"Arial\")[Hello ]#text(font: \"Times New Roman\")[World]"
+        );
+    }
+
+    #[test]
+    fn test_run_merging_with_same_font() {
+        let mut run1 = Run::new("Hello ");
+        run1.font_family = Some("Arial".to_string());
+        let mut run2 = Run::new("World");
+        run2.font_family = Some("Arial".to_string());
+
+        let paragraph = Paragraph::from_runs(vec![run1, run2]);
+        let output = map_paragraph(&paragraph);
+
+        // Should merge - same font
+        assert_eq!(output.typst_source, "#text(font: \"Arial\")[Hello World]");
+    }
+
+    #[test]
+    fn test_run_merging_with_different_colors() {
+        let mut run1 = Run::new("Red ");
+        run1.color = Some(Color::new(255, 0, 0));
+        let mut run2 = Run::new("Blue");
+        run2.color = Some(Color::new(0, 0, 255));
+
+        let paragraph = Paragraph::from_runs(vec![run1, run2]);
+        let output = map_paragraph(&paragraph);
+
+        // Should NOT merge - different colors
+        assert_eq!(
+            output.typst_source,
+            "#text(fill: rgb(255, 0, 0))[Red ]#text(fill: rgb(0, 0, 255))[Blue]"
+        );
+    }
+
+    #[test]
+    fn test_run_merging_with_different_sizes() {
+        let mut run1 = Run::new("Small ");
+        run1.font_size = Some(10.0);
+        let mut run2 = Run::new("Large");
+        run2.font_size = Some(20.0);
+
+        let paragraph = Paragraph::from_runs(vec![run1, run2]);
+        let output = map_paragraph(&paragraph);
+
+        // Should NOT merge - different sizes
+        assert_eq!(
+            output.typst_source,
+            "#text(size: 10pt)[Small ]#text(size: 20pt)[Large]"
+        );
+    }
+
+    #[test]
+    fn test_run_merging_all_style_fields_match() {
+        let mut run1 = Run::new("Hello ");
+        run1.bold = true;
+        run1.font_family = Some("Arial".to_string());
+        run1.font_size = Some(12.0);
+        run1.color = Some(Color::new(255, 0, 0));
+
+        let mut run2 = Run::new("World");
+        run2.bold = true;
+        run2.font_family = Some("Arial".to_string());
+        run2.font_size = Some(12.0);
+        run2.color = Some(Color::new(255, 0, 0));
+
+        let paragraph = Paragraph::from_runs(vec![run1, run2]);
+        let output = map_paragraph(&paragraph);
+
+        // Should merge - all style fields match
+        assert_eq!(
+            output.typst_source,
+            "*#text(font: \"Arial\", size: 12pt, fill: rgb(255, 0, 0))[Hello World]*"
         );
     }
 

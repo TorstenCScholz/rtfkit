@@ -3,13 +3,90 @@
 //! This module handles converting IR paragraphs to HTML with proper
 //! semantic tags and run merging.
 
-use rtfkit_core::{Hyperlink, Inline, Paragraph, Run};
+use rtfkit_core::{Color, Hyperlink, Inline, Paragraph, Run};
 
-use crate::escape::escape_attribute;
+use crate::escape::{escape_attribute, sanitize_font_family};
 use crate::serialize::HtmlBuffer;
 use crate::style::alignment_class;
 #[cfg(test)]
 use rtfkit_core::Alignment;
+
+/// Builds a CSS style string for run-level formatting properties.
+///
+/// This helper centralizes run style string building to ensure:
+/// 1. Deterministic property order for stable output
+/// 2. Proper CSS sanitization for font-family names
+/// 3. Consistent formatting across regular runs and hyperlink runs
+///
+/// Properties are emitted in this order:
+/// 1. font-family (if present)
+/// 2. font-size (if present)
+/// 3. color (if present)
+///
+/// # Security
+///
+/// Font family names are sanitized using [`sanitize_font_family`] to prevent
+/// CSS injection attacks from untrusted RTF input.
+///
+/// # Example
+///
+/// ```rust
+/// use rtfkit_html::blocks::paragraph::build_run_style;
+/// use rtfkit_core::{Run, Color};
+///
+/// let mut run = Run::new("text");
+/// run.font_family = Some("Arial".to_string());
+/// run.font_size = Some(12.0);
+/// run.color = Some(Color::new(255, 0, 0));
+///
+/// let style = build_run_style(&run);
+/// assert_eq!(style, "font-family: \"Arial\"; font-size: 12pt; color: #ff0000;");
+/// ```
+pub fn build_run_style(run: &Run) -> String {
+    let mut parts: Vec<String> = Vec::new();
+
+    // 1. Font family (sanitized for CSS safety)
+    if let Some(ref font_family) = run.font_family {
+        let sanitized = sanitize_font_family(font_family);
+        if !sanitized.is_empty() {
+            parts.push(format!("font-family: \"{}\"", sanitized));
+        }
+    }
+
+    // 2. Font size in points
+    if let Some(font_size) = run.font_size {
+        parts.push(format!("font-size: {}pt", font_size));
+    }
+
+    // 3. Color as hex RGB
+    if let Some(ref color) = run.color {
+        parts.push(format!(
+            "color: #{:02x}{:02x}{:02x}",
+            color.r, color.g, color.b
+        ));
+    }
+
+    if parts.is_empty() {
+        String::new()
+    } else {
+        parts.join("; ") + ";"
+    }
+}
+
+/// Converts a color to its CSS hex representation.
+///
+/// # Example
+///
+/// ```rust
+/// use rtfkit_html::blocks::paragraph::color_to_hex;
+/// use rtfkit_core::Color;
+///
+/// assert_eq!(color_to_hex(&Color::new(255, 0, 0)), "#ff0000");
+/// assert_eq!(color_to_hex(&Color::new(0, 128, 255)), "#0080ff");
+/// ```
+pub fn color_to_hex(color: &Color) -> String {
+    format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b)
+}
 
 /// Checks if a URL scheme is safe for HTML href attributes.
 ///
@@ -82,8 +159,9 @@ fn hyperlink_to_html(hyperlink: &Hyperlink, buf: &mut HtmlBuffer) {
 
 /// Converts a run to HTML with semantic tags.
 ///
-/// Uses the stable nesting order: `strong -> em -> span.rtf-u`
+/// Uses the stable nesting order: `span[style] -> strong -> em -> span.rtf-u`
 /// Per the spec:
+/// - font/color/size -> `<span style="...">`
 /// - bold -> `<strong>`
 /// - italic -> `<em>`
 /// - underline -> `<span class="rtf-u">`
@@ -93,7 +171,14 @@ pub fn run_to_html(run: &Run, buf: &mut HtmlBuffer) {
         return;
     }
 
-    // Open tags in stable order: strong -> em -> span.rtf-u
+    // Build style string for font properties (deterministic order)
+    let style = build_run_style(run);
+    let has_style = !style.is_empty();
+
+    // Open tags in stable order: span[style] -> strong -> em -> span.rtf-u
+    if has_style {
+        buf.push_open_tag("span", &[("style", style.as_str())]);
+    }
     if run.bold {
         buf.push_raw("<strong>");
     }
@@ -107,7 +192,7 @@ pub fn run_to_html(run: &Run, buf: &mut HtmlBuffer) {
     // Emit escaped text content
     buf.push_text(&run.text);
 
-    // Close tags in reverse order: span.rtf-u -> em -> strong
+    // Close tags in reverse order: span.rtf-u -> em -> strong -> span[style]
     if run.underline {
         buf.push_raw("</span>");
     }
@@ -116,6 +201,9 @@ pub fn run_to_html(run: &Run, buf: &mut HtmlBuffer) {
     }
     if run.bold {
         buf.push_raw("</strong>");
+    }
+    if has_style {
+        buf.push_raw("</span>");
     }
 }
 
@@ -503,5 +591,338 @@ mod tests {
     #[test]
     fn unsafe_url_ftp() {
         assert!(!is_safe_url("ftp://example.com/file"));
+    }
+
+    // =========================================================================
+    // Font/Color/Size style tests
+    // =========================================================================
+
+    #[test]
+    fn run_with_font_family_only() {
+        let mut run = Run::new("styled text");
+        run.font_family = Some("Arial".to_string());
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><span style="font-family: &quot;Arial&quot;;">styled text</span></p>"#
+        );
+    }
+
+    #[test]
+    fn run_with_font_size_only() {
+        let mut run = Run::new("sized text");
+        run.font_size = Some(14.0);
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><span style="font-size: 14pt;">sized text</span></p>"#
+        );
+    }
+
+    #[test]
+    fn run_with_color_only() {
+        let mut run = Run::new("colored text");
+        run.color = Some(Color::new(255, 0, 0));
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><span style="color: #ff0000;">colored text</span></p>"#
+        );
+    }
+
+    #[test]
+    fn run_with_all_font_properties() {
+        let mut run = Run::new("fully styled");
+        run.font_family = Some("Helvetica".to_string());
+        run.font_size = Some(12.0);
+        run.color = Some(Color::new(0, 128, 255));
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        // Deterministic order: font-family, font-size, color
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><span style="font-family: &quot;Helvetica&quot;; font-size: 12pt; color: #0080ff;">fully styled</span></p>"#
+        );
+    }
+
+    #[test]
+    fn run_with_bold_and_font() {
+        let mut run = Run::new("bold styled");
+        run.bold = true;
+        run.font_family = Some("Arial".to_string());
+        run.font_size = Some(16.0);
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        // Nesting order: span[style] -> strong
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><span style="font-family: &quot;Arial&quot;; font-size: 16pt;"><strong>bold styled</strong></span></p>"#
+        );
+    }
+
+    #[test]
+    fn run_with_italic_and_color() {
+        let mut run = Run::new("italic colored");
+        run.italic = true;
+        run.color = Some(Color::new(128, 0, 128));
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><span style="color: #800080;"><em>italic colored</em></span></p>"#
+        );
+    }
+
+    #[test]
+    fn run_with_all_formatting() {
+        let mut run = Run::new("everything");
+        run.bold = true;
+        run.italic = true;
+        run.underline = true;
+        run.font_family = Some("Times New Roman".to_string());
+        run.font_size = Some(18.0);
+        run.color = Some(Color::new(0, 100, 0));
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        // Nesting order: span[style] -> strong -> em -> span.rtf-u
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><span style="font-family: &quot;Times New Roman&quot;; font-size: 18pt; color: #006400;"><strong><em><span class="rtf-u">everything</span></em></strong></span></p>"#
+        );
+    }
+
+    #[test]
+    fn hyperlink_with_font_styling() {
+        let mut run = Run::new("styled link");
+        run.font_family = Some("Arial".to_string());
+        run.color = Some(Color::new(0, 0, 255));
+        let hyperlink = Hyperlink {
+            url: "https://example.com".to_string(),
+            runs: vec![run],
+        };
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Hyperlink(hyperlink)],
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><a href="https://example.com" class="rtf-link"><span style="font-family: &quot;Arial&quot;; color: #0000ff;">styled link</span></a></p>"#
+        );
+    }
+
+    #[test]
+    fn hyperlink_with_bold_and_font() {
+        let mut run = Run::new("bold link");
+        run.bold = true;
+        run.font_family = Some("Verdana".to_string());
+        let hyperlink = Hyperlink {
+            url: "https://example.com".to_string(),
+            runs: vec![run],
+        };
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Hyperlink(hyperlink)],
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><a href="https://example.com" class="rtf-link"><span style="font-family: &quot;Verdana&quot;;"><strong>bold link</strong></span></a></p>"#
+        );
+    }
+
+    // =========================================================================
+    // Font family sanitization security tests
+    // =========================================================================
+
+    #[test]
+    fn font_family_injection_attack() {
+        // Try to break out of CSS context
+        let mut run = Run::new("text");
+        run.font_family = Some("Arial\"; } body { display: none; /*".to_string());
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        let result = buf.as_str();
+        // The font-family value inside the style attribute should be sanitized
+        // The sanitized font name should be "Arial body  display none" (quotes, semicolons, braces stripped)
+        // Dangerous characters should be stripped from the font-family value
+        assert!(!result.contains("}"));
+        assert!(!result.contains("{"));
+        // The output should contain the sanitized font name parts
+        assert!(result.contains("Arial"));
+    }
+
+    #[test]
+    fn font_family_xss_attempt() {
+        // Try to inject script tag via font name
+        let mut run = Run::new("text");
+        run.font_family = Some("</style><script>alert('xss')</script>".to_string());
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        let result = buf.as_str();
+        // The font-family value should be sanitized - dangerous chars stripped
+        // After sanitization, only "style script alert xss script" remains (no HTML chars)
+        // Check that no style attribute contains dangerous content
+        if result.contains("style=\"") {
+            let style_value = result
+                .split("style=\"")
+                .nth(1)
+                .unwrap()
+                .split('"')
+                .next()
+                .unwrap();
+            // HTML characters should be stripped from the font-family value
+            assert!(!style_value.contains("<"));
+            assert!(!style_value.contains(">"));
+            assert!(!style_value.contains("\""));
+            assert!(!style_value.contains("'"));
+        }
+        // Either way, the output should be safe
+        assert!(result.contains("text"));
+    }
+
+    #[test]
+    fn font_family_with_backslash() {
+        let mut run = Run::new("text");
+        run.font_family = Some("Font\\Name".to_string());
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        let result = buf.as_str();
+        // Backslash should be stripped
+        assert!(!result.contains("\\"));
+    }
+
+    #[test]
+    fn font_family_with_newline() {
+        let mut run = Run::new("text");
+        run.font_family = Some("Font\nName".to_string());
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        let result = buf.as_str();
+        // Newline should be stripped
+        assert!(!result.contains("\n"));
+    }
+
+    #[test]
+    fn font_family_empty_after_sanitization() {
+        // Font name with only dangerous characters
+        let mut run = Run::new("text");
+        run.font_family = Some("\"';{}<>".to_string());
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        let result = buf.as_str();
+        // No style span should be emitted if font name is empty after sanitization
+        assert!(!result.contains("style="));
+        assert_eq!(result, r#"<p class="rtf-p">text</p>"#);
+    }
+
+    #[test]
+    fn font_family_safe_characters_preserved() {
+        // Test that safe characters are preserved
+        let mut run = Run::new("text");
+        run.font_family = Some("Open-Sans_2024".to_string());
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        let result = buf.as_str();
+        // Hyphens, underscores, and numbers should be preserved
+        assert!(result.contains("Open-Sans_2024"));
+    }
+
+    // =========================================================================
+    // Determinism tests
+    // =========================================================================
+
+    #[test]
+    fn style_output_is_deterministic() {
+        let mut run = Run::new("test");
+        run.font_family = Some("Arial".to_string());
+        run.font_size = Some(12.0);
+        run.color = Some(Color::new(255, 0, 0));
+
+        // Generate style string multiple times
+        let style1 = build_run_style(&run);
+        let style2 = build_run_style(&run);
+        let style3 = build_run_style(&run);
+
+        // All should be identical
+        assert_eq!(style1, style2);
+        assert_eq!(style2, style3);
+        // And in the expected order
+        assert_eq!(
+            style1,
+            "font-family: \"Arial\"; font-size: 12pt; color: #ff0000;"
+        );
+    }
+
+    #[test]
+    fn html_output_is_deterministic() {
+        let mut run = Run::new("test");
+        run.bold = true;
+        run.font_family = Some("Helvetica".to_string());
+        run.color = Some(Color::new(0, 128, 255));
+
+        let para = Paragraph::from_runs(vec![run]);
+
+        // Generate HTML multiple times
+        let mut buf1 = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf1);
+
+        let mut buf2 = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf2);
+
+        // Output should be identical
+        assert_eq!(buf1.as_str(), buf2.as_str());
+    }
+
+    // =========================================================================
+    // Color helper tests
+    // =========================================================================
+
+    #[test]
+    fn color_to_hex_red() {
+        assert_eq!(color_to_hex(&Color::new(255, 0, 0)), "#ff0000");
+    }
+
+    #[test]
+    fn color_to_hex_green() {
+        assert_eq!(color_to_hex(&Color::new(0, 255, 0)), "#00ff00");
+    }
+
+    #[test]
+    fn color_to_hex_blue() {
+        assert_eq!(color_to_hex(&Color::new(0, 0, 255)), "#0000ff");
+    }
+
+    #[test]
+    fn color_to_hex_mixed() {
+        assert_eq!(color_to_hex(&Color::new(123, 45, 67)), "#7b2d43");
+    }
+
+    #[test]
+    fn color_to_hex_black() {
+        assert_eq!(color_to_hex(&Color::new(0, 0, 0)), "#000000");
+    }
+
+    #[test]
+    fn color_to_hex_white() {
+        assert_eq!(color_to_hex(&Color::new(255, 255, 255)), "#ffffff");
     }
 }

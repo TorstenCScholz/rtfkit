@@ -17,7 +17,8 @@
                   "text": "Top level item one",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }
@@ -35,7 +36,8 @@
                   "text": "Nested item one",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }
@@ -53,7 +55,8 @@
                   "text": "Nested item two",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }
@@ -71,7 +74,8 @@
                   "text": "Top level item two",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }
@@ -89,7 +93,8 @@
                   "text": "Nested item three",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }
@@ -107,7 +112,8 @@
                   "text": "Top level item three",
                   "bold": false,
                   "italic": false,
-                  "underline": false
+                  "underline": false,
+                  "font_size": 12.0
                 }
               ]
             }
