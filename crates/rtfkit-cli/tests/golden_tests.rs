@@ -8,7 +8,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use rtfkit_core::Interpreter;
+use rtfkit_core::parse;
 use rtfkit_html::{HtmlWriterOptions, document_to_html};
 use similar::{ChangeTag, TextDiff};
 
@@ -111,7 +111,7 @@ fn golden_ir_output() {
             .unwrap_or_else(|e| panic!("Failed to read fixture {fixture_path:?}: {e}"));
 
         // Parse RTF to IR
-        let (document, _report) = Interpreter::parse(&rtf_content)
+        let (document, _report) = parse(&rtf_content)
             .unwrap_or_else(|e| panic!("Failed to parse RTF fixture {fixture_path:?}: {e}"));
 
         // Serialize IR to JSON
@@ -155,7 +155,7 @@ fn golden_ir_output() {
 #[test]
 fn test_simple_paragraph_content() {
     let input = include_str!("../../../fixtures/text_simple_paragraph.rtf");
-    let (doc, _report) = Interpreter::parse(input).unwrap();
+    let (doc, _report) = parse(input).unwrap();
 
     assert_eq!(doc.blocks.len(), 1, "Should have exactly one paragraph");
 
@@ -168,7 +168,7 @@ fn test_simple_paragraph_content() {
 #[test]
 fn test_bold_italic_formatting() {
     let input = include_str!("../../../fixtures/text_bold_italic.rtf");
-    let (doc, _report) = Interpreter::parse(input).unwrap();
+    let (doc, _report) = parse(input).unwrap();
 
     assert!(!doc.blocks.is_empty(), "Document should have content");
 
@@ -192,7 +192,7 @@ fn test_bold_italic_formatting() {
 #[test]
 fn test_underline_formatting() {
     let input = include_str!("../../../fixtures/text_underline.rtf");
-    let (doc, _report) = Interpreter::parse(input).unwrap();
+    let (doc, _report) = parse(input).unwrap();
 
     let has_underline = doc.blocks.iter().any(|b| {
         as_paragraph(b)
@@ -206,7 +206,7 @@ fn test_underline_formatting() {
 #[test]
 fn test_alignment() {
     let input = include_str!("../../../fixtures/text_alignment.rtf");
-    let (doc, _report) = Interpreter::parse(input).unwrap();
+    let (doc, _report) = parse(input).unwrap();
 
     use rtfkit_core::Alignment;
 
@@ -230,7 +230,7 @@ fn test_alignment() {
 #[test]
 fn test_multiple_paragraphs() {
     let input = include_str!("../../../fixtures/text_multiple_paragraphs.rtf");
-    let (doc, _report) = Interpreter::parse(input).unwrap();
+    let (doc, _report) = parse(input).unwrap();
 
     assert!(doc.blocks.len() >= 2, "Should have at least 2 paragraphs");
 }
@@ -238,7 +238,7 @@ fn test_multiple_paragraphs() {
 #[test]
 fn test_empty_document() {
     let input = include_str!("../../../fixtures/text_empty.rtf");
-    let (doc, _report) = Interpreter::parse(input).unwrap();
+    let (doc, _report) = parse(input).unwrap();
 
     // Empty RTF should produce an empty document
     assert!(
@@ -258,7 +258,7 @@ fn test_empty_document() {
 #[test]
 fn test_nested_styles() {
     let input = include_str!("../../../fixtures/text_nested_styles.rtf");
-    let (doc, _report) = Interpreter::parse(input).unwrap();
+    let (doc, _report) = parse(input).unwrap();
 
     // Nested styles should be handled correctly
     // The document should have content with varying formatting
@@ -287,7 +287,7 @@ fn test_nested_styles() {
 #[test]
 fn test_mixed_formatting() {
     let input = include_str!("../../../fixtures/text_mixed_formatting.rtf");
-    let (doc, _report) = Interpreter::parse(input).unwrap();
+    let (doc, _report) = parse(input).unwrap();
 
     // Mixed formatting should produce multiple runs with different styles
     let total_runs: usize = doc
@@ -302,7 +302,7 @@ fn test_mixed_formatting() {
 #[test]
 fn test_complex_document() {
     let input = include_str!("../../../fixtures/mixed_complex.rtf");
-    let (doc, report) = Interpreter::parse(input).unwrap();
+    let (doc, report) = parse(input).unwrap();
 
     // Complex document should parse without errors
     assert!(
@@ -340,7 +340,7 @@ fn as_list_block(block: &rtfkit_core::Block) -> Option<&rtfkit_core::ListBlock> 
 #[test]
 fn test_list_bullet_simple() {
     let input = include_str!("../../../fixtures/list_bullet_simple.rtf");
-    let (doc, _report) = Interpreter::parse(input).unwrap();
+    let (doc, _report) = parse(input).unwrap();
 
     // Should have exactly one list block
     assert_eq!(doc.blocks.len(), 1, "Should have exactly one block");
@@ -381,7 +381,7 @@ fn test_list_bullet_simple() {
 #[test]
 fn test_list_decimal_simple() {
     let input = include_str!("../../../fixtures/list_decimal_simple.rtf");
-    let (doc, _report) = Interpreter::parse(input).unwrap();
+    let (doc, _report) = parse(input).unwrap();
 
     // Should have exactly one list block
     assert_eq!(doc.blocks.len(), 1, "Should have exactly one block");
@@ -416,7 +416,7 @@ fn test_list_decimal_simple() {
 #[test]
 fn test_list_nested_two_levels() {
     let input = include_str!("../../../fixtures/list_nested_two_levels.rtf");
-    let (doc, _report) = Interpreter::parse(input).unwrap();
+    let (doc, _report) = parse(input).unwrap();
 
     // Should have exactly one list block
     assert_eq!(doc.blocks.len(), 1, "Should have exactly one block");
@@ -464,7 +464,7 @@ fn test_list_nested_two_levels() {
 #[test]
 fn test_list_mixed_kinds() {
     let input = include_str!("../../../fixtures/list_mixed_kinds.rtf");
-    let (doc, _report) = Interpreter::parse(input).unwrap();
+    let (doc, _report) = parse(input).unwrap();
 
     // Should have 4 blocks: paragraph, list, paragraph, list
     assert_eq!(doc.blocks.len(), 4, "Should have 4 blocks");
@@ -517,7 +517,7 @@ fn test_list_mixed_kinds() {
 #[test]
 fn test_list_malformed_fallback() {
     let input = include_str!("../../../fixtures/malformed_list_fallback.rtf");
-    let (doc, _report) = Interpreter::parse(input).unwrap();
+    let (doc, _report) = parse(input).unwrap();
 
     // Malformed list references should still produce content
     assert!(!doc.blocks.is_empty(), "Should have content");
@@ -609,7 +609,7 @@ fn html_snapshots() {
             .unwrap_or_else(|e| panic!("Failed to read fixture {fixture_path:?}: {e}"));
 
         // Parse RTF to IR
-        let (document, _report) = Interpreter::parse(&rtf_content)
+        let (document, _report) = parse(&rtf_content)
             .unwrap_or_else(|e| panic!("Failed to parse RTF fixture {fixture_path:?}: {e}"));
 
         // Generate HTML

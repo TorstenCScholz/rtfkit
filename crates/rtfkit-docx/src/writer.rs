@@ -407,20 +407,24 @@ fn convert_alignment(align: Alignment) -> AlignmentType {
 fn convert_shading(shading: &IrShading) -> Option<Shading> {
     // Only emit shading if we have a fill color
     let fill_color = shading.fill_color.as_ref()?;
-    let fill_hex = format!("{:02X}{:02X}{:02X}", fill_color.r, fill_color.g, fill_color.b);
+    let fill_hex = format!(
+        "{:02X}{:02X}{:02X}",
+        fill_color.r, fill_color.g, fill_color.b
+    );
 
     // Get pattern type, defaulting to Solid if fill_color is present
     let pattern = shading.pattern.unwrap_or(ShadingPattern::Solid);
     let shd_type = pattern_to_shd_type(pattern);
 
     // Build shading with pattern and fill color
-    let mut docx_shading = Shading::new()
-        .shd_type(shd_type)
-        .fill(fill_hex);
+    let mut docx_shading = Shading::new().shd_type(shd_type).fill(fill_hex);
 
     // Add pattern color if present (foreground for patterns)
     if let Some(ref pattern_color) = shading.pattern_color {
-        let pattern_hex = format!("{:02X}{:02X}{:02X}", pattern_color.r, pattern_color.g, pattern_color.b);
+        let pattern_hex = format!(
+            "{:02X}{:02X}{:02X}",
+            pattern_color.r, pattern_color.g, pattern_color.b
+        );
         docx_shading = docx_shading.color(pattern_hex);
     } else {
         // Use "auto" for color when no pattern color specified
@@ -517,7 +521,10 @@ fn convert_run(run: &Run) -> DocxRun {
     // Apply background color (w:shd)
     // Use w:shd with w:val="clear" and w:fill for arbitrary RGB background
     if let Some(ref background_color) = run.background_color {
-        let hex = format!("{:02X}{:02X}{:02X}", background_color.r, background_color.g, background_color.b);
+        let hex = format!(
+            "{:02X}{:02X}{:02X}",
+            background_color.r, background_color.g, background_color.b
+        );
         r = r.shading(
             Shading::new()
                 .shd_type(ShdType::Clear)
@@ -1861,7 +1868,9 @@ mod tests {
     #[test]
     fn test_paragraph_with_shading() {
         let mut para = Paragraph::from_runs(vec![Run::new("Shaded paragraph")]);
-        para.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(255, 255, 0))); // Yellow
+        para.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(
+            255, 255, 0,
+        ))); // Yellow
 
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
         let bytes = write_docx_to_bytes(&doc).unwrap();
@@ -1994,8 +2003,11 @@ mod tests {
     fn test_table_cell_with_shading() {
         use rtfkit_core::{TableCell, TableRow};
 
-        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Shaded cell")]));
-        cell.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(255, 0, 0))); // Red
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Shaded cell")]));
+        cell.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(
+            255, 0, 0,
+        ))); // Red
 
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
@@ -2029,9 +2041,12 @@ mod tests {
     fn test_table_cell_shading_with_merge() {
         use rtfkit_core::{TableCell, TableRow};
 
-        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Merged and shaded")]));
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Merged and shaded")]));
         cell.merge = Some(CellMerge::HorizontalStart { span: 2 });
-        cell.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(0, 0, 255))); // Blue
+        cell.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(
+            0, 0, 255,
+        ))); // Blue
 
         let mut cont_cell = TableCell::new();
         cont_cell.merge = Some(CellMerge::HorizontalContinue);
@@ -2052,9 +2067,12 @@ mod tests {
     fn test_table_cell_shading_with_vertical_align() {
         use rtfkit_core::{TableCell, TableRow};
 
-        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Aligned and shaded")]));
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Aligned and shaded")]));
         cell.v_align = Some(CellVerticalAlign::Center);
-        cell.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(128, 128, 128))); // Gray
+        cell.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(
+            128, 128, 128,
+        ))); // Gray
 
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
@@ -2081,7 +2099,8 @@ mod tests {
         shading.pattern_color = Some(rtfkit_core::Color::new(0, 0, 0)); // Black foreground
         shading.pattern = Some(ShadingPattern::Percent25);
 
-        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("25% pattern")]));
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("25% pattern")]));
         cell.shading = Some(shading);
 
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
@@ -2106,7 +2125,8 @@ mod tests {
         shading.pattern_color = Some(rtfkit_core::Color::new(100, 100, 100)); // Dark gray foreground
         shading.pattern = Some(ShadingPattern::HorzStripe);
 
-        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Horizontal stripes")]));
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Horizontal stripes")]));
         cell.shading = Some(shading);
 
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
@@ -2131,7 +2151,8 @@ mod tests {
         shading.pattern_color = Some(rtfkit_core::Color::new(255, 0, 0)); // Red foreground
         shading.pattern = Some(ShadingPattern::DiagCross);
 
-        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Diagonal cross")]));
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Diagonal cross")]));
         cell.shading = Some(shading);
 
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
@@ -2156,7 +2177,8 @@ mod tests {
         shading.pattern = Some(ShadingPattern::Solid);
         // No pattern_color set
 
-        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Solid green")]));
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Solid green")]));
         cell.shading = Some(shading);
 
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
@@ -2180,7 +2202,8 @@ mod tests {
         shading.fill_color = Some(rtfkit_core::Color::new(200, 200, 255)); // Light blue
         shading.pattern = Some(ShadingPattern::Clear);
 
-        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Clear pattern")]));
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Clear pattern")]));
         cell.shading = Some(shading);
 
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
@@ -2198,25 +2221,85 @@ mod tests {
     #[test]
     fn test_pattern_to_shd_type_all_patterns() {
         // Test all pattern mappings
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Clear), ShdType::Clear));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Solid), ShdType::Solid));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::HorzStripe), ShdType::HorzStripe));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::VertStripe), ShdType::VertStripe));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::DiagStripe), ShdType::DiagStripe));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::ReverseDiagStripe), ShdType::ReverseDiagStripe));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::HorzCross), ShdType::HorzCross));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::DiagCross), ShdType::DiagCross));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent5), ShdType::Pct5));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent10), ShdType::Pct10));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent20), ShdType::Pct20));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent25), ShdType::Pct25));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent30), ShdType::Pct30));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent40), ShdType::Pct40));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent50), ShdType::Pct50));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent60), ShdType::Pct60));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent70), ShdType::Pct70));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent75), ShdType::Pct75));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent80), ShdType::Pct80));
-        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent90), ShdType::Pct90));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Clear),
+            ShdType::Clear
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Solid),
+            ShdType::Solid
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::HorzStripe),
+            ShdType::HorzStripe
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::VertStripe),
+            ShdType::VertStripe
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::DiagStripe),
+            ShdType::DiagStripe
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::ReverseDiagStripe),
+            ShdType::ReverseDiagStripe
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::HorzCross),
+            ShdType::HorzCross
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::DiagCross),
+            ShdType::DiagCross
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Percent5),
+            ShdType::Pct5
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Percent10),
+            ShdType::Pct10
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Percent20),
+            ShdType::Pct20
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Percent25),
+            ShdType::Pct25
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Percent30),
+            ShdType::Pct30
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Percent40),
+            ShdType::Pct40
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Percent50),
+            ShdType::Pct50
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Percent60),
+            ShdType::Pct60
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Percent70),
+            ShdType::Pct70
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Percent75),
+            ShdType::Pct75
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Percent80),
+            ShdType::Pct80
+        ));
+        assert!(matches!(
+            pattern_to_shd_type(ShadingPattern::Percent90),
+            ShdType::Pct90
+        ));
     }
 }

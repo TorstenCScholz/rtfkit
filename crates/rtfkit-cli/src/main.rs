@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use anyhow::{Context, Result};
 use chrono::DateTime;
 use clap::{Parser, Subcommand, ValueEnum};
-use rtfkit_core::{Document, Interpreter, Report, Warning};
+use rtfkit_core::{Document, Report, Warning, parse};
 use rtfkit_docx::write_docx;
 use rtfkit_html::{CssMode, HtmlWriterOptions, document_to_html_with_warnings};
 use rtfkit_render_typst::{
@@ -312,8 +312,8 @@ fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
     let content = fs::read_to_string(&input)
         .with_context(|| format!("Failed to read file: {}", input.display()))?;
 
-    // Parse RTF using the Interpreter
-    let (document, report) = match Interpreter::parse(&content) {
+    // Parse RTF using the new API
+    let (document, report) = match parse(&content) {
         Ok(result) => result,
         Err(e) => {
             eprintln!("Parse error: {e}");

@@ -787,7 +787,8 @@ mod tests {
         shading.pattern_color = Some(Color::new(0, 0, 0)); // Black foreground
         shading.pattern = Some(ShadingPattern::Percent25);
 
-        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Patterned")]));
+        let mut cell =
+            IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Patterned")]));
         cell.shading = Some(shading);
 
         let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
@@ -877,7 +878,8 @@ mod tests {
         shading.pattern_color = Some(Color::new(255, 0, 0)); // Red
         shading.pattern = Some(ShadingPattern::DiagCross);
 
-        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Crosshatch")]));
+        let mut cell =
+            IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Crosshatch")]));
         cell.shading = Some(shading);
 
         let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);

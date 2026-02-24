@@ -33,7 +33,10 @@ pub use table::{TableOutput, map_table};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MappingWarning {
     ListMixedKindFallbackToBullet,
-    ListLevelSkip { from: u8, to: u8 },
+    ListLevelSkip {
+        from: u8,
+        to: u8,
+    },
     OrphanHorizontalContinue,
     CellVerticalAlignDropped,
     /// Pattern was degraded to flat fill (Typst doesn't support patterns)
@@ -53,7 +56,9 @@ impl MappingWarning {
             Self::ListLevelSkip { from, to } => format!("list_level_skip_{}_to_{}", from, to),
             Self::OrphanHorizontalContinue => "orphan_horizontal_continue".to_string(),
             Self::CellVerticalAlignDropped => "cell_vertical_align_dropped".to_string(),
-            Self::PatternDegraded { context, .. } => format!("pattern_degraded_{}", context.replace(' ', "_")),
+            Self::PatternDegraded { context, .. } => {
+                format!("pattern_degraded_{}", context.replace(' ', "_"))
+            }
         }
     }
 

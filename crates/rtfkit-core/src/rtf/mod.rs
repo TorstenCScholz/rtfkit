@@ -1,0 +1,55 @@
+//! RTF Parser Module
+//!
+//! This module provides a modular RTF parsing implementation with:
+//! - Tokenization of RTF input
+//! - Event-based processing
+//! - Document building
+//!
+//! # Architecture
+//!
+//! The module is organized into the following components:
+//! - `tokenizer`: Token model and nom-based tokenization
+//! - `events`: Event model and token-to-event conversion
+//! - `state`: Runtime state container
+//! - `state_style`: Style state and run management
+//! - `state_destinations`: Destination skip state
+//! - `state_lists`: List parsing and resolution state
+//! - `state_tables`: Table, merge, and shading state
+//! - `state_fields`: Field and hyperlink state
+//! - `state_resources`: Font and color table state
+//! - `handlers_control_words`: Control word dispatch
+//! - `handlers_destinations`: Destination handling and skip-state processing
+//! - `handlers_text`: Text/run handling
+//! - `finalize`: Document finalization
+//! - `pipeline`: Parsing orchestration
+//! - `api`: Public entrypoints
+
+// Public API
+pub use api::{RtfParser, parse, parse_with_limits};
+
+// Internal modules - Phase 1
+mod events;
+mod tokenizer;
+
+// Internal modules - Phase 2 (state)
+mod state;
+mod state_destinations;
+mod state_fields;
+mod state_lists;
+mod state_resources;
+mod state_style;
+mod state_tables;
+
+// Internal modules - Phase 3 (handlers)
+mod handlers_control_words;
+mod handlers_destinations;
+mod handlers_text;
+
+// Internal modules - Phase 4 (finalization, pipeline, api)
+mod api;
+mod finalize;
+mod pipeline;
+
+// Test module - Phase 6
+#[cfg(test)]
+mod tests;

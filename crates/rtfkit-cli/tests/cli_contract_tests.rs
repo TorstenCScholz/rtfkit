@@ -3700,17 +3700,26 @@ mod block_shading_tests {
         let cells1 = row1.get("cells").unwrap().as_array().unwrap();
         assert_eq!(cells1.len(), 3);
 
-        let fill1 = cells1[0].get("shading").and_then(|s| s.get("fill_color")).unwrap();
+        let fill1 = cells1[0]
+            .get("shading")
+            .and_then(|s| s.get("fill_color"))
+            .unwrap();
         assert_eq!(fill1.get("r").unwrap().as_u64().unwrap(), 255);
         assert_eq!(fill1.get("g").unwrap().as_u64().unwrap(), 0);
         assert_eq!(fill1.get("b").unwrap().as_u64().unwrap(), 0);
 
-        let fill2 = cells1[1].get("shading").and_then(|s| s.get("fill_color")).unwrap();
+        let fill2 = cells1[1]
+            .get("shading")
+            .and_then(|s| s.get("fill_color"))
+            .unwrap();
         assert_eq!(fill2.get("r").unwrap().as_u64().unwrap(), 0);
         assert_eq!(fill2.get("g").unwrap().as_u64().unwrap(), 128);
         assert_eq!(fill2.get("b").unwrap().as_u64().unwrap(), 0);
 
-        let fill3 = cells1[2].get("shading").and_then(|s| s.get("fill_color")).unwrap();
+        let fill3 = cells1[2]
+            .get("shading")
+            .and_then(|s| s.get("fill_color"))
+            .unwrap();
         assert_eq!(fill3.get("r").unwrap().as_u64().unwrap(), 255);
         assert_eq!(fill3.get("g").unwrap().as_u64().unwrap(), 255);
         assert_eq!(fill3.get("b").unwrap().as_u64().unwrap(), 0);
@@ -3720,7 +3729,10 @@ mod block_shading_tests {
         let cells2 = row2.get("cells").unwrap().as_array().unwrap();
         assert_eq!(cells2.len(), 3);
         for cell in cells2 {
-            let fill = cell.get("shading").and_then(|s| s.get("fill_color")).unwrap();
+            let fill = cell
+                .get("shading")
+                .and_then(|s| s.get("fill_color"))
+                .unwrap();
             assert_eq!(fill.get("r").unwrap().as_u64().unwrap(), 255);
             assert_eq!(fill.get("g").unwrap().as_u64().unwrap(), 255);
             assert_eq!(fill.get("b").unwrap().as_u64().unwrap(), 0);
@@ -3731,7 +3743,10 @@ mod block_shading_tests {
         let cells3 = row3.get("cells").unwrap().as_array().unwrap();
         assert_eq!(cells3.len(), 3);
         for cell in cells3 {
-            let fill = cell.get("shading").and_then(|s| s.get("fill_color")).unwrap();
+            let fill = cell
+                .get("shading")
+                .and_then(|s| s.get("fill_color"))
+                .unwrap();
             assert_eq!(fill.get("r").unwrap().as_u64().unwrap(), 0);
             assert_eq!(fill.get("g").unwrap().as_u64().unwrap(), 128);
             assert_eq!(fill.get("b").unwrap().as_u64().unwrap(), 0);

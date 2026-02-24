@@ -20,16 +20,13 @@ pub mod limits;
 pub use limits::ParserLimits;
 
 // =============================================================================
-// Interpreter Module
+// RTF Module (Modular Architecture)
 // =============================================================================
 
-pub mod interpreter;
+pub mod rtf;
 
-// Re-export key types from interpreter module for convenience
-pub use interpreter::{
-    Interpreter, ParagraphListRef, ParsedListDefinition, ParsedListLevel, ParsedListOverride,
-    RtfEvent, StyleState, Token,
-};
+// Re-export the main API functions for convenience
+pub use rtf::{RtfParser, parse, parse_with_limits};
 
 // =============================================================================
 // Report Module
@@ -1063,7 +1060,10 @@ mod tests {
         assert_eq!(ThemeColor::from_index(8), Some(ThemeColor::Accent5));
         assert_eq!(ThemeColor::from_index(9), Some(ThemeColor::Accent6));
         assert_eq!(ThemeColor::from_index(10), Some(ThemeColor::Hyperlink));
-        assert_eq!(ThemeColor::from_index(11), Some(ThemeColor::FollowedHyperlink));
+        assert_eq!(
+            ThemeColor::from_index(11),
+            Some(ThemeColor::FollowedHyperlink)
+        );
     }
 
     #[test]

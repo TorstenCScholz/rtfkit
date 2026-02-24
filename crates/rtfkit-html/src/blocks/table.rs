@@ -893,8 +893,10 @@ mod tests {
         shading.pattern_color = Some(Color::new(255, 255, 255)); // White
         shading.pattern = Some(ShadingPattern::Percent50);
 
-        let mut cell =
-            TableCell::from_paragraph_with_width(Paragraph::from_runs(vec![Run::new("Complex")]), 720); // 36pt
+        let mut cell = TableCell::from_paragraph_with_width(
+            Paragraph::from_runs(vec![Run::new("Complex")]),
+            720,
+        ); // 36pt
         cell.shading = Some(shading);
         cell.v_align = Some(CellVerticalAlign::Center);
 
