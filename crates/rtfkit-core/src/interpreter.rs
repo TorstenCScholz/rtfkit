@@ -112,6 +112,10 @@ pub struct StyleState {
     pub font_size_half_points: Option<i32>,
     /// Current color index (from \cfN)
     pub color_index: Option<i32>,
+    /// Current highlight color index (from \highlightN)
+    pub highlight_color_index: Option<i32>,
+    /// Current background color index (from \cbN)
+    pub background_color_index: Option<i32>,
 }
 
 impl StyleState {
@@ -847,6 +851,7 @@ impl Interpreter {
     /// This resets ONLY character-style fields:
     /// - bold, italic, underline
     /// - font_index, font_size_half_points, color_index
+    /// - highlight_color_index, background_color_index
     ///
     /// It does NOT reset:
     /// - paragraph alignment
@@ -860,6 +865,8 @@ impl Interpreter {
         self.current_style.font_index = self.default_font_index;
         self.current_style.font_size_half_points = None;
         self.current_style.color_index = None;
+        self.current_style.highlight_color_index = None;
+        self.current_style.background_color_index = None;
     }
 
     /// Handle control words within list table/override table destinations.
@@ -1349,7 +1356,7 @@ impl Interpreter {
             // RTF header control words - silently ignored (not user-facing)
             "rtf" | "ansi" | "ansicpg" | "deflang" | "deflangfe" | "adeflang" | "result"
             | "hwid" | "emdash" | "endash" | "emspace" | "enspace" | "qmspace" | "bullet"
-            | "lquote" | "rquote" | "ldblquote" | "rdblquote" | "tab" | "cb" | "highlight"
+            | "lquote" | "rquote" | "ldblquote" | "rdblquote" | "tab"
             | "strike" | "striked" | "sub" | "super" | "nosupersub" | "caps" | "scaps" | "outl"
             | "shad" | "expnd" | "expndtw" | "kerning" | "charscalex" | "lang" | "langfe"
             | "langnp" | "langfenp" => {
@@ -1376,6 +1383,18 @@ impl Interpreter {
             // \cfN - Foreground color index
             "cf" => {
                 self.current_style.color_index = parameter;
+            }
+            // \highlightN - Highlight color index
+            "highlight" => {
+                self.current_style.highlight_color_index = parameter.and_then(|n| {
+                    if n > 0 { Some(n) } else { None }
+                });
+            }
+            // \cbN - Background color index
+            "cb" => {
+                self.current_style.background_color_index = parameter.and_then(|n| {
+                    if n > 0 { Some(n) } else { None }
+                });
             }
             // \plain - Reset character formatting only
             "plain" => {
@@ -1455,6 +1474,10 @@ impl Interpreter {
             || self.current_style.font_size_half_points
                 != self.current_run_style.font_size_half_points
             || self.current_style.color_index != self.current_run_style.color_index
+            || self.current_style.highlight_color_index
+                != self.current_run_style.highlight_color_index
+            || self.current_style.background_color_index
+                != self.current_run_style.background_color_index
     }
 
     /// Create a run from the current text and run style.
@@ -1468,6 +1491,9 @@ impl Interpreter {
         // Resolve color from color_index -> color_table
         let color = self.resolve_color();
 
+        // Resolve background_color with precedence: highlight > background
+        let background_color = self.resolve_background_color();
+
         Run {
             text: self.current_text.clone(),
             bold: self.current_run_style.bold,
@@ -1476,6 +1502,7 @@ impl Interpreter {
             font_family,
             font_size,
             color,
+            background_color,
         }
     }
 
@@ -1523,6 +1550,44 @@ impl Interpreter {
 
         // Color table stores: [None (auto), color1, color2, ...]
         // cf1 maps to color_table[1], cf2 to color_table[2], etc.
+        let table_index = color_idx as usize;
+        self.color_table.get(table_index).and_then(|c| c.clone())
+    }
+
+    /// Resolve background color from highlight_color_index or background_color_index.
+    ///
+    /// Precedence: highlight_color_index if set and resolvable, otherwise
+    /// background_color_index if set and resolvable, otherwise None.
+    /// Invalid indices degrade to None without warnings.
+    fn resolve_background_color(&self) -> Option<crate::Color> {
+        // Try highlight_color_index first (takes precedence)
+        if let Some(highlight_idx) = self.current_run_style.highlight_color_index {
+            if let Some(color) = self.resolve_color_from_index(highlight_idx) {
+                return Some(color);
+            }
+        }
+
+        // Fall back to background_color_index
+        if let Some(bg_idx) = self.current_run_style.background_color_index {
+            if let Some(color) = self.resolve_color_from_index(bg_idx) {
+                return Some(color);
+            }
+        }
+
+        None
+    }
+
+    /// Resolve a color from a color table index.
+    ///
+    /// Index 0 means auto/default color (represented as None).
+    /// Invalid indices degrade to None without warnings.
+    fn resolve_color_from_index(&self, color_idx: i32) -> Option<crate::Color> {
+        // Index 0 is auto/default color, represented as None
+        if color_idx == 0 {
+            return None;
+        }
+
+        // Color table stores: [None (auto), color1, color2, ...]
         let table_index = color_idx as usize;
         self.color_table.get(table_index).and_then(|c| c.clone())
     }
@@ -4202,6 +4267,292 @@ After table text.\par
             }
         } else {
             panic!("Expected Paragraph block");
+        }
+    }
+
+    // ==========================================================================
+    // Background/Highlight Color Tests (Slice 1)
+    // ==========================================================================
+
+    #[test]
+    fn test_highlight_maps_to_background_color() {
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green255\blue0;}\highlight1 Highlighted Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Highlighted Text");
+                    assert_eq!(r.background_color, Some(crate::Color { r: 255, g: 255, b: 0 }));
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_cb_maps_to_background_color() {
+        let input = r#"{\rtf1\ansi{\colortbl;\red0\green255\blue255;}\cb1 Background Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Background Text");
+                    assert_eq!(r.background_color, Some(crate::Color { r: 0, g: 255, b: 255 }));
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_highlight_takes_precedence_over_cb() {
+        // When both highlight and cb are set, highlight should take precedence
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;\red0\green255\blue0;}\highlight1\cb2 Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Text");
+                    // Should use highlight color (red), not cb color (green)
+                    assert_eq!(r.background_color, Some(crate::Color { r: 255, g: 0, b: 0 }));
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_highlight_zero_results_in_none() {
+        // \highlight0 means auto/default (None)
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\highlight0 Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Text");
+                    assert_eq!(r.background_color, None);
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_cb_zero_results_in_none() {
+        // \cb0 means auto/default (None)
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\cb0 Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Text");
+                    assert_eq!(r.background_color, None);
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_unresolved_highlight_index_degrades_to_none() {
+        // Referencing a highlight index that doesn't exist should degrade gracefully
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\highlight99 Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Text");
+                    // Unresolved index should degrade to None
+                    assert_eq!(r.background_color, None);
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_unresolved_cb_index_degrades_to_none() {
+        // Referencing a cb index that doesn't exist should degrade gracefully
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\cb99 Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Text");
+                    // Unresolved index should degrade to None
+                    assert_eq!(r.background_color, None);
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_plain_clears_background_highlight_but_keeps_alignment() {
+        // \plain should reset character formatting including background/highlight
+        // but keep paragraph alignment
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\qc\highlight1 Styled\plain  Plain}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            // Paragraph alignment should be preserved
+            assert_eq!(para.alignment, Alignment::Center);
+            
+            // First run should have highlight
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Styled");
+                    assert_eq!(r.background_color, Some(crate::Color { r: 255, g: 0, b: 0 }));
+                }
+                _ => panic!("Expected Run"),
+            }
+            
+            // Second run should have no background (plain reset it)
+            match &para.inlines[1] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, " Plain");
+                    assert_eq!(r.background_color, None);
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_plain_clears_cb_but_keeps_alignment() {
+        // \plain should reset character formatting including cb
+        let input = r#"{\rtf1\ansi{\colortbl;\red0\green255\blue0;}\qr\cb1 Styled\plain  Plain}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            // Paragraph alignment should be preserved
+            assert_eq!(para.alignment, Alignment::Right);
+            
+            // First run should have background
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Styled");
+                    assert_eq!(r.background_color, Some(crate::Color { r: 0, g: 255, b: 0 }));
+                }
+                _ => panic!("Expected Run"),
+            }
+            
+            // Second run should have no background (plain reset it)
+            match &para.inlines[1] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, " Plain");
+                    assert_eq!(r.background_color, None);
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_hyperlink_preserves_background_color() {
+        // Hyperlink field runs should preserve background color
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green255\blue0;}{\field{\*\fldinst HYPERLINK "https://example.com"}{\fldrslt \highlight1 Link}}}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Hyperlink(hyperlink) => {
+                    assert_eq!(hyperlink.url, "https://example.com");
+                    assert_eq!(hyperlink.runs.len(), 1);
+                    assert_eq!(hyperlink.runs[0].text, "Link");
+                    assert_eq!(hyperlink.runs[0].background_color, Some(crate::Color { r: 255, g: 255, b: 0 }));
+                }
+                _ => panic!("Expected Hyperlink"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_hyperlink_with_cb_preserves_background_color() {
+        // Hyperlink field runs should preserve cb background color
+        let input = r#"{\rtf1\ansi{\colortbl;\red0\green0\blue255;}{\field{\*\fldinst HYPERLINK "https://example.com"}{\fldrslt \cb1 Link}}}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Hyperlink(hyperlink) => {
+                    assert_eq!(hyperlink.url, "https://example.com");
+                    assert_eq!(hyperlink.runs.len(), 1);
+                    assert_eq!(hyperlink.runs[0].text, "Link");
+                    assert_eq!(hyperlink.runs[0].background_color, Some(crate::Color { r: 0, g: 0, b: 255 }));
+                }
+                _ => panic!("Expected Hyperlink"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_background_color_with_foreground_color() {
+        // Both foreground and background colors should work together
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}\cf1\highlight2 Colored Text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            match &para.inlines[0] {
+                Inline::Run(r) => {
+                    assert_eq!(r.text, "Colored Text");
+                    assert_eq!(r.color, Some(crate::Color { r: 255, g: 0, b: 0 }));
+                    assert_eq!(r.background_color, Some(crate::Color { r: 0, g: 0, b: 255 }));
+                }
+                _ => panic!("Expected Run"),
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_plain_keeps_list_state() {
+        // \plain should not reset list state
+        let input = r#"{\rtf1\ansi {\listtable{\list\listid1{\listlevel\levelnfc23}}}{\listoverridetable{\listoverride\listid1\ls1}}\ls1\highlight1 Item\plain text}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        // Should still be a list block (not paragraph)
+        if let Block::ListBlock(list) = &doc.blocks[0] {
+            assert_eq!(list.items.len(), 1);
+            // Check that the item has content
+            if let Block::Paragraph(para) = &list.items[0].blocks[0] {
+                // First run has highlight, second doesn't (plain reset it)
+                assert_eq!(para.inlines.len(), 2);
+            } else {
+                panic!("Expected Paragraph in list item");
+            }
+        } else {
+            panic!("Expected ListBlock");
         }
     }
 }

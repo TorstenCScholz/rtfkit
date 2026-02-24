@@ -13,6 +13,7 @@
 //! | `Run.font_family` | `#text(font: "Name")[...]` |
 //! | `Run.font_size` | `#text(size: Npt)[...]` |
 //! | `Run.color` | `#text(fill: rgb(r, g, b))[...]` |
+//! | `Run.background_color` | `#highlight(fill: rgb(r, g, b))[...]` |
 //! | `Alignment::Left` | (default, no directive) |
 //! | `Alignment::Center` | `#align(center)[...]` |
 //! | `Alignment::Right` | `#align(right)[...]` |
@@ -167,6 +168,7 @@ struct RunStyle {
     // Canonicalized to half-points for stable equality and output.
     font_size_half_points: Option<i32>,
     color: Option<ColorKey>,
+    background_color: Option<ColorKey>,
 }
 
 /// Color comparison key that implements Eq for hashing.
@@ -197,12 +199,18 @@ impl RunStyle {
             font_family: run.font_family.clone(),
             font_size_half_points: run.font_size.and_then(points_to_half_points),
             color: run.color.as_ref().map(ColorKey::from),
+            background_color: run.background_color.as_ref().map(ColorKey::from),
         }
     }
 
     /// Check if this style needs a `#text(...)` wrapper.
     fn needs_text_wrapper(&self) -> bool {
         self.font_family.is_some() || self.font_size_half_points.is_some() || self.color.is_some()
+    }
+
+    /// Check if this style needs a `#highlight(...)` wrapper.
+    fn needs_highlight_wrapper(&self) -> bool {
+        self.background_color.is_some()
     }
 }
 
@@ -268,7 +276,7 @@ fn map_runs(runs: &[Run], _warnings: &mut Vec<MappingWarning>) -> String {
 
 /// Format a single run with the given formatting.
 ///
-/// Applies formatting in order: #text(...) wrapper, then underline, italic, bold.
+/// Applies formatting in order: #text(...) wrapper, then #highlight(...), then underline, italic, bold.
 /// This ensures proper nesting in Typst.
 fn format_run(text: &str, style: &RunStyle) -> String {
     if text.is_empty() {
@@ -280,6 +288,11 @@ fn format_run(text: &str, style: &RunStyle) -> String {
     // Apply #text(...) wrapper if font/size/color styling is needed
     if style.needs_text_wrapper() {
         result = format_text_wrapper(&result, style);
+    }
+
+    // Apply #highlight(...) wrapper for background color
+    if style.needs_highlight_wrapper() {
+        result = format_highlight_wrapper(&result, style);
     }
 
     // Apply underline (Typst function call)
@@ -325,6 +338,18 @@ fn format_text_wrapper(content: &str, style: &RunStyle) -> String {
     }
 
     format!("#text({})[{}]", params.join(", "), content)
+}
+
+/// Format a `#highlight(...)` wrapper for background color.
+fn format_highlight_wrapper(content: &str, style: &RunStyle) -> String {
+    if let Some(ref color) = style.background_color {
+        format!(
+            "#highlight(fill: rgb({}, {}, {}))[{}]",
+            color.r, color.g, color.b, content
+        )
+    } else {
+        content.to_string()
+    }
 }
 
 /// Escape special Typst characters in text content.
@@ -824,6 +849,146 @@ mod tests {
         assert_eq!(
             output.typst_source,
             "#link(\"https://example.com?q=\\\\\\\"x\\\\\\\"\")[Example]"
+        );
+    }
+
+    // =============================================================================
+    // Background Color Tests
+    // =============================================================================
+
+    #[test]
+    fn test_background_color_output() {
+        let mut run = Run::new("text");
+        run.background_color = Some(Color::new(255, 255, 0)); // Yellow background
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        assert_eq!(
+            output.typst_source,
+            "#highlight(fill: rgb(255, 255, 0))[text]"
+        );
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_background_color_not_emitted_when_none() {
+        let run = Run::new("text");
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        // Should NOT contain highlight wrapper
+        assert_eq!(output.typst_source, "text");
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_background_color_with_foreground_color() {
+        let mut run = Run::new("text");
+        run.color = Some(Color::new(255, 0, 0)); // Red foreground
+        run.background_color = Some(Color::new(255, 255, 0)); // Yellow background
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        // #text wrapper (for foreground) is inside #highlight wrapper
+        assert_eq!(
+            output.typst_source,
+            "#highlight(fill: rgb(255, 255, 0))[#text(fill: rgb(255, 0, 0))[text]]"
+        );
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_background_color_with_all_formatting() {
+        let mut run = Run::new("text");
+        run.bold = true;
+        run.italic = true;
+        run.underline = true;
+        run.font_family = Some("Arial".to_string());
+        run.font_size = Some(14.0);
+        run.color = Some(Color::new(0, 128, 255));
+        run.background_color = Some(Color::new(255, 255, 0));
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        // Order: #text -> #highlight -> #underline -> italic -> bold
+        assert_eq!(
+            output.typst_source,
+            "*_#underline[#highlight(fill: rgb(255, 255, 0))[#text(font: \"Arial\", size: 14pt, fill: rgb(0, 128, 255))[text]]]_*"
+        );
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_run_merging_with_different_background_colors() {
+        let mut run1 = Run::new("Yellow ");
+        run1.background_color = Some(Color::new(255, 255, 0));
+        let mut run2 = Run::new("Cyan");
+        run2.background_color = Some(Color::new(0, 255, 255));
+
+        let paragraph = Paragraph::from_runs(vec![run1, run2]);
+        let output = map_paragraph(&paragraph);
+
+        // Should NOT merge - different background colors
+        assert_eq!(
+            output.typst_source,
+            "#highlight(fill: rgb(255, 255, 0))[Yellow ]#highlight(fill: rgb(0, 255, 255))[Cyan]"
+        );
+    }
+
+    #[test]
+    fn test_run_merging_with_same_background_color() {
+        let mut run1 = Run::new("Hello ");
+        run1.background_color = Some(Color::new(255, 255, 0));
+        let mut run2 = Run::new("World");
+        run2.background_color = Some(Color::new(255, 255, 0));
+
+        let paragraph = Paragraph::from_runs(vec![run1, run2]);
+        let output = map_paragraph(&paragraph);
+
+        // Should merge - same background color
+        assert_eq!(
+            output.typst_source,
+            "#highlight(fill: rgb(255, 255, 0))[Hello World]"
+        );
+    }
+
+    #[test]
+    fn test_run_merging_background_color_mismatch_prevents_merge() {
+        let mut run1 = Run::new("Hello ");
+        run1.bold = true;
+        run1.background_color = Some(Color::new(255, 255, 0));
+        let mut run2 = Run::new("World");
+        run2.bold = true;
+        // No background color on run2
+
+        let paragraph = Paragraph::from_runs(vec![run1, run2]);
+        let output = map_paragraph(&paragraph);
+
+        // Should NOT merge - one has background, one doesn't
+        assert_eq!(
+            output.typst_source,
+            "*#highlight(fill: rgb(255, 255, 0))[Hello ]**World*"
+        );
+    }
+
+    #[test]
+    fn test_background_color_in_hyperlink() {
+        let mut run = Run::new("Example");
+        run.background_color = Some(Color::new(255, 255, 0));
+
+        let paragraph = Paragraph::from_inlines(vec![Inline::Hyperlink(Hyperlink {
+            url: "https://example.com".to_string(),
+            runs: vec![run],
+        })]);
+
+        let output = map_paragraph(&paragraph);
+        assert_eq!(
+            output.typst_source,
+            "#link(\"https://example.com\")[#highlight(fill: rgb(255, 255, 0))[Example]]"
         );
     }
 }

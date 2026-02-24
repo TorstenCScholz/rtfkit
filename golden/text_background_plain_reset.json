@@ -1,0 +1,48 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Highlight and CB set.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "background_color": {
+            "r": 255,
+            "g": 255,
+            "b": 0
+          }
+        },
+        {
+          "type": "run",
+          "text": "Both reset by plain.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        },
+        {
+          "type": "run",
+          "text": "Highlight set again.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "background_color": {
+            "r": 255,
+            "g": 255,
+            "b": 0
+          }
+        },
+        {
+          "type": "run",
+          "text": "Reset again.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}

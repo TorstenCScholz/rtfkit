@@ -34,8 +34,8 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | Font family (`\fN`, `\fonttbl`, `\deffN`) | ✅ Supported | Mapped to DOCX `<w:rFonts>`, HTML `font-family`, Typst `#text(font: ...)` |
 | Font size (`\fsN`) | ✅ Supported | Mapped to DOCX `<w:sz>`, HTML `font-size`, Typst `#text(size: ...)` |
 | Text color (`\cfN`, `\colortbl`) | ✅ Supported | Mapped to DOCX `<w:color>`, HTML `color`, Typst `#text(fill: ...)` |
-| Formatting reset (`\plain`) | ✅ Supported | Resets character formatting to defaults |
-| Background color (`\cbN`, `\highlightN`) | ❌ Not Supported | Parsed but not mapped |
+| Background color (`\cbN`, `\highlightN`) | ✅ Supported | Mapped to DOCX `<w:shd>`, HTML `background-color`, Typst `#highlight(fill: ...)`; `\highlight` takes precedence over `\cb` |
+| Formatting reset (`\plain`) | ✅ Supported | Resets character formatting to defaults (including background/highlight) |
 | Strikethrough (`\strike`) | ❌ Not Supported | Warning emitted |
 | Small caps (`\scaps`) | ❌ Not Supported | Warning emitted |
 | All caps (`\caps`) | ❌ Not Supported | Warning emitted |
@@ -131,6 +131,7 @@ HTML output is selected with `--to html` and produces semantic HTML5:
 | Font family | ✅ Supported | Inline `font-family` style (sanitized) |
 | Font size | ✅ Supported | Inline `font-size` style (pt) |
 | Colors | ✅ Supported | Inline `color` style (hex) |
+| Background color | ✅ Supported | Inline `background-color` style (hex) |
 | Borders | ❌ Not Supported | Semantic-first design |
 | Images | ❌ Not Supported | No IR image blocks |
 | Style Profiles | ✅ Supported | `--style-profile` flag (classic, report, compact) |
@@ -159,6 +160,7 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 | Font family | ✅ Supported | Typst `#text(font: ...)` wrapper |
 | Font size | ✅ Supported | Typst `#text(size: ...)` wrapper |
 | Text color | ✅ Supported | Typst `#text(fill: ...)` wrapper |
+| Background color | ✅ Supported | Typst `#highlight(fill: ...)` wrapper |
 | Images | ❌ Not Supported | No IR image blocks |
 | Custom fonts | ❌ Not Supported | Uses embedded fonts |
 | Style Profiles | ✅ Supported | `--style-profile` flag (classic, report, compact) |
@@ -200,6 +202,7 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 
 | Version | Changes |
 |---------|---------|
+| 0.9.0 | Added background/highlight color support (`\cbN`, `\highlightN`) for DOCX, HTML, PDF; `\plain` now resets background/highlight |
 | 0.8.0 | Added font family, font size, and foreground color support (DOCX, HTML, PDF); added `\plain` reset support |
 | 0.7.0 | Added hyperlink support (DOCX, HTML, PDF), URL sanitization for HTML output |
 | 0.6.0 | Added HTML output support, PDF output support, feature support matrix documentation |

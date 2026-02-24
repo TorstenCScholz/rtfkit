@@ -1,0 +1,58 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "CB background first.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "background_color": {
+            "r": 200,
+            "g": 200,
+            "b": 255
+          }
+        },
+        {
+          "type": "run",
+          "text": "Highlight takes precedence over CB.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "background_color": {
+            "r": 255,
+            "g": 255,
+            "b": 0
+          }
+        },
+        {
+          "type": "run",
+          "text": "CB set but highlight wins.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "background_color": {
+            "r": 255,
+            "g": 255,
+            "b": 0
+          }
+        },
+        {
+          "type": "run",
+          "text": "Now CB background shows.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "background_color": {
+            "r": 0,
+            "g": 255,
+            "b": 255
+          }
+        }
+      ]
+    }
+  ]
+}

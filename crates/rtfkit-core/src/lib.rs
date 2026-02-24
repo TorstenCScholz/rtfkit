@@ -183,6 +183,7 @@ pub struct TableProps {
 ///     font_family: Some("Arial".to_string()),
 ///     font_size: Some(12.0),
 ///     color: None,
+///     background_color: None,
 /// };
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -207,6 +208,9 @@ pub struct Run {
     /// Text color (if specified)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<Color>,
+    /// Background/highlight color (if specified)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background_color: Option<Color>,
 }
 
 impl Run {
@@ -226,6 +230,7 @@ impl Run {
             font_family: None,
             font_size: None,
             color: None,
+            background_color: None,
         }
     }
 }

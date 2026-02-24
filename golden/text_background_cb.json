@@ -1,0 +1,41 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Light blue background.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "background_color": {
+            "r": 200,
+            "g": 200,
+            "b": 255
+          }
+        },
+        {
+          "type": "run",
+          "text": "Light red background.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "background_color": {
+            "r": 255,
+            "g": 200,
+            "b": 200
+          }
+        },
+        {
+          "type": "run",
+          "text": "No background.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}

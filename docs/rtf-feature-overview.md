@@ -16,6 +16,7 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
   - font family (`\fN`, `\fonttbl`, `\deffN`)
   - font size (`\fsN`)
   - foreground color (`\cfN`, `\colortbl`)
+  - background color (`\cbN`, `\highlightN`); `\highlight` takes precedence
   - formatting reset (`\plain`)
 - **Unicode escape handling** (`\uN` with `\ucN`)
 - **Hyperlinks**:
@@ -44,7 +45,6 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
 
 - **Images/embedded objects** as first-class output:
   - `\pict`, `\obj`, related object destinations are currently dropped with warnings
-- **Background color** (`\cbN`, `\highlightN`) - parsed but not mapped
 - **Full RTF table styling parity** (complex borders/layout behavior)
 
 ## Notes

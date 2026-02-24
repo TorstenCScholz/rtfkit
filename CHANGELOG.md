@@ -5,6 +5,35 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - Unreleased
+
+### Added
+
+#### Background/Highlight Color Support
+- First-class background/highlight color support in RTF-to-IR-to-output pipeline
+- New IR field: `Run.background_color` (`Option<Color>`)
+- Text highlight parsing: `\highlightN` sets highlight color from color table
+- Character background parsing: `\cbN` sets character background from color table
+- Precedence rule: `\highlight` takes precedence over `\cb` when both are set
+- Formatting reset: `\plain` now resets background/highlight color
+- DOCX output: `<w:shd w:fill="...">` elements for run shading
+- HTML output: inline `background-color` style (hex)
+- PDF output: Typst `#highlight(fill: rgb(...))` wrapper
+- 4 new background/highlight test fixtures: text_highlight, text_background_cb, text_highlight_background_precedence, text_background_plain_reset
+- Golden IR and HTML snapshots for all background/highlight fixtures
+- CLI contract tests for background/highlight color support
+
+### Changed
+
+- `\plain` now resets background/highlight color in addition to other character formatting
+- Unresolved background/highlight color indexes degrade gracefully without warnings (text content preserved)
+
+### Migration Notes
+
+- IR JSON format extended: `Run` objects may now include `background_color` field
+- External consumers of IR JSON should handle the new optional field
+- Golden IR snapshots need regeneration: `UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests`
+
 ## [0.8.0] - Unreleased
 
 ### Added

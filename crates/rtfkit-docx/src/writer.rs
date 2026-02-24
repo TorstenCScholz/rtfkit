@@ -7,8 +7,8 @@ use crate::DocxError;
 use docx_rs::{
     AbstractNumbering, AlignmentType, Docx, Hyperlink as DocxHyperlink, HyperlinkType, IndentLevel,
     Level, LevelJc, LevelText, NumberFormat, Numbering, NumberingId, Numberings,
-    Paragraph as DocxParagraph, Run as DocxRun, RunFonts, Start, Table, TableCell, TableRow,
-    VAlignType, VMergeType, WidthType,
+    Paragraph as DocxParagraph, Run as DocxRun, RunFonts, Shading, ShdType, Start, Table,
+    TableCell, TableRow, VAlignType, VMergeType, WidthType,
 };
 use indexmap::IndexMap;
 use rtfkit_core::{
@@ -390,6 +390,7 @@ fn convert_alignment(align: Alignment) -> AlignmentType {
 /// 5. Bold (`w:b`)
 /// 6. Italic (`w:i`)
 /// 7. Underline (`w:u`)
+/// 8. Shading (`w:shd`) for background color
 fn convert_run(run: &Run) -> DocxRun {
     let mut r = DocxRun::new().add_text(&run.text);
 
@@ -433,6 +434,18 @@ fn convert_run(run: &Run) -> DocxRun {
     // Apply underline
     if run.underline {
         r = r.underline("single");
+    }
+
+    // Apply background color (w:shd)
+    // Use w:shd with w:val="clear" and w:fill for arbitrary RGB background
+    if let Some(ref background_color) = run.background_color {
+        let hex = format!("{:02X}{:02X}{:02X}", background_color.r, background_color.g, background_color.b);
+        r = r.shading(
+            Shading::new()
+                .shd_type(ShdType::Clear)
+                .color("auto")
+                .fill(hex),
+        );
     }
 
     r
@@ -1754,5 +1767,102 @@ mod tests {
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // 12.4 * 2 = 24.8, rounds to 25
         assert!(document_xml.contains(r#"<w:sz w:val="25" />"#));
+    }
+
+    // =========================================================================
+    // Background Color (Shading) Tests
+    // =========================================================================
+
+    #[test]
+    fn test_run_with_background_color() {
+        let mut run = Run::new("Highlighted text");
+        run.background_color = Some(rtfkit_core::Color::new(255, 255, 0)); // Yellow
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should contain w:shd with w:fill attribute
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:val="clear""#));
+        assert!(document_xml.contains(r#"w:color="auto""#));
+        assert!(document_xml.contains(r#"w:fill="FFFF00""#));
+    }
+
+    #[test]
+    fn test_run_without_background_color_no_shd() {
+        let run = Run::new("Normal text");
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should NOT contain w:shd element
+        assert!(!document_xml.contains("<w:shd"));
+    }
+
+    #[test]
+    fn test_run_with_foreground_and_background_color() {
+        let mut run = Run::new("Colored text on colored background");
+        run.color = Some(rtfkit_core::Color::new(255, 0, 0)); // Red foreground
+        run.background_color = Some(rtfkit_core::Color::new(0, 0, 255)); // Blue background
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should contain both w:color and w:shd
+        assert!(document_xml.contains(r#"<w:color w:val="FF0000" />"#));
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:fill="0000FF""#));
+    }
+
+    #[test]
+    fn test_hyperlink_with_background_color() {
+        let mut run = Run::new("Highlighted link");
+        run.background_color = Some(rtfkit_core::Color::new(0, 255, 0)); // Green background
+        run.underline = true;
+
+        let para = Paragraph::from_inlines(vec![Inline::Hyperlink(IrHyperlink {
+            url: "https://example.com".to_string(),
+            runs: vec![run],
+        })]);
+        let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Verify hyperlink is present
+        assert!(document_xml.contains("<w:hyperlink"));
+        // Verify background color is applied
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:fill="00FF00""#));
+        // Verify underline
+        assert!(document_xml.contains(r#"<w:u w:val="single""#));
+    }
+
+    #[test]
+    fn test_background_color_with_all_formatting() {
+        let mut run = Run::new("Fully formatted");
+        run.bold = true;
+        run.italic = true;
+        run.underline = true;
+        run.font_family = Some("Arial".to_string());
+        run.font_size = Some(14.0);
+        run.color = Some(rtfkit_core::Color::new(128, 0, 128)); // Purple foreground
+        run.background_color = Some(rtfkit_core::Color::new(255, 192, 203)); // Pink background
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Verify all formatting is present
+        assert!(document_xml.contains("<w:b"));
+        assert!(document_xml.contains("<w:i"));
+        assert!(document_xml.contains(r#"<w:u w:val="single""#));
+        assert!(document_xml.contains(r#"w:ascii="Arial""#));
+        assert!(document_xml.contains(r#"<w:sz w:val="28" />"#));
+        assert!(document_xml.contains(r#"<w:color w:val="800080" />"#));
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:fill="FFC0CB""#));
     }
 }

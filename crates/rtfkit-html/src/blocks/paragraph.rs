@@ -22,6 +22,7 @@ use rtfkit_core::Alignment;
 /// 1. font-family (if present)
 /// 2. font-size (if present)
 /// 3. color (if present)
+/// 4. background-color (if present)
 ///
 /// # Security
 ///
@@ -63,6 +64,14 @@ pub fn build_run_style(run: &Run) -> String {
         parts.push(format!(
             "color: #{:02x}{:02x}{:02x}",
             color.r, color.g, color.b
+        ));
+    }
+
+    // 4. Background color as hex RGB
+    if let Some(ref background_color) = run.background_color {
+        parts.push(format!(
+            "background-color: #{:02x}{:02x}{:02x}",
+            background_color.r, background_color.g, background_color.b
         ));
     }
 
@@ -924,5 +933,114 @@ mod tests {
     #[test]
     fn color_to_hex_white() {
         assert_eq!(color_to_hex(&Color::new(255, 255, 255)), "#ffffff");
+    }
+
+    // =========================================================================
+    // Background color tests
+    // =========================================================================
+
+    #[test]
+    fn run_with_background_color_only() {
+        let mut run = Run::new("highlighted text");
+        run.background_color = Some(Color::new(255, 255, 0)); // Yellow
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><span style="background-color: #ffff00;">highlighted text</span></p>"#
+        );
+    }
+
+    #[test]
+    fn run_without_background_color_no_style() {
+        let mut run = Run::new("normal text");
+        run.color = Some(Color::new(255, 0, 0)); // Only foreground color
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        // Should NOT contain background-color style
+        let result = buf.as_str();
+        assert!(!result.contains("background-color"));
+        assert!(result.contains("color: #ff0000"));
+    }
+
+    #[test]
+    fn run_with_foreground_and_background_color() {
+        let mut run = Run::new("colored text");
+        run.color = Some(Color::new(255, 0, 0)); // Red foreground
+        run.background_color = Some(Color::new(255, 255, 0)); // Yellow background
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        // Both colors should be present in deterministic order: color, then background-color
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><span style="color: #ff0000; background-color: #ffff00;">colored text</span></p>"#
+        );
+    }
+
+    #[test]
+    fn background_color_deterministic_style_order() {
+        let mut run = Run::new("fully styled");
+        run.font_family = Some("Arial".to_string());
+        run.font_size = Some(12.0);
+        run.color = Some(Color::new(255, 0, 0));
+        run.background_color = Some(Color::new(0, 0, 255)); // Blue background
+
+        // Generate style string multiple times
+        let style1 = build_run_style(&run);
+        let style2 = build_run_style(&run);
+        let style3 = build_run_style(&run);
+
+        // All should be identical
+        assert_eq!(style1, style2);
+        assert_eq!(style2, style3);
+        // And in the expected order: font-family, font-size, color, background-color
+        assert_eq!(
+            style1,
+            "font-family: \"Arial\"; font-size: 12pt; color: #ff0000; background-color: #0000ff;"
+        );
+    }
+
+    #[test]
+    fn background_color_with_all_properties() {
+        let mut run = Run::new("everything");
+        run.bold = true;
+        run.italic = true;
+        run.underline = true;
+        run.font_family = Some("Times New Roman".to_string());
+        run.font_size = Some(18.0);
+        run.color = Some(Color::new(0, 100, 0));
+        run.background_color = Some(Color::new(255, 200, 100));
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        // Nesting order: span[style] -> strong -> em -> span.rtf-u
+        // Style order: font-family, font-size, color, background-color
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><span style="font-family: &quot;Times New Roman&quot;; font-size: 18pt; color: #006400; background-color: #ffc864;"><strong><em><span class="rtf-u">everything</span></em></strong></span></p>"#
+        );
+    }
+
+    #[test]
+    fn hyperlink_with_background_color() {
+        let mut run = Run::new("highlighted link");
+        run.background_color = Some(Color::new(255, 255, 0));
+        let hyperlink = Hyperlink {
+            url: "https://example.com".to_string(),
+            runs: vec![run],
+        };
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Hyperlink(hyperlink)],
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><a href="https://example.com" class="rtf-link"><span style="background-color: #ffff00;">highlighted link</span></a></p>"#
+        );
     }
 }
