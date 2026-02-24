@@ -1,0 +1,90 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Shaded paragraph with red background.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 255,
+          "g": 0,
+          "b": 0
+        }
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Paragraph after pard - no shading.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Shaded paragraph with green background.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 0,
+          "g": 128,
+          "b": 0
+        }
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Bold text after plain - paragraph still has green shading.",
+          "bold": true,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 0,
+          "g": 128,
+          "b": 0
+        }
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Final paragraph after pard - no shading.",
+          "bold": true,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}

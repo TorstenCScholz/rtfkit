@@ -48,7 +48,7 @@ pub use report::{Report, Stats, Warning, WarningSeverity};
 ///
 /// Each component is stored as a `u8` value (0-255).
 /// This type is used to represent foreground text colors in the IR.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Color {
     /// Red component (0-255)
     pub r: u8,
@@ -68,6 +68,319 @@ impl Color {
     /// ```
     pub fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
+    }
+
+    /// Creates a Color from a hex string (e.g., "#FFFFFF" or "FFFFFF").
+    ///
+    /// Returns None if the string is not a valid 6-character hex color.
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        let hex = hex.strip_prefix('#').unwrap_or(hex);
+        if hex.len() != 6 {
+            return None;
+        }
+        let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+        let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+        let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+        Some(Self { r, g, b })
+    }
+
+    /// Apply a tint to this color (mix with white).
+    ///
+    /// Tint value is in the range 0-255 where:
+    /// - 0 = no change (original color)
+    /// - 255 = fully tinted (white)
+    ///
+    /// This matches RTF/Office theme tint semantics.
+    pub fn tint(&self, tint_value: u8) -> Self {
+        if tint_value == 0 {
+            return self.clone();
+        }
+        let factor = tint_value as f32 / 255.0;
+        Self {
+            r: (self.r as f32 + (255.0 - self.r as f32) * factor).round() as u8,
+            g: (self.g as f32 + (255.0 - self.g as f32) * factor).round() as u8,
+            b: (self.b as f32 + (255.0 - self.b as f32) * factor).round() as u8,
+        }
+    }
+
+    /// Apply a shade to this color (mix with black).
+    ///
+    /// Shade value is in the range 0-255 where:
+    /// - 0 = no change (original color)
+    /// - 255 = fully shaded (black)
+    ///
+    /// This matches RTF/Office theme shade semantics.
+    pub fn shade(&self, shade_value: u8) -> Self {
+        if shade_value == 0 {
+            return self.clone();
+        }
+        let factor = shade_value as f32 / 255.0;
+        Self {
+            r: (self.r as f32 * (1.0 - factor)).round() as u8,
+            g: (self.g as f32 * (1.0 - factor)).round() as u8,
+            b: (self.b as f32 * (1.0 - factor)).round() as u8,
+        }
+    }
+}
+
+// =============================================================================
+// Theme Color Types for RTF Theme Color Resolution
+// =============================================================================
+
+/// Theme color indices as defined in RTF/Office themes.
+///
+/// These indices correspond to the standard Office theme color slots.
+/// RTF uses `\themecolorN` where N maps to these theme color types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemeColor {
+    /// Light 1 (typically white or very light)
+    Light1 = 0,
+    /// Dark 1 (typically black or very dark)
+    Dark1 = 1,
+    /// Light 2 (secondary light color)
+    Light2 = 2,
+    /// Dark 2 (secondary dark color)
+    Dark2 = 3,
+    /// Accent 1
+    Accent1 = 4,
+    /// Accent 2
+    Accent2 = 5,
+    /// Accent 3
+    Accent3 = 6,
+    /// Accent 4
+    Accent4 = 7,
+    /// Accent 5
+    Accent5 = 8,
+    /// Accent 6
+    Accent6 = 9,
+    /// Hyperlink color
+    Hyperlink = 10,
+    /// Followed hyperlink color
+    FollowedHyperlink = 11,
+}
+
+impl ThemeColor {
+    /// Convert from RTF theme color index to ThemeColor enum.
+    ///
+    /// RTF uses indices 0-11 for theme colors.
+    /// Returns None for invalid indices.
+    pub fn from_index(index: i32) -> Option<Self> {
+        match index {
+            0 => Some(ThemeColor::Light1),
+            1 => Some(ThemeColor::Dark1),
+            2 => Some(ThemeColor::Light2),
+            3 => Some(ThemeColor::Dark2),
+            4 => Some(ThemeColor::Accent1),
+            5 => Some(ThemeColor::Accent2),
+            6 => Some(ThemeColor::Accent3),
+            7 => Some(ThemeColor::Accent4),
+            8 => Some(ThemeColor::Accent5),
+            9 => Some(ThemeColor::Accent6),
+            10 => Some(ThemeColor::Hyperlink),
+            11 => Some(ThemeColor::FollowedHyperlink),
+            _ => None,
+        }
+    }
+
+    /// Get the default Office theme color for this theme color slot.
+    ///
+    /// These are the standard colors from the default Office theme.
+    pub fn default_color(&self) -> Color {
+        match self {
+            ThemeColor::Light1 => Color::from_hex("FFFFFF").unwrap(), // White
+            ThemeColor::Dark1 => Color::from_hex("000000").unwrap(),  // Black
+            ThemeColor::Light2 => Color::from_hex("E7E6E6").unwrap(), // Light gray
+            ThemeColor::Dark2 => Color::from_hex("44546A").unwrap(),  // Dark blue-gray
+            ThemeColor::Accent1 => Color::from_hex("4472C4").unwrap(), // Blue
+            ThemeColor::Accent2 => Color::from_hex("ED7D31").unwrap(), // Orange
+            ThemeColor::Accent3 => Color::from_hex("A5A5A5").unwrap(), // Gray
+            ThemeColor::Accent4 => Color::from_hex("FFC000").unwrap(), // Gold
+            ThemeColor::Accent5 => Color::from_hex("5B9BD5").unwrap(), // Light blue
+            ThemeColor::Accent6 => Color::from_hex("70AD47").unwrap(), // Green
+            ThemeColor::Hyperlink => Color::from_hex("0563C1").unwrap(), // Hyperlink blue
+            ThemeColor::FollowedHyperlink => Color::from_hex("954F72").unwrap(), // Purple
+        }
+    }
+}
+
+/// A color entry in the color table that may include theme color metadata.
+///
+/// RTF color tables can contain theme color references in addition to
+/// explicit RGB values. This type captures both possibilities.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ColorEntry {
+    /// The resolved RGB color (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rgb: Option<Color>,
+    /// Theme color reference (if this is a theme color)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_color: Option<ThemeColor>,
+    /// Theme tint value (0-255, lightens the color)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_tint: Option<u8>,
+    /// Theme shade value (0-255, darkens the color)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_shade: Option<u8>,
+}
+
+impl ColorEntry {
+    /// Creates a new explicit RGB color entry.
+    pub fn rgb(color: Color) -> Self {
+        Self {
+            rgb: Some(color),
+            theme_color: None,
+            theme_tint: None,
+            theme_shade: None,
+        }
+    }
+
+    /// Creates a new theme color entry.
+    pub fn theme(theme_color: ThemeColor, tint: Option<u8>, shade: Option<u8>) -> Self {
+        Self {
+            rgb: None,
+            theme_color: Some(theme_color),
+            theme_tint: tint,
+            theme_shade: shade,
+        }
+    }
+
+    /// Creates an auto/default color entry (no color).
+    pub fn auto_color() -> Self {
+        Self {
+            rgb: None,
+            theme_color: None,
+            theme_tint: None,
+            theme_shade: None,
+        }
+    }
+
+    /// Resolve this color entry to a concrete RGB color.
+    ///
+    /// Resolution order:
+    /// 1. Explicit RGB if present
+    /// 2. Resolved theme color (with tint/shade applied)
+    /// 3. None (cosmetic loss)
+    pub fn resolve(&self) -> Option<Color> {
+        // 1. Explicit RGB takes precedence
+        if let Some(rgb) = &self.rgb {
+            return Some(rgb.clone());
+        }
+
+        // 2. Resolve theme color
+        if let Some(theme_color) = &self.theme_color {
+            let mut color = theme_color.default_color();
+
+            // Apply shade first (darken), then tint (lighten)
+            // Note: In practice, only one should be set, but we handle both
+            if let Some(shade) = self.theme_shade {
+                color = color.shade(shade);
+            }
+            if let Some(tint) = self.theme_tint {
+                color = color.tint(tint);
+            }
+
+            return Some(color);
+        }
+
+        // 3. No color available
+        None
+    }
+}
+
+impl Default for ColorEntry {
+    fn default() -> Self {
+        Self::auto_color()
+    }
+}
+
+// =============================================================================
+// Shading Types for Block/Cell Background Patterns
+// =============================================================================
+
+/// Pattern types for shading.
+///
+/// Represents the various fill patterns supported by RTF/DOCX for cell and
+/// paragraph backgrounds. The pattern determines how the fill color and
+/// pattern color are combined.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShadingPattern {
+    /// No pattern (transparent/clear)
+    #[default]
+    Clear,
+    /// Solid fill with fill_color only
+    Solid,
+    /// Horizontal stripes using pattern_color on fill_color
+    HorzStripe,
+    /// Vertical stripes using pattern_color on fill_color
+    VertStripe,
+    /// Diagonal stripes (forward slash direction)
+    DiagStripe,
+    /// Reverse diagonal stripes (backslash direction)
+    ReverseDiagStripe,
+    /// Horizontal crosshatch pattern
+    HorzCross,
+    /// Diagonal crosshatch pattern
+    DiagCross,
+    /// Light percentage patterns (5-95% density)
+    Percent5,
+    Percent10,
+    Percent20,
+    Percent25,
+    Percent30,
+    Percent40,
+    Percent50,
+    Percent60,
+    Percent70,
+    Percent75,
+    Percent80,
+    Percent90,
+}
+
+/// A reusable shading object for cell and paragraph backgrounds.
+///
+/// Shading supports both solid fills and pattern-based fills. The pattern
+/// determines how `fill_color` and `pattern_color` are combined.
+///
+/// - For `Solid` pattern: only `fill_color` is used
+/// - For pattern patterns: `fill_color` is the background, `pattern_color` is the foreground
+/// - For `Clear`: no colors are needed (transparent)
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Shading {
+    /// The background/fill color
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill_color: Option<Color>,
+    /// The pattern foreground color (used with patterned fills)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pattern_color: Option<Color>,
+    /// The pattern type (defaults to Solid if fill_color is set)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<ShadingPattern>,
+}
+
+impl Shading {
+    /// Creates a new empty shading (transparent).
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Creates a solid fill shading with the given color.
+    pub fn solid(color: Color) -> Self {
+        Self {
+            fill_color: Some(color),
+            pattern_color: None,
+            pattern: Some(ShadingPattern::Solid),
+        }
+    }
+
+    /// Creates a patterned shading with fill and pattern colors.
+    pub fn with_pattern(fill_color: Color, pattern_color: Color, pattern: ShadingPattern) -> Self {
+        Self {
+            fill_color: Some(fill_color),
+            pattern_color: Some(pattern_color),
+            pattern: Some(pattern),
+        }
     }
 }
 
@@ -155,6 +468,9 @@ pub struct RowProps {
     /// Left indent in twips (from `\trleft`)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub left_indent: Option<i32>,
+    /// Row-level shading (default for cells in this row)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shading: Option<Shading>,
 }
 
 /// Table-level properties.
@@ -163,6 +479,9 @@ pub struct RowProps {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct TableProps {
+    /// Table-level shading (default for all cells in table)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shading: Option<Shading>,
     // Future: borders, spacing, width preferences, etc.
     // Keeping sparse for now per PHASE5.md guidelines
 }
@@ -273,6 +592,7 @@ pub struct Hyperlink {
 /// let para = Paragraph {
 ///     alignment: Alignment::Left,
 ///     inlines: vec![Inline::Run(Run::new("Hello, World!"))],
+///     shading: None,
 /// };
 /// ```
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -282,6 +602,9 @@ pub struct Paragraph {
     pub alignment: Alignment,
     /// The inline elements that make up this paragraph
     pub inlines: Vec<Inline>,
+    /// Paragraph-level shading (background)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shading: Option<Shading>,
 }
 
 impl Paragraph {
@@ -295,6 +618,7 @@ impl Paragraph {
         Self {
             alignment: Alignment::default(),
             inlines: runs.into_iter().map(Inline::Run).collect(),
+            shading: None,
         }
     }
 
@@ -303,6 +627,7 @@ impl Paragraph {
         Self {
             alignment: Alignment::default(),
             inlines,
+            shading: None,
         }
     }
 }
@@ -418,6 +743,7 @@ impl ListBlock {
 ///                     width_twips: Some(1440), // 1 inch
 ///                     merge: None,
 ///                     v_align: None,
+///                     shading: None,
 ///                 },
 ///             ],
 ///             row_props: None,
@@ -536,6 +862,10 @@ pub struct TableCell {
     /// Vertical alignment of cell content
     #[serde(skip_serializing_if = "Option::is_none")]
     pub v_align: Option<CellVerticalAlign>,
+
+    /// Cell-level shading (background)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shading: Option<Shading>,
 }
 
 impl TableCell {
@@ -551,6 +881,7 @@ impl TableCell {
             width_twips,
             merge: None,
             v_align: None,
+            shading: None,
         }
     }
 
@@ -561,6 +892,7 @@ impl TableCell {
             width_twips: None,
             merge: None,
             v_align: None,
+            shading: None,
         }
     }
 
@@ -571,6 +903,7 @@ impl TableCell {
             width_twips: Some(width_twips),
             merge: None,
             v_align: None,
+            shading: None,
         }
     }
 
@@ -711,5 +1044,239 @@ mod tests {
         let stats = analyze("the the the cat");
         assert_eq!(stats.most_common_word, Some("the".to_string()));
         assert_eq!(stats.unique_words, 2);
+    }
+
+    // ==========================================================================
+    // Theme Color Resolution Tests (Slice C)
+    // ==========================================================================
+
+    #[test]
+    fn test_theme_color_from_index_valid() {
+        assert_eq!(ThemeColor::from_index(0), Some(ThemeColor::Light1));
+        assert_eq!(ThemeColor::from_index(1), Some(ThemeColor::Dark1));
+        assert_eq!(ThemeColor::from_index(2), Some(ThemeColor::Light2));
+        assert_eq!(ThemeColor::from_index(3), Some(ThemeColor::Dark2));
+        assert_eq!(ThemeColor::from_index(4), Some(ThemeColor::Accent1));
+        assert_eq!(ThemeColor::from_index(5), Some(ThemeColor::Accent2));
+        assert_eq!(ThemeColor::from_index(6), Some(ThemeColor::Accent3));
+        assert_eq!(ThemeColor::from_index(7), Some(ThemeColor::Accent4));
+        assert_eq!(ThemeColor::from_index(8), Some(ThemeColor::Accent5));
+        assert_eq!(ThemeColor::from_index(9), Some(ThemeColor::Accent6));
+        assert_eq!(ThemeColor::from_index(10), Some(ThemeColor::Hyperlink));
+        assert_eq!(ThemeColor::from_index(11), Some(ThemeColor::FollowedHyperlink));
+    }
+
+    #[test]
+    fn test_theme_color_from_index_invalid() {
+        assert_eq!(ThemeColor::from_index(-1), None);
+        assert_eq!(ThemeColor::from_index(12), None);
+        assert_eq!(ThemeColor::from_index(100), None);
+    }
+
+    #[test]
+    fn test_theme_color_default_colors() {
+        // Light1 = White
+        let lt1 = ThemeColor::Light1.default_color();
+        assert_eq!(lt1.r, 255);
+        assert_eq!(lt1.g, 255);
+        assert_eq!(lt1.b, 255);
+
+        // Dark1 = Black
+        let dk1 = ThemeColor::Dark1.default_color();
+        assert_eq!(dk1.r, 0);
+        assert_eq!(dk1.g, 0);
+        assert_eq!(dk1.b, 0);
+
+        // Hyperlink = #0563C1
+        let hlink = ThemeColor::Hyperlink.default_color();
+        assert_eq!(hlink.r, 0x05);
+        assert_eq!(hlink.g, 0x63);
+        assert_eq!(hlink.b, 0xC1);
+
+        // FollowedHyperlink = #954F72
+        let fol_hlink = ThemeColor::FollowedHyperlink.default_color();
+        assert_eq!(fol_hlink.r, 0x95);
+        assert_eq!(fol_hlink.g, 0x4F);
+        assert_eq!(fol_hlink.b, 0x72);
+    }
+
+    #[test]
+    fn test_color_tint_no_change() {
+        let color = Color::new(128, 128, 128);
+        let tinted = color.tint(0);
+        assert_eq!(tinted.r, 128);
+        assert_eq!(tinted.g, 128);
+        assert_eq!(tinted.b, 128);
+    }
+
+    #[test]
+    fn test_color_tint_full() {
+        let color = Color::new(0, 0, 0);
+        let tinted = color.tint(255);
+        // Full tint should produce white
+        assert_eq!(tinted.r, 255);
+        assert_eq!(tinted.g, 255);
+        assert_eq!(tinted.b, 255);
+    }
+
+    #[test]
+    fn test_color_tint_partial() {
+        let color = Color::new(0, 0, 0);
+        // Tint of 128 (50%) should produce (128, 128, 128)
+        let tinted = color.tint(128);
+        assert_eq!(tinted.r, 128);
+        assert_eq!(tinted.g, 128);
+        assert_eq!(tinted.b, 128);
+    }
+
+    #[test]
+    fn test_color_shade_no_change() {
+        let color = Color::new(128, 128, 128);
+        let shaded = color.shade(0);
+        assert_eq!(shaded.r, 128);
+        assert_eq!(shaded.g, 128);
+        assert_eq!(shaded.b, 128);
+    }
+
+    #[test]
+    fn test_color_shade_full() {
+        let color = Color::new(255, 255, 255);
+        let shaded = color.shade(255);
+        // Full shade should produce black
+        assert_eq!(shaded.r, 0);
+        assert_eq!(shaded.g, 0);
+        assert_eq!(shaded.b, 0);
+    }
+
+    #[test]
+    fn test_color_shade_partial() {
+        let color = Color::new(100, 100, 100);
+        // Shade of 128 (50%) should produce (50, 50, 50)
+        let shaded = color.shade(128);
+        assert_eq!(shaded.r, 50);
+        assert_eq!(shaded.g, 50);
+        assert_eq!(shaded.b, 50);
+    }
+
+    #[test]
+    fn test_color_entry_rgb_resolution() {
+        let entry = ColorEntry::rgb(Color::new(255, 0, 0));
+        let resolved = entry.resolve();
+        assert!(resolved.is_some());
+        let color = resolved.unwrap();
+        assert_eq!(color.r, 255);
+        assert_eq!(color.g, 0);
+        assert_eq!(color.b, 0);
+    }
+
+    #[test]
+    fn test_color_entry_theme_resolution() {
+        let entry = ColorEntry::theme(ThemeColor::Hyperlink, None, None);
+        let resolved = entry.resolve();
+        assert!(resolved.is_some());
+        let color = resolved.unwrap();
+        // Hyperlink default is #0563C1
+        assert_eq!(color.r, 0x05);
+        assert_eq!(color.g, 0x63);
+        assert_eq!(color.b, 0xC1);
+    }
+
+    #[test]
+    fn test_color_entry_theme_with_tint() {
+        // Dark1 (black) with 50% tint should be gray (128, 128, 128)
+        let entry = ColorEntry::theme(ThemeColor::Dark1, Some(128), None);
+        let resolved = entry.resolve();
+        assert!(resolved.is_some());
+        let color = resolved.unwrap();
+        assert_eq!(color.r, 128);
+        assert_eq!(color.g, 128);
+        assert_eq!(color.b, 128);
+    }
+
+    #[test]
+    fn test_color_entry_theme_with_shade() {
+        // Light1 (white) with shade 128 produces gray
+        // shade(128) means factor = 128/255 ≈ 0.502
+        // 255 * (1 - 0.502) ≈ 127
+        let entry = ColorEntry::theme(ThemeColor::Light1, None, Some(128));
+        let resolved = entry.resolve();
+        assert!(resolved.is_some());
+        let color = resolved.unwrap();
+        assert_eq!(color.r, 127);
+        assert_eq!(color.g, 127);
+        assert_eq!(color.b, 127);
+    }
+
+    #[test]
+    fn test_color_entry_rgb_takes_precedence_over_theme() {
+        // When both RGB and theme are present, RGB should win
+        let entry = ColorEntry {
+            rgb: Some(Color::new(255, 0, 0)),
+            theme_color: Some(ThemeColor::Hyperlink),
+            theme_tint: None,
+            theme_shade: None,
+        };
+        let resolved = entry.resolve();
+        assert!(resolved.is_some());
+        let color = resolved.unwrap();
+        // Should be the explicit RGB, not the theme color
+        assert_eq!(color.r, 255);
+        assert_eq!(color.g, 0);
+        assert_eq!(color.b, 0);
+    }
+
+    #[test]
+    fn test_color_entry_auto_color_resolves_to_none() {
+        let entry = ColorEntry::auto_color();
+        let resolved = entry.resolve();
+        assert!(resolved.is_none());
+    }
+
+    #[test]
+    fn test_color_entry_default_is_auto() {
+        let entry = ColorEntry::default();
+        assert!(entry.rgb.is_none());
+        assert!(entry.theme_color.is_none());
+        assert!(entry.theme_tint.is_none());
+        assert!(entry.theme_shade.is_none());
+    }
+
+    #[test]
+    fn test_deterministic_fallback_chain() {
+        // Test the fallback chain: RGB > theme > None
+
+        // 1. Explicit RGB wins
+        let entry_rgb = ColorEntry {
+            rgb: Some(Color::new(100, 100, 100)),
+            theme_color: Some(ThemeColor::Dark1),
+            theme_tint: None,
+            theme_shade: None,
+        };
+        let resolved_rgb = entry_rgb.resolve().unwrap();
+        assert_eq!(resolved_rgb.r, 100);
+
+        // 2. Theme color when no RGB
+        let entry_theme = ColorEntry {
+            rgb: None,
+            theme_color: Some(ThemeColor::Dark1),
+            theme_tint: None,
+            theme_shade: None,
+        };
+        let resolved_theme = entry_theme.resolve().unwrap();
+        assert_eq!(resolved_theme.r, 0); // Dark1 is black
+
+        // 3. None when neither RGB nor theme
+        let entry_none = ColorEntry::auto_color();
+        assert!(entry_none.resolve().is_none());
+    }
+
+    #[test]
+    fn test_no_hard_failure_for_missing_theme_data() {
+        // Invalid theme color index should not cause hard failure
+        assert!(ThemeColor::from_index(999).is_none());
+
+        // ColorEntry with missing theme data should resolve to None
+        let entry = ColorEntry::auto_color();
+        assert!(entry.resolve().is_none());
     }
 }

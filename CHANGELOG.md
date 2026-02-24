@@ -5,6 +5,42 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] - Unreleased
+
+### Added
+
+#### Block Shading and Theme Color Support
+- First-class block shading support in RTF-to-IR-to-output pipeline
+- New IR types: `Shading` struct, `ShadingPattern` enum, `ThemeColor` enum, `ColorEntry` struct
+- Paragraph shading: `\cbpatN` sets paragraph background color from color table
+- Paragraph pattern controls: `\shadingN` (percentage 0-10000), `\cfpatN` (pattern color)
+- Table cell shading: `\clcbpatN` sets cell background, `\clshdngN` and `\clcfpatN` for patterns
+- Table row shading: `\trcbpatN` sets row default, `\trshdngN` and `\trcfpatN` for patterns
+- Table-level shading: First row's `\trcbpatN` sets table default (fallback for cells without row/cell shading)
+- Shading precedence: cell > row > table
+- Theme color resolution: `\themecolorN` in color table, `\ctintN` (tint), `\cshadeN` (shade)
+- `\pard` resets paragraph shading; `\plain` does NOT reset paragraph shading
+- DOCX output: `<w:shd>` elements with `w:fill`, `w:val` (pattern), `w:color` (pattern color)
+- HTML output: `background-color` style (patterns degraded to solid fill)
+- PDF/Typst output: paragraph `#highlight(fill: ...)` and table `table.cell(fill: ...)` mapping (patterns degraded to solid fill)
+- 6 new shading test fixtures: paragraph_shading_basic, table_cell_shading_basic, table_row_cell_shading_precedence, paragraph_shading_plain_pard_reset, shading_pattern_basic, shading_theme_color_reference
+- Golden IR and HTML snapshots for all shading fixtures
+- CLI contract tests for block shading support
+
+### Changed
+
+- `\pard` now resets paragraph shading in addition to other paragraph properties
+- `\plain` does NOT reset paragraph shading (character-only reset)
+- Unresolved shading color indexes degrade gracefully without warnings (content preserved)
+- Pattern shading degraded to solid fill in HTML/Typst output with `PatternDegraded` info warning
+
+### Migration Notes
+
+- IR JSON format extended: `Paragraph` and `TableCell` objects may now include `shading` field
+- `Shading` object contains `fill_color`, `pattern_color`, and `pattern` fields
+- External consumers of IR JSON should handle the new optional `shading` field
+- Golden IR snapshots need regeneration: `UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests`
+
 ## [0.9.0] - Unreleased
 
 ### Added

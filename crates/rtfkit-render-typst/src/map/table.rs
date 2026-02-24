@@ -21,13 +21,18 @@
 //! - **Rowspan**: Uses `rowspan` parameter on cells
 //! - Cells covered by merges are omitted from output
 //!
+//! ## Cell Shading
+//!
+//! - **Background color**: Uses `fill` parameter on `table.cell()`
+//!
 //! ## Column Width Calculation
 //!
 //! Column widths are computed deterministically from cell widths when available,
 //! falling back to `auto` for unspecified columns.
 
 use rtfkit_core::{
-    CellMerge, TableBlock as IrTableBlock, TableCell as IrTableCell, TableRow as IrTableRow,
+    CellMerge, Color, ShadingPattern, TableBlock as IrTableBlock, TableCell as IrTableCell,
+    TableRow as IrTableRow,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -53,6 +58,8 @@ struct CellInfo {
     rowspan: u32,
     /// Cell width in twips (if specified).
     width_twips: Option<i32>,
+    /// Cell fill color (from shading).
+    fill_color: Option<Color>,
 }
 
 type RowspanMap = HashMap<(usize, usize), u32>;
@@ -257,6 +264,21 @@ fn map_cell(
         warnings.push(MappingWarning::CellVerticalAlignDropped);
     }
 
+    // Extract fill color from shading (Slice A: flat fill only)
+    // Slice B: Emit warning for pattern degradation
+    let fill_color = cell.shading.as_ref().and_then(|s| {
+        // Check if pattern is something other than Solid or Clear
+        if let Some(ref pattern) = s.pattern {
+            if !matches!(pattern, ShadingPattern::Solid | ShadingPattern::Clear) {
+                warnings.push(MappingWarning::PatternDegraded {
+                    context: "cell shading".to_string(),
+                    pattern: format!("{:?}", pattern),
+                });
+            }
+        }
+        s.fill_color.clone()
+    });
+
     // Format content for table cell
     let content = if content_parts.is_empty() {
         String::new()
@@ -271,6 +293,7 @@ fn map_cell(
         colspan,
         rowspan,
         width_twips: cell.width_twips,
+        fill_color,
     }
 }
 
@@ -364,13 +387,17 @@ fn generate_table_source(
     let mut cell_entries = Vec::new();
     for row in rows {
         for cell in row {
-            // Add span parameters if needed
+            // Add parameters if needed
             let mut params = Vec::new();
             if cell.colspan > 1 {
                 params.push(format!("colspan: {}", cell.colspan));
             }
             if cell.rowspan > 1 {
                 params.push(format!("rowspan: {}", cell.rowspan));
+            }
+            // Add fill parameter for cell shading
+            if let Some(ref color) = cell.fill_color {
+                params.push(format!("fill: rgb({}, {}, {})", color.r, color.g, color.b));
             }
 
             let cell_spec = if !params.is_empty() {
@@ -401,7 +428,7 @@ fn generate_table_source(
 mod tests {
     use super::*;
     use rtfkit_core::{
-        Block as IrBlock, Paragraph, Run, TableCell as IrTableCell, TableRow as IrTableRow,
+        Block as IrBlock, Paragraph, Run, Shading, TableCell as IrTableCell, TableRow as IrTableRow,
     };
 
     fn make_simple_table() -> IrTableBlock {
@@ -667,5 +694,234 @@ mod tests {
         let output2 = map_table(&table);
 
         assert_eq!(output1.typst_source, output2.typst_source);
+    }
+
+    // =============================================================================
+    // Cell Shading Tests
+    // =============================================================================
+
+    #[test]
+    fn test_map_table_cell_shading() {
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Shaded")]));
+        cell.shading = Some(Shading::solid(Color::new(255, 255, 0))); // Yellow
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+
+        let output = map_table(&table);
+
+        // Should have fill parameter
+        assert!(output.typst_source.contains("fill: rgb(255, 255, 0)"));
+        assert!(output.typst_source.contains("[Shaded]"));
+    }
+
+    #[test]
+    fn test_map_table_cell_shading_with_merge() {
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Merged")]));
+        cell.merge = Some(CellMerge::HorizontalStart { span: 2 });
+        cell.shading = Some(Shading::solid(Color::new(0, 128, 255))); // Blue
+
+        let mut cont_cell = IrTableCell::new();
+        cont_cell.merge = Some(CellMerge::HorizontalContinue);
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell, cont_cell])]);
+
+        let output = map_table(&table);
+
+        // Should have both colspan and fill parameters
+        assert!(output.typst_source.contains("colspan: 2"));
+        assert!(output.typst_source.contains("fill: rgb(0, 128, 255)"));
+    }
+
+    #[test]
+    fn test_map_table_cell_without_shading() {
+        let cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Normal")]));
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+
+        let output = map_table(&table);
+
+        // Should NOT have fill parameter
+        assert!(!output.typst_source.contains("fill:"));
+        assert!(output.typst_source.contains("[Normal]"));
+    }
+
+    #[test]
+    fn test_map_table_cell_shading_empty_fill_color() {
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Text")]));
+        cell.shading = Some(Shading::new()); // Empty shading
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+
+        let output = map_table(&table);
+
+        // Should NOT have fill parameter
+        assert!(!output.typst_source.contains("fill:"));
+        assert!(output.typst_source.contains("[Text]"));
+    }
+
+    #[test]
+    fn test_map_table_cell_shading_deterministic() {
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Test")]));
+        cell.shading = Some(Shading::solid(Color::new(128, 64, 32)));
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+
+        // Run multiple times to verify determinism
+        let output1 = map_table(&table);
+        let output2 = map_table(&table);
+        let output3 = map_table(&table);
+
+        assert_eq!(output1.typst_source, output2.typst_source);
+        assert_eq!(output2.typst_source, output3.typst_source);
+        assert!(output1.typst_source.contains("fill: rgb(128, 64, 32)"));
+    }
+
+    // =============================================================================
+    // Pattern Degradation Tests (Slice B)
+    // =============================================================================
+
+    #[test]
+    fn test_map_table_cell_with_patterned_shading_degrades() {
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(255, 255, 255)); // White background
+        shading.pattern_color = Some(Color::new(0, 0, 0)); // Black foreground
+        shading.pattern = Some(ShadingPattern::Percent25);
+
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Patterned")]));
+        cell.shading = Some(shading);
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+
+        let output = map_table(&table);
+
+        // Pattern should be degraded - only fill_color emitted
+        assert!(output.typst_source.contains("fill: rgb(255, 255, 255)"));
+        assert!(!output.typst_source.contains("0, 0, 0")); // Pattern color not emitted
+
+        // Should have a warning about pattern degradation
+        assert_eq!(output.warnings.len(), 1);
+        assert!(matches!(
+            &output.warnings[0],
+            MappingWarning::PatternDegraded { context, .. } if context == "cell shading"
+        ));
+    }
+
+    #[test]
+    fn test_map_table_cell_with_horz_stripe_pattern_degrades() {
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(200, 200, 200)); // Light gray
+        shading.pattern_color = Some(Color::new(100, 100, 100)); // Dark gray
+        shading.pattern = Some(ShadingPattern::HorzStripe);
+
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Striped")]));
+        cell.shading = Some(shading);
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+
+        let output = map_table(&table);
+
+        // Only fill_color should be emitted
+        assert!(output.typst_source.contains("fill: rgb(200, 200, 200)"));
+
+        // Should have a warning
+        assert_eq!(output.warnings.len(), 1);
+        if let MappingWarning::PatternDegraded { pattern, .. } = &output.warnings[0] {
+            assert!(pattern.contains("HorzStripe"));
+        } else {
+            panic!("Expected PatternDegraded warning");
+        }
+    }
+
+    #[test]
+    fn test_map_table_cell_with_solid_pattern_no_warning() {
+        // Solid pattern should not emit a warning
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Solid")]));
+        cell.shading = Some(Shading::solid(Color::new(255, 255, 0)));
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+
+        let output = map_table(&table);
+
+        // Should emit fill color
+        assert!(output.typst_source.contains("fill: rgb(255, 255, 0)"));
+
+        // Should NOT have a warning - Solid is supported
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_map_table_cell_with_clear_pattern_no_warning() {
+        // Clear pattern should not emit a warning
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(200, 200, 255));
+        shading.pattern = Some(ShadingPattern::Clear);
+
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Clear")]));
+        cell.shading = Some(shading);
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+
+        let output = map_table(&table);
+
+        // Should emit fill color
+        assert!(output.typst_source.contains("fill: rgb(200, 200, 255)"));
+
+        // Should NOT have a warning - Clear is supported
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_map_table_cell_with_diag_cross_pattern_degrades() {
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(255, 255, 0)); // Yellow
+        shading.pattern_color = Some(Color::new(255, 0, 0)); // Red
+        shading.pattern = Some(ShadingPattern::DiagCross);
+
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Crosshatch")]));
+        cell.shading = Some(shading);
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+
+        let output = map_table(&table);
+
+        // Only fill_color should be emitted, pattern ignored
+        assert!(output.typst_source.contains("fill: rgb(255, 255, 0)"));
+        assert!(!output.typst_source.contains("255, 0, 0")); // Pattern color not emitted
+
+        // Should have a warning
+        assert_eq!(output.warnings.len(), 1);
+        if let MappingWarning::PatternDegraded { pattern, .. } = &output.warnings[0] {
+            assert!(pattern.contains("DiagCross"));
+        } else {
+            panic!("Expected PatternDegraded warning");
+        }
+    }
+
+    #[test]
+    fn test_map_table_multiple_cells_with_patterns() {
+        let mut shading1 = Shading::new();
+        shading1.fill_color = Some(Color::new(255, 0, 0));
+        shading1.pattern = Some(ShadingPattern::Percent10);
+
+        let mut shading2 = Shading::new();
+        shading2.fill_color = Some(Color::new(0, 255, 0));
+        shading2.pattern = Some(ShadingPattern::Percent20);
+
+        let mut cell1 = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("A")]));
+        cell1.shading = Some(shading1);
+
+        let mut cell2 = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("B")]));
+        cell2.shading = Some(shading2);
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell1, cell2])]);
+
+        let output = map_table(&table);
+
+        // Both fill colors should be emitted
+        assert!(output.typst_source.contains("fill: rgb(255, 0, 0)"));
+        assert!(output.typst_source.contains("fill: rgb(0, 255, 0)"));
+
+        // Should have two warnings (one per cell with pattern)
+        assert_eq!(output.warnings.len(), 2);
     }
 }

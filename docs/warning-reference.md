@@ -350,6 +350,34 @@ Emitted when table geometry is invalid (e.g., non-monotonic cell positions, impo
 
 **Impact**: Geometry is adjusted or clamped. May emit `DroppedContent` for semantic loss.
 
+---
+
+### `pattern_degraded`
+
+Emitted when a shading pattern cannot be fully represented in the output format.
+
+**Severity**: `info`
+
+**Strict Mode**: Does NOT cause failure (cosmetic loss only).
+
+**JSON Format**:
+```json
+{
+  "kind": "partial_support",
+  "message": "pattern_degraded_paragraph_shading"
+}
+```
+
+Common message values include:
+- `pattern_degraded_paragraph_shading`
+- `pattern_degraded_cell_shading`
+
+**Common Causes**:
+- Percentage patterns (e.g., 25%, 50%, 75%) in HTML or Typst output
+- Hatch/stripe patterns in any output format except DOCX
+
+**Impact**: Pattern is rendered as solid fill using the fill color. DOCX output preserves patterns fully.
+
 ## Strict Mode
 
 When running with `--strict`, the conversion fails (exit code 4) if any `DroppedContent` warnings are present.

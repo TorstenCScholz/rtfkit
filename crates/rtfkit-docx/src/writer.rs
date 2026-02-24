@@ -7,14 +7,14 @@ use crate::DocxError;
 use docx_rs::{
     AbstractNumbering, AlignmentType, Docx, Hyperlink as DocxHyperlink, HyperlinkType, IndentLevel,
     Level, LevelJc, LevelText, NumberFormat, Numbering, NumberingId, Numberings,
-    Paragraph as DocxParagraph, Run as DocxRun, RunFonts, Shading, ShdType, Start, Table,
-    TableCell, TableRow, VAlignType, VMergeType, WidthType,
+    Paragraph as DocxParagraph, Run as DocxRun, RunFonts, RunProperty, Shading, ShdType, Start,
+    Table, TableCell, TableRow, VAlignType, VMergeType, WidthType,
 };
 use indexmap::IndexMap;
 use rtfkit_core::{
     Alignment, Block, CellMerge, CellVerticalAlign, Document, Hyperlink as IrHyperlink, Inline,
-    ListBlock, ListId, ListKind, Paragraph, Run, TableBlock, TableCell as IrTableCell,
-    TableRow as IrTableRow,
+    ListBlock, ListId, ListKind, Paragraph, Run, Shading as IrShading, ShadingPattern, TableBlock,
+    TableCell as IrTableCell, TableRow as IrTableRow,
 };
 use std::fs::File;
 use std::io::{Cursor, Write};
@@ -339,6 +339,15 @@ fn convert_paragraph_with_numbering(para: &Paragraph, num_id: u32, level: u8) ->
     // Map alignment
     p = p.align(convert_alignment(para.alignment));
 
+    // Map paragraph shading through paragraph default run properties.
+    // docx-rs does not expose w:pPr/w:shd directly, but this still emits w:shd
+    // at paragraph property scope (w:pPr/w:rPr/w:shd).
+    if let Some(ref shading) = para.shading
+        && let Some(docx_shading) = convert_shading(shading)
+    {
+        p = p.run_property(RunProperty::new().shading(docx_shading));
+    }
+
     // Map inlines
     for inline in &para.inlines {
         match inline {
@@ -375,6 +384,75 @@ fn convert_alignment(align: Alignment) -> AlignmentType {
         Alignment::Center => AlignmentType::Center,
         Alignment::Right => AlignmentType::Right,
         Alignment::Justify => AlignmentType::Both,
+    }
+}
+
+/// Converts IR Shading to docx-rs Shading.
+///
+/// Maps IR `ShadingPattern` to DOCX `w:val` attribute:
+/// - Clear → "clear"
+/// - Solid → "solid"
+/// - HorzStripe → "horzStripe"
+/// - VertStripe → "vertStripe"
+/// - DiagStripe → "diagStripe"
+/// - ReverseDiagStripe → "reverseDiagStripe"
+/// - HorzCross → "horzCross"
+/// - DiagCross → "diagCross"
+/// - Percent5-90 → "pct5"-"pct90"
+///
+/// Emits full `w:shd` attributes:
+/// - `w:val` = pattern type
+/// - `w:fill` = fill_color (background)
+/// - `w:color` = pattern_color (foreground)
+fn convert_shading(shading: &IrShading) -> Option<Shading> {
+    // Only emit shading if we have a fill color
+    let fill_color = shading.fill_color.as_ref()?;
+    let fill_hex = format!("{:02X}{:02X}{:02X}", fill_color.r, fill_color.g, fill_color.b);
+
+    // Get pattern type, defaulting to Solid if fill_color is present
+    let pattern = shading.pattern.unwrap_or(ShadingPattern::Solid);
+    let shd_type = pattern_to_shd_type(pattern);
+
+    // Build shading with pattern and fill color
+    let mut docx_shading = Shading::new()
+        .shd_type(shd_type)
+        .fill(fill_hex);
+
+    // Add pattern color if present (foreground for patterns)
+    if let Some(ref pattern_color) = shading.pattern_color {
+        let pattern_hex = format!("{:02X}{:02X}{:02X}", pattern_color.r, pattern_color.g, pattern_color.b);
+        docx_shading = docx_shading.color(pattern_hex);
+    } else {
+        // Use "auto" for color when no pattern color specified
+        docx_shading = docx_shading.color("auto");
+    }
+
+    Some(docx_shading)
+}
+
+/// Maps IR ShadingPattern to docx-rs ShdType.
+fn pattern_to_shd_type(pattern: ShadingPattern) -> ShdType {
+    match pattern {
+        ShadingPattern::Clear => ShdType::Clear,
+        ShadingPattern::Solid => ShdType::Solid,
+        ShadingPattern::HorzStripe => ShdType::HorzStripe,
+        ShadingPattern::VertStripe => ShdType::VertStripe,
+        ShadingPattern::DiagStripe => ShdType::DiagStripe,
+        ShadingPattern::ReverseDiagStripe => ShdType::ReverseDiagStripe,
+        ShadingPattern::HorzCross => ShdType::HorzCross,
+        ShadingPattern::DiagCross => ShdType::DiagCross,
+        ShadingPattern::Percent5 => ShdType::Pct5,
+        ShadingPattern::Percent10 => ShdType::Pct10,
+        ShadingPattern::Percent20 => ShdType::Pct20,
+        ShadingPattern::Percent25 => ShdType::Pct25,
+        ShadingPattern::Percent30 => ShdType::Pct30,
+        ShadingPattern::Percent40 => ShdType::Pct40,
+        ShadingPattern::Percent50 => ShdType::Pct50,
+        ShadingPattern::Percent60 => ShdType::Pct60,
+        ShadingPattern::Percent70 => ShdType::Pct70,
+        ShadingPattern::Percent75 => ShdType::Pct75,
+        ShadingPattern::Percent80 => ShdType::Pct80,
+        ShadingPattern::Percent90 => ShdType::Pct90,
     }
 }
 
@@ -523,7 +601,7 @@ fn convert_table_row(row: &IrTableRow, numbering: &NumberingAllocator) -> TableR
 /// Converts an IR TableCell to a docx-rs TableCell.
 ///
 /// Handles cell content (paragraphs and lists), width mapping, merge semantics,
-/// and vertical alignment.
+/// vertical alignment, and shading.
 ///
 /// Width is stored in twips in the IR and mapped to DXA for DOCX (1:1 ratio).
 fn convert_table_cell(cell: &IrTableCell, numbering: &NumberingAllocator) -> TableCell {
@@ -572,6 +650,13 @@ fn convert_table_cell(cell: &IrTableCell, numbering: &NumberingAllocator) -> Tab
             CellVerticalAlign::Bottom => {
                 docx_cell = docx_cell.vertical_align(VAlignType::Bottom);
             }
+        }
+    }
+
+    // Apply cell shading if present
+    if let Some(ref shading) = cell.shading {
+        if let Some(docx_shading) = convert_shading(shading) {
+            docx_cell = docx_cell.shading(docx_shading);
         }
     }
 
@@ -1774,6 +1859,41 @@ mod tests {
     // =========================================================================
 
     #[test]
+    fn test_paragraph_with_shading() {
+        let mut para = Paragraph::from_runs(vec![Run::new("Shaded paragraph")]);
+        para.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(255, 255, 0))); // Yellow
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        assert!(document_xml.contains("<w:pPr>"));
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:val="solid""#));
+        assert!(document_xml.contains(r#"w:fill="FFFF00""#));
+    }
+
+    #[test]
+    fn test_paragraph_with_patterned_shading() {
+        let mut shading = rtfkit_core::Shading::new();
+        shading.fill_color = Some(rtfkit_core::Color::new(255, 255, 255)); // White
+        shading.pattern_color = Some(rtfkit_core::Color::new(0, 0, 0)); // Black
+        shading.pattern = Some(ShadingPattern::Percent25);
+
+        let mut para = Paragraph::from_runs(vec![Run::new("Patterned paragraph")]);
+        para.shading = Some(shading);
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:val="pct25""#));
+        assert!(document_xml.contains(r#"w:fill="FFFFFF""#));
+        assert!(document_xml.contains(r#"w:color="000000""#));
+    }
+
+    #[test]
     fn test_run_with_background_color() {
         let mut run = Run::new("Highlighted text");
         run.background_color = Some(rtfkit_core::Color::new(255, 255, 0)); // Yellow
@@ -1864,5 +1984,239 @@ mod tests {
         assert!(document_xml.contains(r#"<w:color w:val="800080" />"#));
         assert!(document_xml.contains("<w:shd"));
         assert!(document_xml.contains(r#"w:fill="FFC0CB""#));
+    }
+
+    // =========================================================================
+    // Table Cell Shading Tests
+    // =========================================================================
+
+    #[test]
+    fn test_table_cell_with_shading() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Shaded cell")]));
+        cell.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(255, 0, 0))); // Red
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should contain w:shd in cell properties
+        assert!(document_xml.contains("<w:tcPr>"));
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:fill="FF0000""#));
+    }
+
+    #[test]
+    fn test_table_cell_without_shading_no_shd() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Normal cell")]));
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should NOT contain w:shd in cell properties
+        assert!(!document_xml.contains("<w:shd"));
+    }
+
+    #[test]
+    fn test_table_cell_shading_with_merge() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Merged and shaded")]));
+        cell.merge = Some(CellMerge::HorizontalStart { span: 2 });
+        cell.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(0, 0, 255))); // Blue
+
+        let mut cont_cell = TableCell::new();
+        cont_cell.merge = Some(CellMerge::HorizontalContinue);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell, cont_cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should contain both gridSpan and shading
+        assert!(document_xml.contains(r#"<w:gridSpan w:val="2""#));
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:fill="0000FF""#));
+    }
+
+    #[test]
+    fn test_table_cell_shading_with_vertical_align() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Aligned and shaded")]));
+        cell.v_align = Some(CellVerticalAlign::Center);
+        cell.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(128, 128, 128))); // Gray
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should contain both vertical alignment and shading
+        assert!(document_xml.contains(r#"<w:vAlign w:val="center""#));
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:fill="808080""#));
+    }
+
+    // =========================================================================
+    // Shading Pattern Tests
+    // =========================================================================
+
+    #[test]
+    fn test_table_cell_shading_with_percent_pattern() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut shading = rtfkit_core::Shading::new();
+        shading.fill_color = Some(rtfkit_core::Color::new(255, 255, 255)); // White background
+        shading.pattern_color = Some(rtfkit_core::Color::new(0, 0, 0)); // Black foreground
+        shading.pattern = Some(ShadingPattern::Percent25);
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("25% pattern")]));
+        cell.shading = Some(shading);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should contain w:shd with pct25 pattern
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:val="pct25""#));
+        assert!(document_xml.contains(r#"w:fill="FFFFFF""#));
+        assert!(document_xml.contains(r#"w:color="000000""#));
+    }
+
+    #[test]
+    fn test_table_cell_shading_with_horz_stripe_pattern() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut shading = rtfkit_core::Shading::new();
+        shading.fill_color = Some(rtfkit_core::Color::new(200, 200, 200)); // Light gray background
+        shading.pattern_color = Some(rtfkit_core::Color::new(100, 100, 100)); // Dark gray foreground
+        shading.pattern = Some(ShadingPattern::HorzStripe);
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Horizontal stripes")]));
+        cell.shading = Some(shading);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should contain w:shd with horzStripe pattern
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:val="horzStripe""#));
+        assert!(document_xml.contains(r#"w:fill="C8C8C8""#));
+        assert!(document_xml.contains(r#"w:color="646464""#));
+    }
+
+    #[test]
+    fn test_table_cell_shading_with_diag_cross_pattern() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut shading = rtfkit_core::Shading::new();
+        shading.fill_color = Some(rtfkit_core::Color::new(255, 255, 0)); // Yellow background
+        shading.pattern_color = Some(rtfkit_core::Color::new(255, 0, 0)); // Red foreground
+        shading.pattern = Some(ShadingPattern::DiagCross);
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Diagonal cross")]));
+        cell.shading = Some(shading);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should contain w:shd with diagCross pattern
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:val="diagCross""#));
+        assert!(document_xml.contains(r#"w:fill="FFFF00""#));
+        assert!(document_xml.contains(r#"w:color="FF0000""#));
+    }
+
+    #[test]
+    fn test_table_cell_shading_solid_without_pattern_color() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut shading = rtfkit_core::Shading::new();
+        shading.fill_color = Some(rtfkit_core::Color::new(0, 128, 0)); // Green
+        shading.pattern = Some(ShadingPattern::Solid);
+        // No pattern_color set
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Solid green")]));
+        cell.shading = Some(shading);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should contain w:shd with solid pattern and auto color
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:val="solid""#));
+        assert!(document_xml.contains(r#"w:fill="008000""#));
+        assert!(document_xml.contains(r#"w:color="auto""#));
+    }
+
+    #[test]
+    fn test_table_cell_shading_clear_pattern() {
+        use rtfkit_core::{TableCell, TableRow};
+
+        let mut shading = rtfkit_core::Shading::new();
+        shading.fill_color = Some(rtfkit_core::Color::new(200, 200, 255)); // Light blue
+        shading.pattern = Some(ShadingPattern::Clear);
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Clear pattern")]));
+        cell.shading = Some(shading);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        // Should contain w:shd with clear pattern
+        assert!(document_xml.contains("<w:shd"));
+        assert!(document_xml.contains(r#"w:val="clear""#));
+        assert!(document_xml.contains(r#"w:fill="C8C8FF""#));
+    }
+
+    #[test]
+    fn test_pattern_to_shd_type_all_patterns() {
+        // Test all pattern mappings
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Clear), ShdType::Clear));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Solid), ShdType::Solid));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::HorzStripe), ShdType::HorzStripe));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::VertStripe), ShdType::VertStripe));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::DiagStripe), ShdType::DiagStripe));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::ReverseDiagStripe), ShdType::ReverseDiagStripe));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::HorzCross), ShdType::HorzCross));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::DiagCross), ShdType::DiagCross));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent5), ShdType::Pct5));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent10), ShdType::Pct10));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent20), ShdType::Pct20));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent25), ShdType::Pct25));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent30), ShdType::Pct30));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent40), ShdType::Pct40));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent50), ShdType::Pct50));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent60), ShdType::Pct60));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent70), ShdType::Pct70));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent75), ShdType::Pct75));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent80), ShdType::Pct80));
+        assert!(matches!(pattern_to_shd_type(ShadingPattern::Percent90), ShdType::Pct90));
     }
 }

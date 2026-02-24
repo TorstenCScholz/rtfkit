@@ -1,0 +1,282 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Red cell",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 1440,
+              "shading": {
+                "fill_color": {
+                  "r": 255,
+                  "g": 0,
+                  "b": 0
+                }
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Green cell",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 1440,
+              "shading": {
+                "fill_color": {
+                  "r": 0,
+                  "g": 128,
+                  "b": 0
+                }
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Blue row",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 1440,
+              "shading": {
+                "fill_color": {
+                  "r": 255,
+                  "g": 255,
+                  "b": 0
+                }
+              }
+            }
+          ],
+          "row_props": {
+            "shading": {
+              "fill_color": {
+                "r": 255,
+                "g": 255,
+                "b": 0
+              }
+            }
+          }
+        },
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Table yellow",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 1440,
+              "shading": {
+                "fill_color": {
+                  "r": 255,
+                  "g": 255,
+                  "b": 0
+                }
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Table yellow",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 1440,
+              "shading": {
+                "fill_color": {
+                  "r": 255,
+                  "g": 255,
+                  "b": 0
+                }
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Table yellow",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 1440,
+              "shading": {
+                "fill_color": {
+                  "r": 255,
+                  "g": 255,
+                  "b": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Green row",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 1440,
+              "shading": {
+                "fill_color": {
+                  "r": 0,
+                  "g": 128,
+                  "b": 0
+                }
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Green row",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 1440,
+              "shading": {
+                "fill_color": {
+                  "r": 0,
+                  "g": 128,
+                  "b": 0
+                }
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Green row",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 1440,
+              "shading": {
+                "fill_color": {
+                  "r": 0,
+                  "g": 128,
+                  "b": 0
+                }
+              }
+            }
+          ],
+          "row_props": {
+            "shading": {
+              "fill_color": {
+                "r": 0,
+                "g": 128,
+                "b": 0
+              }
+            }
+          }
+        }
+      ],
+      "table_props": {
+        "shading": {
+          "fill_color": {
+            "r": 255,
+            "g": 255,
+            "b": 0
+          }
+        }
+      }
+    }
+  ]
+}

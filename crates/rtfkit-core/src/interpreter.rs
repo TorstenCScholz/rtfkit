@@ -28,9 +28,9 @@ use crate::error::{ConversionError, ParseError};
 use crate::limits::ParserLimits;
 use crate::report::ReportBuilder;
 use crate::{
-    Alignment, Block, CellMerge, CellVerticalAlign, Document, Hyperlink, Inline, ListBlock, ListId,
-    ListItem, ListKind, Paragraph, Report, RowAlignment, RowProps, Run, TableBlock, TableCell,
-    TableRow,
+    Alignment, Block, CellMerge, CellVerticalAlign, Color, ColorEntry, Document, Hyperlink, Inline,
+    ListBlock, ListId, ListItem, ListKind, Paragraph, Report, RowAlignment, RowProps, Run,
+    Shading, ShadingPattern, TableBlock, TableCell, TableProps, TableRow, ThemeColor,
 };
 use nom::{
     IResult,
@@ -116,6 +116,15 @@ pub struct StyleState {
     pub highlight_color_index: Option<i32>,
     /// Current background color index (from \cbN)
     pub background_color_index: Option<i32>,
+    // =============================================================================
+    // Paragraph Shading State (reset by \pard, NOT reset by \plain)
+    // =============================================================================
+    /// Paragraph background color index (from \cbpatN)
+    pub paragraph_cbpat: Option<i32>,
+    /// Paragraph pattern color index (from \cfpatN) - for Slice B
+    pub paragraph_cfpat: Option<i32>,
+    /// Paragraph shading percentage (from \shadingN) - for Slice B
+    pub paragraph_shading: Option<i32>,
 }
 
 impl StyleState {
@@ -304,7 +313,7 @@ pub struct Interpreter {
     /// Font table mapping font index to font family name
     font_table: HashMap<i32, String>,
     /// Color table (index 0 is auto/default, represented as None)
-    color_table: Vec<Option<crate::Color>>,
+    color_table: Vec<ColorEntry>,
     // =============================================================================
     // List Parsing State (Phase 3)
     // =============================================================================
@@ -353,6 +362,12 @@ pub struct Interpreter {
     current_blue: u8,
     /// Whether any color component has been set since last semicolon
     color_components_seen: bool,
+    /// Current theme color index (from \themecolorN in color table)
+    current_theme_color: Option<ThemeColor>,
+    /// Current theme tint value (from \ctintN in color table)
+    current_theme_tint: Option<u8>,
+    /// Current theme shade value (from \cshadeN in color table)
+    current_theme_shade: Option<u8>,
     // =============================================================================
     // Table Parsing State (Phase 4)
     // =============================================================================
@@ -382,6 +397,33 @@ pub struct Interpreter {
     pending_cell_v_align: Option<CellVerticalAlign>,
     /// Pending row properties (reset per row)
     pending_row_props: RowProps,
+    // =============================================================================
+    // Table Cell Shading State (Phase 5 - Shading)
+    // =============================================================================
+    /// Pending cell background color index (from \clcbpatN, reset per cell)
+    pending_cell_cbpat: Option<i32>,
+    /// Pending row background color index (from \trcbpatN, reset per row)
+    pending_row_cbpat: Option<i32>,
+    /// Pending table background color index (from \trcbpatN at table level)
+    pending_table_cbpat: Option<i32>,
+    /// Pending table pattern color index (from first-row \trcfpatN)
+    pending_table_cfpat: Option<i32>,
+    /// Pending table shading percentage (from first-row \trshdngN)
+    pending_table_shading: Option<i32>,
+    /// Pending row pattern color index (from \trcfpatN) - for Slice B
+    pending_row_cfpat: Option<i32>,
+    /// Pending row shading percentage (from \trshdngN) - for Slice B
+    pending_row_shading: Option<i32>,
+    /// Pending cell pattern color index (from \clcfpatN) - for Slice B
+    pending_cell_cfpat: Option<i32>,
+    /// Pending cell shading percentage (from \clshdngN) - for Slice B
+    pending_cell_shading: Option<i32>,
+    /// Cell background color indexes per cell boundary (stored at each \cellx)
+    pending_cell_cbpats: Vec<Option<i32>>,
+    /// Cell pattern color indexes per cell boundary - for Slice B
+    pending_cell_cfpats: Vec<Option<i32>>,
+    /// Cell shading percentages per cell boundary - for Slice B
+    pending_cell_shadings: Vec<Option<i32>>,
     /// Fatal parser failure encountered mid-parse.
     ///
     /// Used for hard-limit violations discovered in helper methods that
@@ -462,6 +504,9 @@ impl Interpreter {
             current_green: 0,
             current_blue: 0,
             color_components_seen: false,
+            current_theme_color: None,
+            current_theme_tint: None,
+            current_theme_shade: None,
             // Table parsing state
             current_table: None,
             current_row: None,
@@ -474,6 +519,20 @@ impl Interpreter {
             pending_cell_merge: None,
             pending_cell_v_align: None,
             pending_row_props: RowProps::default(),
+            // Table cell shading state (Phase 5 - Shading)
+            pending_cell_cbpat: None,
+            pending_cell_cfpat: None,
+            pending_cell_shading: None,
+            pending_cell_cbpats: Vec::new(),
+            pending_cell_cfpats: Vec::new(),
+            pending_cell_shadings: Vec::new(),
+            // Row/table fallback shading state
+            pending_row_cbpat: None,
+            pending_table_cbpat: None,
+            pending_table_cfpat: None,
+            pending_table_shading: None,
+            pending_row_cfpat: None,
+            pending_row_shading: None,
             hard_failure: None,
             // Field parsing state (Hyperlinks)
             parsing_field: false,
@@ -747,21 +806,43 @@ impl Interpreter {
                             // Subsequent semicolons mark end of color definitions
                             if self.color_components_seen {
                                 // We have RGB components, push the defined color
-                                let color = crate::Color {
+                                let color = Color {
                                     r: self.current_red,
                                     g: self.current_green,
                                     b: self.current_blue,
                                 };
-                                self.color_table.push(Some(color));
+                                // Check if we also have theme color metadata
+                                if let Some(theme_color) = self.current_theme_color.take() {
+                                    // Create a ColorEntry with both RGB and theme info
+                                    self.color_table.push(ColorEntry {
+                                        rgb: Some(color),
+                                        theme_color: Some(theme_color),
+                                        theme_tint: self.current_theme_tint.take(),
+                                        theme_shade: self.current_theme_shade.take(),
+                                    });
+                                } else {
+                                    // Just RGB, no theme color
+                                    self.color_table.push(ColorEntry::rgb(color));
+                                }
+                            } else if let Some(theme_color) = self.current_theme_color.take() {
+                                // Theme color without explicit RGB
+                                self.color_table.push(ColorEntry::theme(
+                                    theme_color,
+                                    self.current_theme_tint.take(),
+                                    self.current_theme_shade.take(),
+                                ));
                             } else {
                                 // No RGB components seen - this is auto/default slot
-                                self.color_table.push(None);
+                                self.color_table.push(ColorEntry::auto_color());
                             }
                             // Reset for next color
                             self.current_red = 0;
                             self.current_green = 0;
                             self.current_blue = 0;
                             self.color_components_seen = false;
+                            self.current_theme_color = None;
+                            self.current_theme_tint = None;
+                            self.current_theme_shade = None;
                         }
                     }
                 }
@@ -827,6 +908,22 @@ impl Interpreter {
                     if let Some(val) = parameter {
                         self.current_blue = val.clamp(0, 255) as u8;
                         self.color_components_seen = true;
+                    }
+                }
+                // Theme color controls
+                "themecolor" => {
+                    if let Some(val) = parameter {
+                        self.current_theme_color = ThemeColor::from_index(val);
+                    }
+                }
+                "ctint" => {
+                    if let Some(val) = parameter {
+                        self.current_theme_tint = Some(val.clamp(0, 255) as u8);
+                    }
+                }
+                "cshade" => {
+                    if let Some(val) = parameter {
+                        self.current_theme_shade = Some(val.clamp(0, 255) as u8);
                     }
                 }
                 _ => {
@@ -1086,6 +1183,9 @@ impl Interpreter {
                     self.current_green = 0;
                     self.current_blue = 0;
                     self.color_components_seen = false;
+                    self.current_theme_color = None;
+                    self.current_theme_tint = None;
+                    self.current_theme_shade = None;
                     // Don't pre-initialize - first semicolon marks auto/default color
                     self.skip_destination_depth = 1;
                 }
@@ -1171,6 +1271,10 @@ impl Interpreter {
                     self.pending_level = 0;
                     // Reset paragraph-local table marker.
                     self.seen_intbl_in_paragraph = false;
+                    // Reset paragraph shading state (reset by \pard, NOT by \plain)
+                    self.current_style.paragraph_cbpat = None;
+                    self.current_style.paragraph_cfpat = None;
+                    self.current_style.paragraph_shading = None;
                 } else {
                     self.finalize_paragraph();
                 }
@@ -1256,6 +1360,13 @@ impl Interpreter {
                         .push(self.pending_cell_merge.take());
                     self.pending_cell_v_aligns
                         .push(self.pending_cell_v_align.take());
+                    // Store the current cell shading state for this cell
+                    self.pending_cell_cbpats
+                        .push(self.pending_cell_cbpat.take());
+                    self.pending_cell_cfpats
+                        .push(self.pending_cell_cfpat.take());
+                    self.pending_cell_shadings
+                        .push(self.pending_cell_shading.take());
                 }
             }
             // \intbl - Paragraph is inside a table
@@ -1325,6 +1436,64 @@ impl Interpreter {
             // Vertical merge continuation - this cell continues vertical merge
             "clvmrg" => {
                 self.pending_cell_merge = Some(CellMerge::VerticalContinue);
+            }
+            // =============================================================================
+            // Paragraph Shading Controls (Phase 5 - Shading)
+            // =============================================================================
+            // \cbpatN - Paragraph background color index
+            "cbpat" => {
+                self.current_style.paragraph_cbpat = parameter;
+            }
+            // \cfpatN - Paragraph pattern color index (for Slice B)
+            "cfpat" => {
+                self.current_style.paragraph_cfpat = parameter;
+            }
+            // \shadingN - Paragraph shading percentage (for Slice B)
+            "shading" => {
+                self.current_style.paragraph_shading = parameter;
+            }
+            // =============================================================================
+            // Cell Shading Controls (Phase 5 - Shading)
+            // =============================================================================
+            // \clcbpatN - Cell background color index
+            "clcbpat" => {
+                self.pending_cell_cbpat = parameter;
+            }
+            // \clcfpatN - Cell pattern color index (for Slice B)
+            "clcfpat" => {
+                self.pending_cell_cfpat = parameter;
+            }
+            // \clshdngN - Cell shading percentage (for Slice B)
+            "clshdng" => {
+                self.pending_cell_shading = parameter;
+            }
+            // =============================================================================
+            // Row/Table Fallback Shading Controls (Phase 5 - Shading)
+            // =============================================================================
+            // \trcbpatN - Row background color index
+            "trcbpat" => {
+                // Capture for row-level shading (applied when row is finalized)
+                self.pending_row_cbpat = parameter;
+                // Also capture for table-level shading if no table shading set yet
+                if self.pending_table_cbpat.is_none() {
+                    self.pending_table_cbpat = parameter;
+                }
+            }
+            // \trcfpatN - Row pattern color index (for Slice B)
+            "trcfpat" => {
+                self.pending_row_cfpat = parameter;
+                // Capture first-row value as table-level default
+                if self.pending_table_cfpat.is_none() {
+                    self.pending_table_cfpat = parameter;
+                }
+            }
+            // \trshdngN - Row shading percentage (for Slice B)
+            "trshdng" => {
+                self.pending_row_shading = parameter;
+                // Capture first-row value as table-level default
+                if self.pending_table_shading.is_none() {
+                    self.pending_table_shading = parameter;
+                }
             }
             // =============================================================================
             // Field Control Words (Hyperlinks)
@@ -1540,7 +1709,8 @@ impl Interpreter {
     ///
     /// \cf0 means auto/default color (represented as None).
     /// Invalid indices degrade to None without warnings.
-    fn resolve_color(&self) -> Option<crate::Color> {
+    /// Theme colors are resolved to concrete RGB values.
+    fn resolve_color(&self) -> Option<Color> {
         let color_idx = self.current_run_style.color_index?;
 
         // cf0 is auto/default color, represented as None
@@ -1548,10 +1718,12 @@ impl Interpreter {
             return None;
         }
 
-        // Color table stores: [None (auto), color1, color2, ...]
+        // Color table stores: [auto (None), color1, color2, ...]
         // cf1 maps to color_table[1], cf2 to color_table[2], etc.
         let table_index = color_idx as usize;
-        self.color_table.get(table_index).and_then(|c| c.clone())
+        self.color_table
+            .get(table_index)
+            .and_then(|entry| entry.resolve())
     }
 
     /// Resolve background color from highlight_color_index or background_color_index.
@@ -1559,7 +1731,7 @@ impl Interpreter {
     /// Precedence: highlight_color_index if set and resolvable, otherwise
     /// background_color_index if set and resolvable, otherwise None.
     /// Invalid indices degrade to None without warnings.
-    fn resolve_background_color(&self) -> Option<crate::Color> {
+    fn resolve_background_color(&self) -> Option<Color> {
         // Try highlight_color_index first (takes precedence)
         if let Some(highlight_idx) = self.current_run_style.highlight_color_index {
             if let Some(color) = self.resolve_color_from_index(highlight_idx) {
@@ -1581,15 +1753,90 @@ impl Interpreter {
     ///
     /// Index 0 means auto/default color (represented as None).
     /// Invalid indices degrade to None without warnings.
-    fn resolve_color_from_index(&self, color_idx: i32) -> Option<crate::Color> {
+    /// Theme colors are resolved to concrete RGB values.
+    fn resolve_color_from_index(&self, color_idx: i32) -> Option<Color> {
         // Index 0 is auto/default color, represented as None
         if color_idx == 0 {
             return None;
         }
 
-        // Color table stores: [None (auto), color1, color2, ...]
+        // Color table stores: [auto (None), color1, color2, ...]
         let table_index = color_idx as usize;
-        self.color_table.get(table_index).and_then(|c| c.clone())
+        self.color_table
+            .get(table_index)
+            .and_then(|entry| entry.resolve())
+    }
+
+    /// Map RTF shading percentage (0-10000) to ShadingPattern.
+    ///
+    /// RTF `\shadingN` and `\clshdngN` use percentage values where:
+    /// - 0 = Clear (transparent)
+    /// - 10000 = Solid (100%)
+    /// - Other values map to Percent patterns
+    fn shading_percentage_to_pattern(percentage: i32) -> Option<ShadingPattern> {
+        // Clamp to valid range
+        let clamped = percentage.clamp(0, 10000);
+
+        match clamped {
+            0 => Some(ShadingPattern::Clear),
+            10000 => Some(ShadingPattern::Solid),
+            // Map percentage to closest Percent pattern
+            // RTF uses 0-10000, we map to discrete percentages
+            p if p <= 75 => Some(ShadingPattern::Percent5),
+            p if p <= 150 => Some(ShadingPattern::Percent10),
+            p if p <= 250 => Some(ShadingPattern::Percent20),
+            p if p <= 375 => Some(ShadingPattern::Percent25),
+            p if p <= 450 => Some(ShadingPattern::Percent30),
+            p if p <= 550 => Some(ShadingPattern::Percent40),
+            p if p <= 650 => Some(ShadingPattern::Percent50),
+            p if p <= 750 => Some(ShadingPattern::Percent60),
+            p if p <= 825 => Some(ShadingPattern::Percent70),
+            p if p <= 875 => Some(ShadingPattern::Percent75),
+            p if p <= 950 => Some(ShadingPattern::Percent80),
+            p if p < 10000 => Some(ShadingPattern::Percent90),
+            _ => Some(ShadingPattern::Solid),
+        }
+    }
+
+    /// Build a Shading object from fill color index, pattern color index, and shading percentage.
+    ///
+    /// This combines the three shading-related RTF controls into a single Shading struct:
+    /// - `cbpat`/`clcbpat`: fill/background color index
+    /// - `cfpat`/`clcfpat`: pattern/foreground color index
+    /// - `shading`/`clshdng`: shading percentage (0-10000)
+    fn build_shading(
+        &self,
+        fill_color_idx: Option<i32>,
+        pattern_color_idx: Option<i32>,
+        shading_percentage: Option<i32>,
+    ) -> Option<Shading> {
+        // Resolve fill color (required for any shading)
+        let fill_color = fill_color_idx.and_then(|idx| self.resolve_color_from_index(idx));
+
+        // If no fill color, no shading
+        fill_color.map(|fill| {
+            // Resolve pattern color (optional)
+            let pattern_color = pattern_color_idx.and_then(|idx| self.resolve_color_from_index(idx));
+
+            // Map shading percentage to pattern
+            let pattern = shading_percentage.and_then(|p| Self::shading_percentage_to_pattern(p));
+
+            // Determine the final pattern:
+            // - If we have an explicit shading percentage, use the mapped pattern
+            // - If we have a pattern color but no shading percentage, default to Solid
+            // - If we have neither, leave pattern as None (flat fill, no pattern overlay)
+            let final_pattern = match (pattern, pattern_color.is_some()) {
+                (Some(p), _) => Some(p),
+                (None, true) => Some(ShadingPattern::Solid),
+                (None, false) => None,
+            };
+
+            Shading {
+                fill_color: Some(fill),
+                pattern_color,
+                pattern: final_pattern,
+            }
+        })
     }
 
     fn flush_current_text_as_run(&mut self) {
@@ -1641,6 +1888,13 @@ impl Interpreter {
         // Add paragraph to document if it has content
         if !self.current_paragraph.inlines.is_empty() {
             self.current_paragraph.alignment = self.paragraph_alignment;
+
+            // Apply paragraph shading from current style state
+            self.current_paragraph.shading = self.build_shading(
+                self.current_style.paragraph_cbpat,
+                self.current_style.paragraph_cfpat,
+                self.current_style.paragraph_shading,
+            );
 
             // Resolve list reference if we have pending list state
             self.resolve_list_reference();
@@ -1778,14 +2032,26 @@ impl Interpreter {
         self.pending_cellx.clear();
         self.pending_cell_merges.clear();
         self.pending_cell_v_aligns.clear();
+        // Clear pending cell shading vectors for new row
+        self.pending_cell_cbpats.clear();
+        self.pending_cell_cfpats.clear();
+        self.pending_cell_shadings.clear();
         self.current_row = Some(TableRow::new());
 
         // Reset pending row properties for new row
         self.pending_row_props = RowProps::default();
+        // Reset row-level shading state for new row
+        self.pending_row_cbpat = None;
+        self.pending_row_cfpat = None;
+        self.pending_row_shading = None;
 
         // Reset pending cell properties
         self.pending_cell_merge = None;
         self.pending_cell_v_align = None;
+        // Reset pending cell shading state
+        self.pending_cell_cbpat = None;
+        self.pending_cell_cfpat = None;
+        self.pending_cell_shading = None;
 
         // Ensure we have a table context
         if self.current_table.is_none() {
@@ -1898,6 +2164,32 @@ impl Interpreter {
                 .copied()
                 .flatten();
 
+            // Apply shading with fallback precedence: cell > row > table
+            // 1. Check for explicit cell shading first
+            let cell_cbpat = self.pending_cell_cbpats.get(cell_index).copied().flatten();
+            let cell_cfpat = self.pending_cell_cfpats.get(cell_index).copied().flatten();
+            let cell_shading = self.pending_cell_shadings.get(cell_index).copied().flatten();
+            
+            if let Some(shading) = self.build_shading(cell_cbpat, cell_cfpat, cell_shading) {
+                cell_with_props.shading = Some(shading);
+            }
+            // 2. Fall back to row shading if cell has no explicit shading
+            else if let Some(shading) = self.build_shading(
+                self.pending_row_cbpat,
+                self.pending_row_cfpat,
+                self.pending_row_shading,
+            ) {
+                cell_with_props.shading = Some(shading);
+            }
+            // 3. Fall back to table shading if no cell or row shading
+            else if let Some(shading) = self.build_shading(
+                self.pending_table_cbpat,
+                self.pending_table_cfpat,
+                self.pending_table_shading,
+            ) {
+                cell_with_props.shading = Some(shading);
+            }
+
             if let Some(ref mut row) = self.current_row {
                 row.cells.push(cell_with_props);
             }
@@ -1906,6 +2198,9 @@ impl Interpreter {
         // Reset pending cell state for next cell
         self.pending_cell_merge = None;
         self.pending_cell_v_align = None;
+        self.pending_cell_cbpat = None;
+        self.pending_cell_cfpat = None;
+        self.pending_cell_shading = None;
     }
 
     /// Finalize the current row and attach it to the current table.
@@ -1921,6 +2216,15 @@ impl Interpreter {
                 self.report_builder.malformed_table_structure(&reason);
                 self.report_builder
                     .dropped_content("Table cell count mismatch", None);
+            }
+
+            // Apply row-level shading to RowProps if present
+            if let Some(shading) = self.build_shading(
+                self.pending_row_cbpat,
+                self.pending_row_cfpat,
+                self.pending_row_shading,
+            ) {
+                self.pending_row_props.shading = Some(shading);
             }
 
             // Apply pending row properties
@@ -1957,6 +2261,9 @@ impl Interpreter {
 
             // Reset pending row state
             self.pending_row_props = RowProps::default();
+            self.pending_row_cbpat = None;
+            self.pending_row_cfpat = None;
+            self.pending_row_shading = None;
         }
     }
 
@@ -2114,9 +2421,19 @@ impl Interpreter {
         }
 
         // Add the table to the document if it has content
-        if let Some(table) = self.current_table.take()
+        if let Some(mut table) = self.current_table.take()
             && !table.is_empty()
         {
+            // Apply table-level shading to TableProps if present
+            if let Some(shading) = self.build_shading(
+                self.pending_table_cbpat,
+                self.pending_table_cfpat,
+                self.pending_table_shading,
+            ) {
+                table.table_props = Some(TableProps {
+                    shading: Some(shading),
+                });
+            }
             self.document.blocks.push(Block::TableBlock(table));
         }
 
@@ -2126,6 +2443,10 @@ impl Interpreter {
         self.pending_cell_merges.clear();
         self.pending_cell_v_aligns.clear();
         self.seen_intbl_in_paragraph = false;
+        // Reset table-level shading state
+        self.pending_table_cbpat = None;
+        self.pending_table_cfpat = None;
+        self.pending_table_shading = None;
     }
 
     /// Finalize paragraph for table context (routes to current cell instead of document).
@@ -2135,6 +2456,14 @@ impl Interpreter {
         // Add paragraph to current cell if it has content
         if !self.current_paragraph.inlines.is_empty() {
             self.current_paragraph.alignment = self.paragraph_alignment;
+
+            // Apply paragraph shading from current style state
+            self.current_paragraph.shading = self.build_shading(
+                self.current_style.paragraph_cbpat,
+                self.current_style.paragraph_cfpat,
+                self.current_style.paragraph_shading,
+            );
+
             self.resolve_list_reference();
 
             let paragraph = self.current_paragraph.clone();
@@ -4553,6 +4882,416 @@ After table text.\par
             }
         } else {
             panic!("Expected ListBlock");
+        }
+    }
+
+    // ==========================================================================
+    // Paragraph Shading Tests (Phase 5 - Shading)
+    // ==========================================================================
+
+    #[test]
+    fn test_paragraph_fill_from_cbpat() {
+        // \cbpatN sets paragraph background color
+        // Note: \par is needed to finalize the paragraph inside the group where shading is active
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\cbpat1 Shaded paragraph\par}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert!(para.shading.is_some());
+            let shading = para.shading.as_ref().unwrap();
+            assert_eq!(shading.fill_color, Some(crate::Color { r: 255, g: 0, b: 0 }));
+            assert_eq!(shading.pattern_color, None); // For Slice B
+            assert_eq!(shading.pattern, None); // For Slice B
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_paragraph_shading_unresolved_index_degrades_to_none() {
+        // \cbpatN with invalid index should degrade to None
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\cbpat99 Shaded paragraph\par}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            // Invalid color index should result in no shading
+            assert!(para.shading.is_none());
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_pard_resets_paragraph_shading() {
+        // \pard should reset paragraph shading
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\cbpat1 First\par\pard Second\par}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        // First paragraph should have shading
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            assert!(para.shading.is_some());
+        } else {
+            panic!("Expected first block to be Paragraph");
+        }
+
+        // Second paragraph (after \pard) should NOT have shading
+        if let Block::Paragraph(para) = &doc.blocks[1] {
+            assert!(para.shading.is_none());
+        } else {
+            panic!("Expected second block to be Paragraph");
+        }
+    }
+
+    #[test]
+    fn test_plain_does_not_reset_paragraph_shading() {
+        // \plain should NOT reset paragraph shading (character-only reset)
+        // Need to finalize paragraph inside the group where shading is active
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\cbpat1\b Bold\plain  normal\par}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::Paragraph(para) = &doc.blocks[0] {
+            // Paragraph should still have shading after \plain
+            assert!(para.shading.is_some());
+            let shading = para.shading.as_ref().unwrap();
+            assert_eq!(shading.fill_color, Some(crate::Color { r: 255, g: 0, b: 0 }));
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    // ==========================================================================
+    // Cell Shading Tests (Phase 5 - Shading)
+    // ==========================================================================
+
+    #[test]
+    fn test_cell_fill_from_clcbpat() {
+        // \clcbpatN sets cell background color
+        let input = r#"{\rtf1\ansi{\colortbl;\red0\green255\blue0;}
+\trowd\clcbpat1\cellx2880\cellx5760
+\intbl Cell 1\cell Cell 2\cell\row
+}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::TableBlock(table) = &doc.blocks[0] {
+            assert_eq!(table.rows.len(), 1);
+            assert_eq!(table.rows[0].cells.len(), 2);
+
+            // First cell should have shading
+            let cell1 = &table.rows[0].cells[0];
+            assert!(cell1.shading.is_some());
+            let shading1 = cell1.shading.as_ref().unwrap();
+            assert_eq!(shading1.fill_color, Some(crate::Color { r: 0, g: 255, b: 0 }));
+
+            // Second cell should NOT have shading (no \clcbpat before its \cellx)
+            let cell2 = &table.rows[0].cells[1];
+            assert!(cell2.shading.is_none());
+        } else {
+            panic!("Expected TableBlock");
+        }
+    }
+
+    #[test]
+    fn test_cell_shading_unresolved_index_degrades_to_none() {
+        // \clcbpatN with invalid index should degrade to None
+        let input = r#"{\rtf1\ansi{\colortbl;\red0\green255\blue0;}
+\trowd\clcbpat99\cellx2880
+\intbl Cell\cell\row
+}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::TableBlock(table) = &doc.blocks[0] {
+            let cell = &table.rows[0].cells[0];
+            // Invalid color index should result in no shading
+            assert!(cell.shading.is_none());
+        } else {
+            panic!("Expected TableBlock");
+        }
+    }
+
+    #[test]
+    fn test_cell_shading_per_cell_independent() {
+        // Each cell can have its own shading
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
+\trowd\clcbpat1\cellx1440\clcbpat2\cellx2880\cellx4320
+\intbl Red\cell Blue\cell None\cell\row
+}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::TableBlock(table) = &doc.blocks[0] {
+            // First cell: red shading
+            let cell1 = &table.rows[0].cells[0];
+            assert!(cell1.shading.is_some());
+            assert_eq!(cell1.shading.as_ref().unwrap().fill_color, Some(crate::Color { r: 255, g: 0, b: 0 }));
+
+            // Second cell: blue shading
+            let cell2 = &table.rows[0].cells[1];
+            assert!(cell2.shading.is_some());
+            assert_eq!(cell2.shading.as_ref().unwrap().fill_color, Some(crate::Color { r: 0, g: 0, b: 255 }));
+
+            // Third cell: no shading
+            let cell3 = &table.rows[0].cells[2];
+            assert!(cell3.shading.is_none());
+        } else {
+            panic!("Expected TableBlock");
+        }
+    }
+
+    #[test]
+    fn test_cell_shading_resets_on_new_row() {
+        // Cell shading should reset at new row definition (\trowd)
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}
+\trowd\clcbpat1\cellx2880
+\intbl Shaded\cell\row
+\trowd\cellx2880
+\intbl Not shaded\cell\row
+}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::TableBlock(table) = &doc.blocks[0] {
+            // First row: cell has shading
+            let cell1 = &table.rows[0].cells[0];
+            assert!(cell1.shading.is_some());
+
+            // Second row: cell has NO shading (reset by \trowd)
+            let cell2 = &table.rows[1].cells[0];
+            assert!(cell2.shading.is_none());
+        } else {
+            panic!("Expected TableBlock");
+        }
+    }
+
+    // ==========================================================================
+    // Row/Table Shading Fallback Tests (Phase 5 - Step 4)
+    // ==========================================================================
+
+    #[test]
+    fn test_cell_shading_ignores_row_table_fallback() {
+        // Cell with explicit shading ignores row/table fallback
+        // Precedence: cell > row > table
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;\red0\green255\blue0;\red0\green0\blue255;}
+\trowd\trcbpat2\clcbpat1\cellx2880\cellx5760
+\intbl Cell\cell NoShading\cell\row
+}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::TableBlock(table) = &doc.blocks[0] {
+            // First cell: explicit cell shading (red) should take precedence
+            let cell1 = &table.rows[0].cells[0];
+            assert!(cell1.shading.is_some());
+            assert_eq!(
+                cell1.shading.as_ref().unwrap().fill_color,
+                Some(crate::Color { r: 255, g: 0, b: 0 })
+            );
+
+            // Second cell: no explicit shading, should fall back to row shading (green)
+            let cell2 = &table.rows[0].cells[1];
+            assert!(cell2.shading.is_some());
+            assert_eq!(
+                cell2.shading.as_ref().unwrap().fill_color,
+                Some(crate::Color { r: 0, g: 255, b: 0 })
+            );
+        } else {
+            panic!("Expected TableBlock");
+        }
+    }
+
+    #[test]
+    fn test_cell_without_shading_uses_row_shading() {
+        // Cell without shading uses row shading when available
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}
+\trowd\trcbpat1\cellx2880\cellx5760
+\intbl Cell 1\cell Cell 2\cell\row
+}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::TableBlock(table) = &doc.blocks[0] {
+            // Both cells should inherit row shading
+            for cell in &table.rows[0].cells {
+                assert!(cell.shading.is_some());
+                assert_eq!(
+                    cell.shading.as_ref().unwrap().fill_color,
+                    Some(crate::Color { r: 255, g: 0, b: 0 })
+                );
+            }
+        } else {
+            panic!("Expected TableBlock");
+        }
+    }
+
+    #[test]
+    fn test_cell_without_shading_uses_table_shading() {
+        // Cell without shading uses table shading when row shading unavailable
+        // \trcbpat at first row sets table-level shading
+        let input = r#"{\rtf1\ansi{\colortbl;\red0\green0\blue255;}
+\trowd\trcbpat1\cellx2880
+\intbl Cell 1\cell\row
+\trowd\cellx2880
+\intbl Cell 2\cell\row
+}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::TableBlock(table) = &doc.blocks[0] {
+            // First row: row shading is set (blue)
+            let cell1 = &table.rows[0].cells[0];
+            assert!(cell1.shading.is_some());
+            assert_eq!(
+                cell1.shading.as_ref().unwrap().fill_color,
+                Some(crate::Color { r: 0, g: 0, b: 255 })
+            );
+
+            // Second row: no row shading, should fall back to table shading (blue)
+            let cell2 = &table.rows[1].cells[0];
+            assert!(cell2.shading.is_some());
+            assert_eq!(
+                cell2.shading.as_ref().unwrap().fill_color,
+                Some(crate::Color { r: 0, g: 0, b: 255 })
+            );
+        } else {
+            panic!("Expected TableBlock");
+        }
+    }
+
+    #[test]
+    fn test_later_row_shading_overrides_table_shading() {
+        // First row establishes table shading (blue). Later row shading (red)
+        // must win for cells in that row.
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
+\trowd\trcbpat2\cellx2880\cellx5760
+\intbl A1\cell A2\cell\row
+\trowd\trcbpat1\cellx2880\cellx5760
+\intbl B1\cell B2\cell\row
+}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::TableBlock(table) = &doc.blocks[0] {
+            // First row uses blue (also the table fallback color).
+            for cell in &table.rows[0].cells {
+                assert_eq!(
+                    cell.shading.as_ref().unwrap().fill_color,
+                    Some(crate::Color { r: 0, g: 0, b: 255 })
+                );
+            }
+
+            // Second row must use explicit row shading (red), not table fallback (blue).
+            for cell in &table.rows[1].cells {
+                assert_eq!(
+                    cell.shading.as_ref().unwrap().fill_color,
+                    Some(crate::Color { r: 255, g: 0, b: 0 })
+                );
+            }
+        } else {
+            panic!("Expected TableBlock");
+        }
+    }
+
+    #[test]
+    fn test_cell_shading_precedence_cell_row_table() {
+        // Full precedence test: cell > row > table
+        // \clcbpat must come BEFORE the \cellx that defines the cell boundary
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;\red0\green255\blue0;\red0\green0\blue255;}
+\trowd\trcbpat3\clcbpat1\cellx1440\cellx2880\cellx4320
+\intbl Explicit\cell RowOnly\cell TableOnly\cell\row
+\trowd\cellx1440\cellx2880\cellx4320
+\intbl A\cell B\cell C\cell\row
+}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::TableBlock(table) = &doc.blocks[0] {
+            // Row 1
+            // Cell 1: explicit cell shading (red) - should override row/table
+            let cell1 = &table.rows[0].cells[0];
+            assert_eq!(
+                cell1.shading.as_ref().unwrap().fill_color,
+                Some(crate::Color { r: 255, g: 0, b: 0 })
+            );
+
+            // Cell 2: no explicit cell shading, uses row shading (blue from trcbpat3)
+            let cell2 = &table.rows[0].cells[1];
+            assert_eq!(
+                cell2.shading.as_ref().unwrap().fill_color,
+                Some(crate::Color { r: 0, g: 0, b: 255 })
+            );
+
+            // Cell 3: no explicit cell shading, uses row shading (blue)
+            let cell3 = &table.rows[0].cells[2];
+            assert_eq!(
+                cell3.shading.as_ref().unwrap().fill_color,
+                Some(crate::Color { r: 0, g: 0, b: 255 })
+            );
+
+            // Row 2: no row shading, should fall back to table shading (blue)
+            for cell in &table.rows[1].cells {
+                assert_eq!(
+                    cell.shading.as_ref().unwrap().fill_color,
+                    Some(crate::Color { r: 0, g: 0, b: 255 })
+                );
+            }
+        } else {
+            panic!("Expected TableBlock");
+        }
+    }
+
+    #[test]
+    fn test_row_shading_applied_to_row_props() {
+        // Row shading should be stored in RowProps for writers
+        let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}
+\trowd\trcbpat1\cellx2880
+\intbl Cell\cell\row
+}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::TableBlock(table) = &doc.blocks[0] {
+            // Row should have row_props with shading
+            let row = &table.rows[0];
+            assert!(row.row_props.is_some());
+            let row_props = row.row_props.as_ref().unwrap();
+            assert!(row_props.shading.is_some());
+            assert_eq!(
+                row_props.shading.as_ref().unwrap().fill_color,
+                Some(crate::Color { r: 255, g: 0, b: 0 })
+            );
+        } else {
+            panic!("Expected TableBlock");
+        }
+    }
+
+    #[test]
+    fn test_table_shading_applied_to_table_props() {
+        // Table shading should be stored in TableProps for writers
+        let input = r#"{\rtf1\ansi{\colortbl;\red0\green0\blue255;}
+\trowd\trcbpat1\cellx2880
+\intbl Cell\cell\row
+}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::TableBlock(table) = &doc.blocks[0] {
+            // Table should have table_props with shading
+            assert!(table.table_props.is_some());
+            let table_props = table.table_props.as_ref().unwrap();
+            assert!(table_props.shading.is_some());
+            assert_eq!(
+                table_props.shading.as_ref().unwrap().fill_color,
+                Some(crate::Color { r: 0, g: 0, b: 255 })
+            );
+        } else {
+            panic!("Expected TableBlock");
+        }
+    }
+
+    #[test]
+    fn test_no_shading_when_no_fallback_available() {
+        // Cell should have no shading when no cell/row/table shading is defined
+        let input = r#"{\rtf1\ansi
+\trowd\cellx2880
+\intbl Cell\cell\row
+}"#;
+        let (doc, _report) = Interpreter::parse(input).unwrap();
+
+        if let Block::TableBlock(table) = &doc.blocks[0] {
+            let cell = &table.rows[0].cells[0];
+            assert!(cell.shading.is_none());
+        } else {
+            panic!("Expected TableBlock");
         }
     }
 }

@@ -18,6 +18,13 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
   - foreground color (`\cfN`, `\colortbl`)
   - background color (`\cbN`, `\highlightN`); `\highlight` takes precedence
   - formatting reset (`\plain`)
+- **Block shading**:
+  - paragraph shading (`\cbpatN`, `\shadingN`, `\cfpatN`)
+  - table cell shading (`\clcbpatN`, `\clshdngN`, `\clcfpatN`)
+  - table row shading (`\trcbpatN`, `\trshdngN`, `\trcfpatN`)
+  - theme color resolution (`\themecolorN`, `\ctintN`, `\cshadeN`)
+  - shading precedence: cell > row > table
+  - `\pard` resets paragraph shading; `\plain` does not
 - **Unicode escape handling** (`\uN` with `\ucN`)
 - **Hyperlinks**:
   - external URLs (`http://`, `https://`, `mailto:`)
@@ -38,6 +45,9 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
 - **Row-level table properties** are parsed but only partially emitted:
   - parsed: `\trql`, `\trqc`, `\trqr`, `\trleft`
   - currently not fully mapped by `docx-rs` writer
+- **Shading patterns** are fully supported in DOCX but degraded in HTML/Typst:
+  - percentage patterns (e.g., 25%, 50%) are rendered as solid fill in HTML/Typst
+  - `PatternDegraded` warning emitted for Typst output
 - **Some malformed table/list inputs** are repaired with warnings (and `DroppedContent` when semantics are lost)
 - **Warning-cap behavior** preserves strict-mode signal (`DroppedContent`)
 

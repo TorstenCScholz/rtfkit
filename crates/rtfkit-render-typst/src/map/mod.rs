@@ -36,6 +36,13 @@ pub enum MappingWarning {
     ListLevelSkip { from: u8, to: u8 },
     OrphanHorizontalContinue,
     CellVerticalAlignDropped,
+    /// Pattern was degraded to flat fill (Typst doesn't support patterns)
+    PatternDegraded {
+        /// Context where the pattern was found (e.g., "paragraph shading", "cell shading")
+        context: String,
+        /// The pattern that was degraded
+        pattern: String,
+    },
 }
 
 impl MappingWarning {
@@ -46,6 +53,7 @@ impl MappingWarning {
             Self::ListLevelSkip { from, to } => format!("list_level_skip_{}_to_{}", from, to),
             Self::OrphanHorizontalContinue => "orphan_horizontal_continue".to_string(),
             Self::CellVerticalAlignDropped => "cell_vertical_align_dropped".to_string(),
+            Self::PatternDegraded { context, .. } => format!("pattern_degraded_{}", context.replace(' ', "_")),
         }
     }
 
@@ -54,6 +62,8 @@ impl MappingWarning {
         match self {
             // Mixed list kinds lose ordered-vs-bullet semantics.
             Self::ListMixedKindFallbackToBullet => WarningKind::DroppedContent,
+            // Pattern degradation is partial support (not dropped content).
+            Self::PatternDegraded { .. } => WarningKind::PartialSupport,
             // Remaining current mapper degradations are partial support.
             _ => WarningKind::PartialSupport,
         }

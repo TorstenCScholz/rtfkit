@@ -35,6 +35,8 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | Font size (`\fsN`) | ✅ Supported | Mapped to DOCX `<w:sz>`, HTML `font-size`, Typst `#text(size: ...)` |
 | Text color (`\cfN`, `\colortbl`) | ✅ Supported | Mapped to DOCX `<w:color>`, HTML `color`, Typst `#text(fill: ...)` |
 | Background color (`\cbN`, `\highlightN`) | ✅ Supported | Mapped to DOCX `<w:shd>`, HTML `background-color`, Typst `#highlight(fill: ...)`; `\highlight` takes precedence over `\cb` |
+| Paragraph shading (`\cbpatN`) | ✅ Supported | Block-level background for paragraphs; mapped to DOCX `<w:shd>`, HTML `background-color`; `\pard` resets, `\plain` does not |
+| Paragraph shading pattern (`\shadingN`, `\cfpatN`) | ⚠️ Partial | Percentage patterns (0-10000) mapped to `ShadingPattern`; DOCX full support, HTML/Typst degraded to solid fill |
 | Formatting reset (`\plain`) | ✅ Supported | Resets character formatting to defaults (including background/highlight) |
 | Strikethrough (`\strike`) | ❌ Not Supported | Warning emitted |
 | Small caps (`\scaps`) | ❌ Not Supported | Warning emitted |
@@ -66,9 +68,12 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | Cell vertical alignment (`\clvertalt`, etc.) | ✅ Supported | Mapped to DOCX `vAlign` |
 | Row alignment (`\trql`, `\trqc`, `\trqr`) | ⚠️ Partial | Parsed but not fully emitted by docx-rs |
 | Row indent (`\trleft`) | ⚠️ Partial | Parsed but not fully emitted by docx-rs |
+| Cell shading (`\clcbpatN`) | ✅ Supported | Cell background color; precedence: cell > row > table |
+| Cell shading pattern (`\clshdngN`, `\clcfpatN`) | ⚠️ Partial | Percentage patterns; DOCX full support, HTML/Typst degraded to solid fill |
+| Row shading (`\trcbpatN`) | ✅ Supported | Default shading for cells without explicit shading |
+| Table shading | ✅ Supported | Fallback shading from first row's `\trcbpatN` |
 | Nested tables | ❌ Not Supported | Warning emitted |
 | Table borders | ❌ Not Supported | Parsed but not mapped |
-| Cell shading | ❌ Not Supported | Parsed but not mapped |
 
 ### Destinations
 
@@ -202,6 +207,7 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 
 | Version | Changes |
 |---------|---------|
+| 0.10.0 | Added block shading support (`\cbpatN`, `\clcbpatN`, `\trcbpatN`) for paragraphs and tables; theme color resolution; pattern support with degradation |
 | 0.9.0 | Added background/highlight color support (`\cbN`, `\highlightN`) for DOCX, HTML, PDF; `\plain` now resets background/highlight |
 | 0.8.0 | Added font family, font size, and foreground color support (DOCX, HTML, PDF); added `\plain` reset support |
 | 0.7.0 | Added hyperlink support (DOCX, HTML, PDF), URL sanitization for HTML output |

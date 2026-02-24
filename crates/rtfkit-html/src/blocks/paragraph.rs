@@ -3,7 +3,7 @@
 //! This module handles converting IR paragraphs to HTML with proper
 //! semantic tags and run merging.
 
-use rtfkit_core::{Color, Hyperlink, Inline, Paragraph, Run};
+use rtfkit_core::{Color, Hyperlink, Inline, Paragraph, Run, Shading};
 
 use crate::escape::{escape_attribute, sanitize_font_family};
 use crate::serialize::HtmlBuffer;
@@ -97,6 +97,55 @@ pub fn color_to_hex(color: &Color) -> String {
     format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b)
 }
 
+/// Builds a CSS style string for paragraph-level properties.
+///
+/// This helper centralizes paragraph style string building to ensure:
+/// 1. Deterministic property order for stable output
+/// 2. Consistent formatting with run-level styles
+///
+/// Properties are emitted in this order:
+/// 1. background-color (if present from shading)
+///
+/// # Pattern Degradation (Slice B)
+///
+/// CSS does not natively support pattern fills without images. For patterned shading,
+/// we emit only the `fill_color` as `background-color` and ignore the pattern.
+/// This is deterministic degradation - no warnings are emitted.
+///
+/// # Security
+///
+/// Color values are formatted as hex strings, preventing CSS injection.
+///
+/// # Example
+///
+/// ```rust
+/// use rtfkit_html::blocks::paragraph::build_paragraph_style;
+/// use rtfkit_core::{Shading, Color};
+///
+/// let shading = Shading::solid(Color::new(255, 255, 0));
+/// let style = build_paragraph_style(Some(&shading));
+/// assert_eq!(style, "background-color: #ffff00;");
+/// ```
+pub fn build_paragraph_style(shading: Option<&Shading>) -> String {
+    let mut parts: Vec<String> = Vec::new();
+
+    // 1. Background color from shading (pattern degradation: emit fill_color only)
+    if let Some(shading) = shading {
+        if let Some(ref fill_color) = shading.fill_color {
+            parts.push(format!(
+                "background-color: #{:02x}{:02x}{:02x}",
+                fill_color.r, fill_color.g, fill_color.b
+            ));
+        }
+    }
+
+    if parts.is_empty() {
+        String::new()
+    } else {
+        parts.join("; ") + ";"
+    }
+}
+
 /// Checks if a URL scheme is safe for HTML href attributes.
 ///
 /// Only allows http, https, and mailto schemes to prevent XSS attacks.
@@ -111,6 +160,7 @@ fn is_safe_url(url: &str) -> bool {
 ///
 /// Emits a `<p>` element with `rtf-p` class and appropriate alignment class if needed.
 /// Inlines are processed in order, with hyperlinks emitting `<a href>` tags.
+/// Paragraph shading is emitted as inline `background-color` style.
 pub fn paragraph_to_html(para: &Paragraph, buf: &mut HtmlBuffer) {
     // Build class attribute - always include rtf-p, add alignment if non-default
     let mut classes: Vec<&'static str> = vec!["rtf-p"];
@@ -118,7 +168,16 @@ pub fn paragraph_to_html(para: &Paragraph, buf: &mut HtmlBuffer) {
         classes.push(align_class);
     }
     let class_str = classes.join(" ");
-    let attrs: Vec<(&str, &str)> = vec![("class", &class_str)];
+
+    // Build style attribute for shading
+    let style = build_paragraph_style(para.shading.as_ref());
+    let has_style = !style.is_empty();
+
+    // Build attributes in deterministic order: class, style
+    let mut attrs: Vec<(&str, &str)> = vec![("class", &class_str)];
+    if has_style {
+        attrs.push(("style", style.as_str()));
+    }
 
     buf.push_open_tag("p", &attrs);
 
@@ -293,6 +352,7 @@ mod tests {
         let para = Paragraph {
             alignment: Alignment::Center,
             inlines: vec![Inline::Run(Run::new("centered"))],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -307,6 +367,7 @@ mod tests {
         let para = Paragraph {
             alignment: Alignment::Right,
             inlines: vec![Inline::Run(Run::new("right"))],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -321,6 +382,7 @@ mod tests {
         let para = Paragraph {
             alignment: Alignment::Justify,
             inlines: vec![Inline::Run(Run::new("justified"))],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -335,6 +397,7 @@ mod tests {
         let para = Paragraph {
             alignment: Alignment::Left,
             inlines: vec![Inline::Run(Run::new("left"))],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -425,6 +488,7 @@ mod tests {
         let para = Paragraph {
             alignment: Alignment::Left,
             inlines: vec![Inline::Hyperlink(hyperlink)],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -447,6 +511,7 @@ mod tests {
         let para = Paragraph {
             alignment: Alignment::Left,
             inlines: vec![Inline::Hyperlink(hyperlink)],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -469,6 +534,7 @@ mod tests {
                 Inline::Hyperlink(hyperlink),
                 Inline::Run(Run::new(" for more.")),
             ],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -487,6 +553,7 @@ mod tests {
         let para = Paragraph {
             alignment: Alignment::Left,
             inlines: vec![Inline::Hyperlink(hyperlink)],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -503,6 +570,7 @@ mod tests {
         let para = Paragraph {
             alignment: Alignment::Left,
             inlines: vec![Inline::Hyperlink(hyperlink)],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -519,6 +587,7 @@ mod tests {
         let para = Paragraph {
             alignment: Alignment::Left,
             inlines: vec![Inline::Hyperlink(hyperlink)],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -538,6 +607,7 @@ mod tests {
         let para = Paragraph {
             alignment: Alignment::Left,
             inlines: vec![Inline::Hyperlink(hyperlink)],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -722,6 +792,7 @@ mod tests {
         let para = Paragraph {
             alignment: Alignment::Left,
             inlines: vec![Inline::Hyperlink(hyperlink)],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -743,6 +814,7 @@ mod tests {
         let para = Paragraph {
             alignment: Alignment::Left,
             inlines: vec![Inline::Hyperlink(hyperlink)],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -1035,6 +1107,7 @@ mod tests {
         let para = Paragraph {
             alignment: Alignment::Left,
             inlines: vec![Inline::Hyperlink(hyperlink)],
+            shading: None,
         };
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
@@ -1042,5 +1115,188 @@ mod tests {
             buf.as_str(),
             r#"<p class="rtf-p"><a href="https://example.com" class="rtf-link"><span style="background-color: #ffff00;">highlighted link</span></a></p>"#
         );
+    }
+
+    // =========================================================================
+    // Paragraph shading tests
+    // =========================================================================
+
+    #[test]
+    fn paragraph_with_shading() {
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Run(Run::new("shaded paragraph"))],
+            shading: Some(Shading::solid(Color::new(255, 255, 0))), // Yellow
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p" style="background-color: #ffff00;">shaded paragraph</p>"#
+        );
+    }
+
+    #[test]
+    fn paragraph_with_shading_and_alignment() {
+        let para = Paragraph {
+            alignment: Alignment::Center,
+            inlines: vec![Inline::Run(Run::new("centered and shaded"))],
+            shading: Some(Shading::solid(Color::new(0, 128, 255))), // Blue
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        // Attributes in order: class, style
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p rtf-align-center" style="background-color: #0080ff;">centered and shaded</p>"#
+        );
+    }
+
+    #[test]
+    fn paragraph_without_shading_no_style() {
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Run(Run::new("normal paragraph"))],
+            shading: None,
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        // Should NOT have style attribute
+        let result = buf.as_str();
+        assert!(!result.contains("style="));
+        assert_eq!(result, r#"<p class="rtf-p">normal paragraph</p>"#);
+    }
+
+    #[test]
+    fn paragraph_shading_empty_fill_color_no_style() {
+        // Shading with no fill_color should not emit style
+        let shading = Shading::new(); // Empty shading
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Run(Run::new("text"))],
+            shading: Some(shading),
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        // Should NOT have style attribute
+        let result = buf.as_str();
+        assert!(!result.contains("style="));
+        assert_eq!(result, r#"<p class="rtf-p">text</p>"#);
+    }
+
+    #[test]
+    fn paragraph_shading_deterministic() {
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Run(Run::new("test"))],
+            shading: Some(Shading::solid(Color::new(255, 0, 128))),
+        };
+
+        // Generate HTML multiple times
+        let mut buf1 = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf1);
+
+        let mut buf2 = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf2);
+
+        // Output should be identical
+        assert_eq!(buf1.as_str(), buf2.as_str());
+        assert!(buf1.as_str().contains("background-color: #ff0080"));
+    }
+
+    #[test]
+    fn build_paragraph_style_helper() {
+        // Test the helper function directly
+        let shading = Shading::solid(Color::new(0, 255, 0));
+        let style = build_paragraph_style(Some(&shading));
+        assert_eq!(style, "background-color: #00ff00;");
+
+        // Empty shading
+        let empty_shading = Shading::new();
+        let style = build_paragraph_style(Some(&empty_shading));
+        assert_eq!(style, "");
+
+        // None
+        let style = build_paragraph_style(None);
+        assert_eq!(style, "");
+    }
+
+    // =========================================================================
+    // Pattern degradation tests (Slice B)
+    // =========================================================================
+
+    #[test]
+    fn paragraph_with_patterned_shading_degrades_to_flat_fill() {
+        use rtfkit_core::ShadingPattern;
+
+        // Create a patterned shading (25% pattern with black on white)
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(255, 255, 255)); // White background
+        shading.pattern_color = Some(Color::new(0, 0, 0)); // Black foreground
+        shading.pattern = Some(ShadingPattern::Percent25);
+
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Run(Run::new("patterned text"))],
+            shading: Some(shading),
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+
+        // Pattern should be ignored - only fill_color emitted as background-color
+        // Pattern color (black) should NOT appear in output
+        let result = buf.as_str();
+        assert!(result.contains("background-color: #ffffff"));
+        assert!(!result.contains("#000000")); // Pattern color not emitted
+        assert_eq!(
+            result,
+            r#"<p class="rtf-p" style="background-color: #ffffff;">patterned text</p>"#
+        );
+    }
+
+    #[test]
+    fn paragraph_with_horz_stripe_pattern_degrades_to_flat_fill() {
+        use rtfkit_core::ShadingPattern;
+
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(200, 200, 200)); // Light gray
+        shading.pattern_color = Some(Color::new(100, 100, 100)); // Dark gray
+        shading.pattern = Some(ShadingPattern::HorzStripe);
+
+        let para = Paragraph {
+            alignment: Alignment::Left,
+            inlines: vec![Inline::Run(Run::new("striped text"))],
+            shading: Some(shading),
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+
+        // Only fill_color should be emitted
+        let result = buf.as_str();
+        assert!(result.contains("background-color: #c8c8c8"));
+        assert!(!result.contains("#646464")); // Pattern color not emitted
+    }
+
+    #[test]
+    fn paragraph_with_diag_cross_pattern_degrades_to_flat_fill() {
+        use rtfkit_core::ShadingPattern;
+
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(255, 255, 0)); // Yellow
+        shading.pattern_color = Some(Color::new(255, 0, 0)); // Red
+        shading.pattern = Some(ShadingPattern::DiagCross);
+
+        let para = Paragraph {
+            alignment: Alignment::Center,
+            inlines: vec![Inline::Run(Run::new("crosshatch"))],
+            shading: Some(shading),
+        };
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+
+        // Only fill_color should be emitted, pattern ignored
+        let result = buf.as_str();
+        assert!(result.contains("background-color: #ffff00"));
+        assert!(!result.contains("#ff0000")); // Pattern color not emitted
     }
 }

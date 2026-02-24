@@ -1,0 +1,169 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Paragraph with Accent1 theme color shading.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 68,
+          "g": 114,
+          "b": 196
+        }
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Paragraph with Accent2+50%tint theme color shading.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 246,
+          "g": 190,
+          "b": 152
+        }
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Paragraph with Hyperlink theme color shading.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 5,
+          "g": 99,
+          "b": 193
+        }
+      }
+    },
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Accent1",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ],
+                  "shading": {
+                    "fill_color": {
+                      "r": 5,
+                      "g": 99,
+                      "b": 193
+                    }
+                  }
+                }
+              ],
+              "width_twips": 2880,
+              "shading": {
+                "fill_color": {
+                  "r": 68,
+                  "g": 114,
+                  "b": 196
+                }
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Accent2+tint",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ],
+                  "shading": {
+                    "fill_color": {
+                      "r": 5,
+                      "g": 99,
+                      "b": 193
+                    }
+                  }
+                }
+              ],
+              "width_twips": 2880,
+              "shading": {
+                "fill_color": {
+                  "r": 246,
+                  "g": 190,
+                  "b": 152
+                }
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Hyperlink",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ],
+                  "shading": {
+                    "fill_color": {
+                      "r": 5,
+                      "g": 99,
+                      "b": 193
+                    }
+                  }
+                }
+              ],
+              "width_twips": 2880,
+              "shading": {
+                "fill_color": {
+                  "r": 5,
+                  "g": 99,
+                  "b": 193
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

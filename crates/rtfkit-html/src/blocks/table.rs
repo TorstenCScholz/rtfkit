@@ -13,8 +13,9 @@
 //! | horizontal merge | `colspan` |
 //! | vertical merge | `rowspan` |
 //! | `CellVerticalAlign` | class `rtf-valign-top|middle|bottom` |
+//! | `shading` | inline style `background-color: #rrggbb` |
 
-use super::paragraph::paragraph_to_html;
+use super::paragraph::{build_paragraph_style, paragraph_to_html};
 use crate::serialize::HtmlBuffer;
 use rtfkit_core::{Block, CellMerge, CellVerticalAlign, TableBlock, TableCell, TableRow};
 use std::collections::HashSet;
@@ -242,6 +243,7 @@ fn row_to_html(
 /// - `rowspan` for vertical merges (computed from VerticalStart/VerticalContinue)
 /// - `style="width: Npt"` for explicit widths
 /// - `class="rtf-valign-*"` for vertical alignment
+/// - `style="background-color: #rrggbb"` for cell shading
 fn cell_to_html(
     cell: &TableCell,
     rowspan: usize,
@@ -250,6 +252,7 @@ fn cell_to_html(
 ) {
     let mut attrs: Vec<(&str, String)> = Vec::new();
     let mut classes: Vec<&'static str> = Vec::new();
+    let mut style_parts: Vec<String> = Vec::new();
 
     // Handle vertical alignment class
     if let Some(v_align) = cell.v_align {
@@ -278,7 +281,20 @@ fn cell_to_html(
         && width_twips > 0
     {
         let points = twips_to_points(width_twips);
-        attrs.push(("style", format!("width: {:.1}pt", points)));
+        style_parts.push(format!("width: {:.1}pt", points));
+    }
+
+    // Handle cell shading (background color)
+    let shading_style = build_paragraph_style(cell.shading.as_ref());
+    if !shading_style.is_empty() {
+        // Remove trailing semicolon from build_paragraph_style output
+        // and add to style parts
+        style_parts.push(shading_style.trim_end_matches(';').to_string());
+    }
+
+    // Combine style parts into a single style attribute
+    if !style_parts.is_empty() {
+        attrs.push(("style", style_parts.join("; ") + ";"));
     }
 
     // Combine classes into a single attribute
@@ -530,8 +546,8 @@ mod tests {
         table_to_html(&table, &mut buf);
         let html = buf.as_str();
 
-        // 1440 twips = 72.0 points
-        assert!(html.contains(r#"style="width: 72.0pt""#));
+        // 1440 twips = 72.0 points (style now ends with semicolon)
+        assert!(html.contains(r#"style="width: 72.0pt;""#));
     }
 
     #[test]
@@ -692,5 +708,206 @@ mod tests {
         assert_eq!(twips_to_points(1440), 72.0); // 1 inch
         assert_eq!(twips_to_points(720), 36.0); // 0.5 inch
         assert_eq!(twips_to_points(0), 0.0);
+    }
+
+    // =========================================================================
+    // Cell shading tests
+    // =========================================================================
+
+    #[test]
+    fn table_cell_with_shading() {
+        use rtfkit_core::{Color, Shading};
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Shaded")]));
+        cell.shading = Some(Shading::solid(Color::new(255, 255, 0))); // Yellow
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        assert!(html.contains(r#"style="background-color: #ffff00;""#));
+        assert!(html.contains("Shaded"));
+    }
+
+    #[test]
+    fn table_cell_with_shading_and_width() {
+        use rtfkit_core::{Color, Shading};
+
+        let mut cell = TableCell::from_paragraph_with_width(
+            Paragraph::from_runs(vec![Run::new("Styled")]),
+            1440, // 72pt
+        );
+        cell.shading = Some(Shading::solid(Color::new(0, 128, 255))); // Blue
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        // Both width and background-color in style, deterministic order
+        assert!(html.contains(r#"style="width: 72.0pt; background-color: #0080ff;""#));
+        assert!(html.contains("Styled"));
+    }
+
+    #[test]
+    fn table_cell_with_shading_and_alignment() {
+        use rtfkit_core::{Color, Shading};
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Combined")]));
+        cell.shading = Some(Shading::solid(Color::new(255, 0, 0))); // Red
+        cell.v_align = Some(CellVerticalAlign::Center);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        // Should have both class and style
+        assert!(html.contains(r#"class="rtf-valign-middle""#));
+        assert!(html.contains(r#"style="background-color: #ff0000;""#));
+        assert!(html.contains("Combined"));
+    }
+
+    #[test]
+    fn table_cell_without_shading_no_style() {
+        let cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Normal")]));
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        // Should NOT have style attribute
+        assert!(!html.contains("style="));
+        assert!(html.contains("Normal"));
+    }
+
+    #[test]
+    fn table_cell_shading_deterministic() {
+        use rtfkit_core::{Color, Shading};
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Test")]));
+        cell.shading = Some(Shading::solid(Color::new(128, 64, 32)));
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        // Generate HTML multiple times
+        let mut buf1 = HtmlBuffer::new();
+        table_to_html(&table, &mut buf1);
+
+        let mut buf2 = HtmlBuffer::new();
+        table_to_html(&table, &mut buf2);
+
+        // Output should be identical
+        assert_eq!(buf1.as_str(), buf2.as_str());
+        assert!(buf1.as_str().contains("background-color: #804020"));
+    }
+
+    // =========================================================================
+    // Pattern degradation tests (Slice B)
+    // =========================================================================
+
+    #[test]
+    fn table_cell_with_patterned_shading_degrades_to_flat_fill() {
+        use rtfkit_core::{Color, Shading, ShadingPattern};
+
+        // Create a patterned shading (25% pattern with black on white)
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(255, 255, 255)); // White background
+        shading.pattern_color = Some(Color::new(0, 0, 0)); // Black foreground
+        shading.pattern = Some(ShadingPattern::Percent25);
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Patterned")]));
+        cell.shading = Some(shading);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        // Pattern should be ignored - only fill_color emitted as background-color
+        assert!(html.contains(r#"style="background-color: #ffffff;""#));
+        assert!(!html.contains("#000000")); // Pattern color not emitted
+        assert!(html.contains("Patterned"));
+    }
+
+    #[test]
+    fn table_cell_with_horz_stripe_pattern_degrades_to_flat_fill() {
+        use rtfkit_core::{Color, Shading, ShadingPattern};
+
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(200, 200, 200)); // Light gray
+        shading.pattern_color = Some(Color::new(100, 100, 100)); // Dark gray
+        shading.pattern = Some(ShadingPattern::HorzStripe);
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Striped")]));
+        cell.shading = Some(shading);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        // Only fill_color should be emitted
+        assert!(html.contains(r#"style="background-color: #c8c8c8;""#));
+        assert!(!html.contains("#646464")); // Pattern color not emitted
+    }
+
+    #[test]
+    fn table_cell_with_diag_cross_pattern_degrades_to_flat_fill() {
+        use rtfkit_core::{Color, Shading, ShadingPattern};
+
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(255, 255, 0)); // Yellow
+        shading.pattern_color = Some(Color::new(255, 0, 0)); // Red
+        shading.pattern = Some(ShadingPattern::DiagCross);
+
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Crosshatch")]));
+        cell.shading = Some(shading);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        // Only fill_color should be emitted, pattern ignored
+        assert!(html.contains(r#"style="background-color: #ffff00;""#));
+        assert!(!html.contains("#ff0000")); // Pattern color not emitted
+    }
+
+    #[test]
+    fn table_cell_pattern_with_width_and_alignment() {
+        use rtfkit_core::{Color, Shading, ShadingPattern};
+
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(0, 128, 0)); // Green
+        shading.pattern_color = Some(Color::new(255, 255, 255)); // White
+        shading.pattern = Some(ShadingPattern::Percent50);
+
+        let mut cell =
+            TableCell::from_paragraph_with_width(Paragraph::from_runs(vec![Run::new("Complex")]), 720); // 36pt
+        cell.shading = Some(shading);
+        cell.v_align = Some(CellVerticalAlign::Center);
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        // Should have class, width, and background-color (pattern ignored)
+        assert!(html.contains(r#"class="rtf-valign-middle""#));
+        assert!(html.contains(r#"width: 36.0pt"#));
+        assert!(html.contains(r#"background-color: #008000"#));
+        assert!(!html.contains("#ffffff")); // Pattern color not emitted
     }
 }

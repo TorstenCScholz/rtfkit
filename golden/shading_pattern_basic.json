@@ -1,0 +1,129 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Solid red background.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 255,
+          "g": 0,
+          "b": 0
+        },
+        "pattern": "solid"
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "50% pattern: black fill with red pattern.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 0,
+          "g": 0,
+          "b": 0
+        },
+        "pattern_color": {
+          "r": 255,
+          "g": 0,
+          "b": 0
+        },
+        "pattern": "percent90"
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "25% pattern: black fill with blue pattern.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 0,
+          "g": 0,
+          "b": 0
+        },
+        "pattern_color": {
+          "r": 0,
+          "g": 0,
+          "b": 255
+        },
+        "pattern": "percent90"
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Clear shading (transparent).",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 255,
+          "g": 0,
+          "b": 0
+        },
+        "pattern_color": {
+          "r": 0,
+          "g": 0,
+          "b": 255
+        },
+        "pattern": "clear"
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Pattern colors without shading percentage.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 255,
+          "g": 0,
+          "b": 0
+        },
+        "pattern_color": {
+          "r": 0,
+          "g": 0,
+          "b": 255
+        },
+        "pattern": "clear"
+      }
+    }
+  ]
+}

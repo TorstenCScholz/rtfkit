@@ -1,0 +1,77 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Paragraph with red background.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 255,
+          "g": 0,
+          "b": 0
+        }
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Paragraph with green background.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 0,
+          "g": 128,
+          "b": 0
+        }
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Paragraph with blue background.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 0,
+          "g": 0,
+          "b": 255
+        }
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Paragraph with default background.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ]
+    }
+  ]
+}

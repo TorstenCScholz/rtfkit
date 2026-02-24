@@ -14,6 +14,7 @@
 //! | `Run.font_size` | `#text(size: Npt)[...]` |
 //! | `Run.color` | `#text(fill: rgb(r, g, b))[...]` |
 //! | `Run.background_color` | `#highlight(fill: rgb(r, g, b))[...]` |
+//! | `Paragraph.shading` | `#highlight(fill: rgb(r, g, b))[...]` (wrapper) |
 //! | `Alignment::Left` | (default, no directive) |
 //! | `Alignment::Center` | `#align(center)[...]` |
 //! | `Alignment::Right` | `#align(right)[...]` |
@@ -30,7 +31,7 @@
 //! - `$` - Typst math mode marker
 //! - `~` - Typst non-breaking space
 
-use rtfkit_core::{Alignment, Color, Hyperlink, Inline, Paragraph, Run};
+use rtfkit_core::{Alignment, Color, Hyperlink, Inline, Paragraph, Run, Shading, ShadingPattern};
 
 use super::MappingWarning;
 
@@ -62,6 +63,13 @@ pub fn map_paragraph(paragraph: &Paragraph) -> ParagraphOutput {
     // Map inlines to text content
     let content = map_inlines(&paragraph.inlines, &mut warnings);
 
+    // Apply paragraph shading (background) if present
+    let content = if let Some(ref shading) = paragraph.shading {
+        apply_paragraph_shading(&content, shading, &mut warnings)
+    } else {
+        content
+    };
+
     // Apply alignment if needed
     let typst_source = if content.is_empty() {
         // Empty paragraph - emit empty line
@@ -78,6 +86,41 @@ pub fn map_paragraph(paragraph: &Paragraph) -> ParagraphOutput {
     ParagraphOutput {
         typst_source,
         warnings,
+    }
+}
+
+/// Apply paragraph-level shading as a highlight wrapper.
+///
+/// For flat fill colors, wraps content in `#highlight(fill: rgb(...))`.
+///
+/// # Pattern Degradation (Slice B)
+///
+/// Typst does not have native pattern support. For patterned shading:
+/// - Emit fill color only (flat fill)
+/// - Emit partial-support warning for pattern loss
+fn apply_paragraph_shading(content: &str, shading: &Shading, warnings: &mut Vec<MappingWarning>) -> String {
+    if content.is_empty() {
+        return String::new();
+    }
+
+    // Check if pattern is present and not Solid/Clear - emit warning
+    if let Some(ref pattern) = shading.pattern {
+        if !matches!(pattern, ShadingPattern::Solid | ShadingPattern::Clear) {
+            warnings.push(MappingWarning::PatternDegraded {
+                context: "paragraph shading".to_string(),
+                pattern: format!("{:?}", pattern),
+            });
+        }
+    }
+
+    // Emit flat fill color only
+    if let Some(ref fill_color) = shading.fill_color {
+        format!(
+            "#highlight(fill: rgb({}, {}, {}))[{}]",
+            fill_color.r, fill_color.g, fill_color.b, content
+        )
+    } else {
+        content.to_string()
     }
 }
 
@@ -990,5 +1033,205 @@ mod tests {
             output.typst_source,
             "#link(\"https://example.com\")[#highlight(fill: rgb(255, 255, 0))[Example]]"
         );
+    }
+
+    // =============================================================================
+    // Paragraph Shading Tests
+    // =============================================================================
+
+    #[test]
+    fn test_paragraph_shading() {
+        let mut paragraph = Paragraph::from_runs(vec![Run::new("shaded paragraph")]);
+        paragraph.shading = Some(Shading::solid(Color::new(255, 255, 0))); // Yellow
+
+        let output = map_paragraph(&paragraph);
+        assert_eq!(
+            output.typst_source,
+            "#highlight(fill: rgb(255, 255, 0))[shaded paragraph]"
+        );
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_paragraph_shading_with_alignment() {
+        let mut paragraph = Paragraph::from_runs(vec![Run::new("centered and shaded")]);
+        paragraph.alignment = Alignment::Center;
+        paragraph.shading = Some(Shading::solid(Color::new(0, 128, 255))); // Blue
+
+        let output = map_paragraph(&paragraph);
+        // Alignment wrapper is outside the highlight
+        assert_eq!(
+            output.typst_source,
+            "#align(center)[#highlight(fill: rgb(0, 128, 255))[centered and shaded]]"
+        );
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_paragraph_shading_without_fill_color() {
+        let mut paragraph = Paragraph::from_runs(vec![Run::new("text")]);
+        paragraph.shading = Some(Shading::new()); // Empty shading
+
+        let output = map_paragraph(&paragraph);
+        // Should NOT have highlight wrapper
+        assert_eq!(output.typst_source, "text");
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_paragraph_shading_with_run_formatting() {
+        let mut run = Run::new("bold text");
+        run.bold = true;
+
+        let mut paragraph = Paragraph::from_runs(vec![run]);
+        paragraph.shading = Some(Shading::solid(Color::new(255, 200, 100)));
+
+        let output = map_paragraph(&paragraph);
+        // Highlight wraps the formatted content
+        assert_eq!(
+            output.typst_source,
+            "#highlight(fill: rgb(255, 200, 100))[*bold text*]"
+        );
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_paragraph_shading_deterministic() {
+        let mut paragraph = Paragraph::from_runs(vec![Run::new("test")]);
+        paragraph.shading = Some(Shading::solid(Color::new(128, 64, 32)));
+
+        // Run multiple times to verify determinism
+        let output1 = map_paragraph(&paragraph);
+        let output2 = map_paragraph(&paragraph);
+        let output3 = map_paragraph(&paragraph);
+
+        assert_eq!(output1.typst_source, output2.typst_source);
+        assert_eq!(output2.typst_source, output3.typst_source);
+        assert!(output1.typst_source.contains("#highlight(fill: rgb(128, 64, 32))"));
+    }
+
+    #[test]
+    fn test_paragraph_shading_empty_paragraph() {
+        let mut paragraph = Paragraph::from_runs(vec![]);
+        paragraph.shading = Some(Shading::solid(Color::new(255, 0, 0)));
+
+        let output = map_paragraph(&paragraph);
+        // Empty paragraph should remain empty
+        assert!(output.typst_source.is_empty());
+        assert!(output.warnings.is_empty());
+    }
+
+    // =============================================================================
+    // Pattern Degradation Tests (Slice B)
+    // =============================================================================
+
+    #[test]
+    fn test_paragraph_with_patterned_shading_degrades_to_flat_fill() {
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(255, 255, 255)); // White background
+        shading.pattern_color = Some(Color::new(0, 0, 0)); // Black foreground
+        shading.pattern = Some(ShadingPattern::Percent25);
+
+        let mut paragraph = Paragraph::from_runs(vec![Run::new("patterned text")]);
+        paragraph.shading = Some(shading);
+
+        let output = map_paragraph(&paragraph);
+
+        // Pattern should be degraded - only fill_color emitted
+        assert!(output.typst_source.contains("#highlight(fill: rgb(255, 255, 255))"));
+        assert!(!output.typst_source.contains("0, 0, 0")); // Pattern color not emitted
+
+        // Should have a warning about pattern degradation
+        assert_eq!(output.warnings.len(), 1);
+        assert!(matches!(
+            &output.warnings[0],
+            MappingWarning::PatternDegraded { context, .. } if context == "paragraph shading"
+        ));
+    }
+
+    #[test]
+    fn test_paragraph_with_horz_stripe_pattern_degrades() {
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(200, 200, 200)); // Light gray
+        shading.pattern_color = Some(Color::new(100, 100, 100)); // Dark gray
+        shading.pattern = Some(ShadingPattern::HorzStripe);
+
+        let mut paragraph = Paragraph::from_runs(vec![Run::new("striped text")]);
+        paragraph.shading = Some(shading);
+
+        let output = map_paragraph(&paragraph);
+
+        // Only fill_color should be emitted
+        assert!(output.typst_source.contains("#highlight(fill: rgb(200, 200, 200))"));
+
+        // Should have a warning
+        assert_eq!(output.warnings.len(), 1);
+        if let MappingWarning::PatternDegraded { pattern, .. } = &output.warnings[0] {
+            assert!(pattern.contains("HorzStripe"));
+        } else {
+            panic!("Expected PatternDegraded warning");
+        }
+    }
+
+    #[test]
+    fn test_paragraph_with_solid_pattern_no_warning() {
+        // Solid pattern should not emit a warning
+        let shading = Shading::solid(Color::new(255, 255, 0));
+
+        let mut paragraph = Paragraph::from_runs(vec![Run::new("solid fill")]);
+        paragraph.shading = Some(shading);
+
+        let output = map_paragraph(&paragraph);
+
+        // Should emit fill color
+        assert!(output.typst_source.contains("#highlight(fill: rgb(255, 255, 0))"));
+
+        // Should NOT have a warning - Solid is supported
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_paragraph_with_clear_pattern_no_warning() {
+        // Clear pattern should not emit a warning
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(200, 200, 255));
+        shading.pattern = Some(ShadingPattern::Clear);
+
+        let mut paragraph = Paragraph::from_runs(vec![Run::new("clear pattern")]);
+        paragraph.shading = Some(shading);
+
+        let output = map_paragraph(&paragraph);
+
+        // Should emit fill color
+        assert!(output.typst_source.contains("#highlight(fill: rgb(200, 200, 255))"));
+
+        // Should NOT have a warning - Clear is supported
+        assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_paragraph_with_diag_cross_pattern_degrades() {
+        let mut shading = Shading::new();
+        shading.fill_color = Some(Color::new(255, 255, 0)); // Yellow
+        shading.pattern_color = Some(Color::new(255, 0, 0)); // Red
+        shading.pattern = Some(ShadingPattern::DiagCross);
+
+        let mut paragraph = Paragraph::from_runs(vec![Run::new("crosshatch")]);
+        paragraph.alignment = Alignment::Center;
+        paragraph.shading = Some(shading);
+
+        let output = map_paragraph(&paragraph);
+
+        // Only fill_color should be emitted, pattern ignored
+        assert!(output.typst_source.contains("#highlight(fill: rgb(255, 255, 0))"));
+        assert!(!output.typst_source.contains("255, 0, 0")); // Pattern color not emitted
+
+        // Should have a warning
+        assert_eq!(output.warnings.len(), 1);
+        if let MappingWarning::PatternDegraded { pattern, .. } = &output.warnings[0] {
+            assert!(pattern.contains("DiagCross"));
+        } else {
+            panic!("Expected PatternDegraded warning");
+        }
     }
 }
