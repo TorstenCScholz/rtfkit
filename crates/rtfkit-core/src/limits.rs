@@ -79,6 +79,14 @@ pub struct ParserLimits {
     /// Limits the number of cells that can be merged horizontally.
     /// Default: 1000 cells
     pub max_merge_span: u16,
+
+    /// Maximum cumulative decoded image bytes.
+    ///
+    /// Prevents memory exhaustion from documents with large or many embedded images.
+    /// If cumulative decoded image bytes exceed this limit, parsing fails immediately
+    /// with a hard parse failure (exit code 2).
+    /// Default: 50 MiB (52,428,800 bytes)
+    pub max_image_bytes_total: usize,
 }
 
 impl Default for ParserLimits {
@@ -92,6 +100,7 @@ impl Default for ParserLimits {
     /// - `max_rows_per_table`: 10000 rows
     /// - `max_cells_per_row`: 1000 cells
     /// - `max_merge_span`: 1000 cells
+    /// - `max_image_bytes_total`: 50 MiB (52,428,800 bytes)
     fn default() -> Self {
         Self {
             max_input_bytes: 10 * 1024 * 1024, // 10 MB
@@ -100,6 +109,7 @@ impl Default for ParserLimits {
             max_rows_per_table: 10000,
             max_cells_per_row: 1000,
             max_merge_span: 1000,
+            max_image_bytes_total: 50 * 1024 * 1024, // 50 MiB
         }
     }
 }
@@ -122,6 +132,7 @@ impl ParserLimits {
             max_rows_per_table: usize::MAX,
             max_cells_per_row: usize::MAX,
             max_merge_span: u16::MAX,
+            max_image_bytes_total: usize::MAX,
         }
     }
 
@@ -160,6 +171,12 @@ impl ParserLimits {
         self.max_merge_span = span;
         self
     }
+
+    /// Sets the maximum cumulative decoded image bytes.
+    pub fn with_max_image_bytes_total(mut self, bytes: usize) -> Self {
+        self.max_image_bytes_total = bytes;
+        self
+    }
 }
 
 // =============================================================================
@@ -179,6 +196,7 @@ mod tests {
         assert_eq!(limits.max_rows_per_table, 10000);
         assert_eq!(limits.max_cells_per_row, 1000);
         assert_eq!(limits.max_merge_span, 1000);
+        assert_eq!(limits.max_image_bytes_total, 50 * 1024 * 1024);
     }
 
     #[test]
@@ -196,6 +214,7 @@ mod tests {
         assert_eq!(limits.max_rows_per_table, usize::MAX);
         assert_eq!(limits.max_cells_per_row, usize::MAX);
         assert_eq!(limits.max_merge_span, u16::MAX);
+        assert_eq!(limits.max_image_bytes_total, usize::MAX);
     }
 
     #[test]
@@ -206,7 +225,8 @@ mod tests {
             .with_max_warning_count(100)
             .with_max_rows_per_table(500)
             .with_max_cells_per_row(50)
-            .with_max_merge_span(100);
+            .with_max_merge_span(100)
+            .with_max_image_bytes_total(1024 * 1024);
 
         assert_eq!(limits.max_input_bytes, 1024);
         assert_eq!(limits.max_group_depth, 50);
@@ -214,6 +234,7 @@ mod tests {
         assert_eq!(limits.max_rows_per_table, 500);
         assert_eq!(limits.max_cells_per_row, 50);
         assert_eq!(limits.max_merge_span, 100);
+        assert_eq!(limits.max_image_bytes_total, 1024 * 1024);
     }
 
     #[test]
@@ -226,5 +247,6 @@ mod tests {
         assert!(json.contains("max_rows_per_table"));
         assert!(json.contains("max_cells_per_row"));
         assert!(json.contains("max_merge_span"));
+        assert!(json.contains("max_image_bytes_total"));
     }
 }

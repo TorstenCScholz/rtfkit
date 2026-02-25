@@ -139,7 +139,19 @@ impl TypstWorld for TypstEngine {
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        // We don't support loading external files - all content is in-memory
+        let path = id.vpath().as_rootless_path().to_string_lossy();
+        
+        // Handle data URIs for images
+        if path.starts_with("data:image/") {
+            // Parse data URI: data:<mime-type>;base64,<data>
+            if let Some(base64_part) = path.strip_prefix("data:image/").and_then(|s| s.split_once(";base64,")) {
+                let decoded = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, base64_part.1)
+                    .map_err(|_| FileError::NotFound(path.to_string().into()))?;
+                return Ok(Bytes::from(decoded));
+            }
+        }
+
+        // We don't support loading other external files - all content is in-memory
         Err(FileError::NotFound(
             id.vpath().as_rootless_path().to_path_buf(),
         ))

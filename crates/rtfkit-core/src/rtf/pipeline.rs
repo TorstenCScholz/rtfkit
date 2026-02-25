@@ -12,6 +12,7 @@ use crate::{Document, Report};
 
 use super::events::{RtfEvent, token_to_event};
 use super::state::RuntimeState;
+use super::state_images::ImageByteTracker;
 use super::tokenizer::{tokenize, validate_tokens};
 
 /// Parse RTF input and return a Document with a Report.
@@ -95,6 +96,46 @@ fn handle_group_end(state: &mut RuntimeState) {
     state.destinations.destination_marker = false;
 
     super::handlers_fields::process_field_group_end(state);
+
+    // Check if we're ending a pict group
+    if state.image.is_pict_ended(state.current_depth) {
+        // Finalize the image
+        finalize_pict_group(state);
+    }
+}
+
+/// Finalize a pict group by creating an image block or recording dropped content.
+fn finalize_pict_group(state: &mut RuntimeState) {
+    // Create a tracker from the current state
+    let mut tracker = ImageByteTracker::new(state.limits.max_image_bytes_total);
+    tracker.total_bytes = state.image_bytes_used;
+
+    // Call the finalization logic
+    let result = super::finalize::finalize_image(&state.image, &mut tracker);
+
+    match result {
+        super::finalize::ImageFinalizationResult::Success(block) => {
+            // Update the tracker state
+            state.image_bytes_used = tracker.total_bytes;
+            // Push the block to the document
+            state.document.blocks.push(block);
+        }
+        super::finalize::ImageFinalizationResult::Dropped(reason) => {
+            // Add warning to report
+            let size_hint = Some(state.image.hex_buffer.len());
+            state.report_builder.dropped_content(reason, size_hint);
+        }
+        super::finalize::ImageFinalizationResult::ByteLimitExceeded => {
+            // Hard failure - set the error
+            state.set_hard_failure(ParseError::ImageBytesExceeded {
+                total: tracker.total_bytes,
+                limit: state.limits.max_image_bytes_total,
+            });
+        }
+    }
+
+    // Reset image state
+    state.image.reset();
 }
 
 fn handle_control_word_event(

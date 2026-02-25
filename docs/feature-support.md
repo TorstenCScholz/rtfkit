@@ -75,6 +75,45 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | Nested tables | ❌ Not Supported | Warning emitted |
 | Table borders | ❌ Not Supported | Parsed but not mapped |
 
+### Embedded Images
+
+rtfkit supports embedded PNG and JPEG images from RTF `\pict` groups.
+
+#### Supported Formats
+
+| Format | Control Word | Support |
+|--------|-------------|---------|
+| PNG | `\pngblip` | Full support |
+| JPEG | `\jpegblip` | Full support |
+| WMF | `\wmetafile` | Not supported (dropped) |
+| EMF | `\emfblip` | Not supported (dropped) |
+
+#### Supported Controls
+
+| Control | Description | Support |
+|---------|-------------|---------|
+| `\picwgoal` | Goal width in twips | Full support |
+| `\pichgoal` | Goal height in twips | Full support |
+| `\picw` | Original width in twips | Fallback |
+| `\pich` | Original height in twips | Fallback |
+| `\picscalex` | Horizontal scale percentage | Full support |
+| `\picscaley` | Vertical scale percentage | Full support |
+| `\shppict` | Shape picture (preferred) | Handled |
+| `\nonshppict` | Non-shape picture | Handled |
+
+#### Output Formats
+
+- **DOCX**: Images embedded as media files with DrawingML references
+- **HTML**: Images as data URIs in `<figure class="rtf-image">` elements
+- **PDF/Typst**: Images as data URIs (note: Typst may not support data URIs)
+
+#### Limitations
+
+- Images are block-level elements (not inline)
+- WMF/EMF vector formats are not supported
+- Image cropping is not supported
+- Floating/anchored positioning is not supported
+
 ### Destinations
 
 | Destination | Support | Notes |
@@ -86,7 +125,7 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | List override table (`\listoverridetable`) | ✅ Supported | Parsed for list references |
 | Header (`\header`) | 🔸 Degraded | Dropped with warning |
 | Footer (`\footer`) | 🔸 Degraded | Dropped with warning |
-| Picture (`\pict`) | 🔸 Degraded | Dropped with `DroppedContent` |
+| Picture (`\pict`) | ⚠️ Partial | PNG/JPEG supported; WMF/EMF dropped |
 | Object (`\obj`) | 🔸 Degraded | Dropped with `DroppedContent` |
 | Field (`\field`) | ⚠️ Partial | HYPERLINK fields supported; other fields dropped with warning |
 | Unknown destinations (`\*\foo`) | 🔸 Degraded | Dropped with `DroppedContent` |
@@ -138,7 +177,7 @@ HTML output is selected with `--to html` and produces semantic HTML5:
 | Colors | ✅ Supported | Inline `color` style (hex) |
 | Background color | ✅ Supported | Inline `background-color` style (hex) |
 | Borders | ❌ Not Supported | Semantic-first design |
-| Images | ❌ Not Supported | No IR image blocks |
+| Images | ✅ Supported | `<figure class="rtf-image">` with data URI |
 | Style Profiles | ✅ Supported | `--style-profile` flag (classic, report, compact) |
 
 ### PDF Output Details
@@ -166,7 +205,7 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 | Font size | ✅ Supported | Typst `#text(size: ...)` wrapper |
 | Text color | ✅ Supported | Typst `#text(fill: ...)` wrapper |
 | Background color | ✅ Supported | Typst `#highlight(fill: ...)` wrapper |
-| Images | ❌ Not Supported | No IR image blocks |
+| Images | ⚠️ Partial | Data URIs (Typst support may vary) |
 | Custom fonts | ❌ Not Supported | Uses embedded fonts |
 | Style Profiles | ✅ Supported | `--style-profile` flag (classic, report, compact) |
 
@@ -180,6 +219,7 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 | Table row limit | ✅ Supported | Default: 10,000 rows |
 | Table cell limit | ✅ Supported | Default: 1,000 cells/row |
 | Merge span limit | ✅ Supported | Default: 1,000 cells |
+| Image byte limit | ✅ Supported | Default: 50 MiB cumulative |
 | Strict mode | ✅ Supported | Exit code 4 on dropped content |
 
 ## Error Handling
@@ -196,7 +236,7 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 
 ## Known Limitations
 
-1. **No image support** - Images are dropped with `DroppedContent` warning
+1. **Limited image support** - Only PNG and JPEG formats supported; WMF/EMF dropped; images are block-level only
 2. **Row alignment cosmetic loss** - Row alignment is parsed but not fully emitted by docx-rs
 3. **List nesting limit** - Maximum 8 levels due to DOCX compatibility
 4. **No nested tables** - Tables inside cells are not supported
@@ -207,6 +247,7 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 
 | Version | Changes |
 |---------|---------|
+| 0.11.0 | Added embedded image support (PNG/JPEG) for DOCX, HTML, PDF output; image byte limit |
 | 0.10.0 | Added block shading support (`\cbpatN`, `\clcbpatN`, `\trcbpatN`) for paragraphs and tables; theme color resolution; pattern support with degradation |
 | 0.9.0 | Added background/highlight color support (`\cbN`, `\highlightN`) for DOCX, HTML, PDF; `\plain` now resets background/highlight |
 | 0.8.0 | Added font family, font size, and foreground color support (DOCX, HTML, PDF); added `\plain` reset support |

@@ -10,5 +10,6 @@ description = "HTML writer for rtfkit IR documents"
 rtfkit-core = { path = "../rtfkit-core" }
 rtfkit-style-tokens = { path = "../rtfkit-style-tokens" }
 thiserror = "2.0"
+base64 = "0.22"
 
 [dev-dependencies]

@@ -59,12 +59,13 @@ fn normalize_line_endings(s: &str) -> String {
 }
 
 /// Helper to extract paragraph from block.
-/// Returns None for ListBlock and TableBlock variants (which contain paragraphs inside items).
+/// Returns None for ListBlock, TableBlock, and ImageBlock variants (which contain paragraphs inside items).
 fn as_paragraph(block: &rtfkit_core::Block) -> Option<&rtfkit_core::Paragraph> {
     match block {
         rtfkit_core::Block::Paragraph(p) => Some(p),
         rtfkit_core::Block::ListBlock(_) => None,
         rtfkit_core::Block::TableBlock(_) => None,
+        rtfkit_core::Block::ImageBlock(_) => None,
     }
 }
 
@@ -328,12 +329,13 @@ fn test_complex_document() {
 // =============================================================================
 
 /// Helper to extract list block from a Block.
-/// Returns None for Paragraph and TableBlock variants.
+/// Returns None for Paragraph, TableBlock, and ImageBlock variants.
 fn as_list_block(block: &rtfkit_core::Block) -> Option<&rtfkit_core::ListBlock> {
     match block {
         rtfkit_core::Block::ListBlock(list) => Some(list),
         rtfkit_core::Block::Paragraph(_) => None,
         rtfkit_core::Block::TableBlock(_) => None,
+        rtfkit_core::Block::ImageBlock(_) => None,
     }
 }
 

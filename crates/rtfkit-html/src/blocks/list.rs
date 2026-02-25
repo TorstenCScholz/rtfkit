@@ -108,6 +108,9 @@ fn emit_item_blocks(item: &ListItem, buf: &mut HtmlBuffer, dropped_reasons: &mut
             Block::TableBlock(table) => {
                 crate::blocks::table::table_to_html_with_warnings(table, buf, dropped_reasons);
             }
+            Block::ImageBlock(image) => {
+                crate::blocks::image::image_to_html(image, buf);
+            }
         }
     }
 }

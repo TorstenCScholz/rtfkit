@@ -18,7 +18,7 @@ use crate::error::{ConversionError, ParseError};
 pub enum DestinationBehavior {
     /// Metadata destination (stylesheet, info, etc.) - skip silently
     Metadata,
-    /// Dropped destination with a reason (pict, obj, etc.)
+    /// Dropped destination with a reason (obj, etc.)
     Dropped(&'static str),
     /// List table destination - parse list definitions
     ListTable,
@@ -32,6 +32,12 @@ pub enum DestinationBehavior {
     FontTable,
     /// Color table destination - parse color definitions
     ColorTable,
+    /// Picture destination - parse embedded image data
+    Pict,
+    /// Shape picture destination - preferred over nonshppict
+    Shppict,
+    /// Non-shape picture destination - fallback when no shppict
+    Nonshppict,
 }
 
 // =============================================================================
@@ -59,8 +65,12 @@ pub fn destination_behavior(word: &str) -> Option<DestinationBehavior> {
         | "nofpages" | "nofwords" | "nofchars" | "nofcharsws" | "id" => {
             Some(DestinationBehavior::Metadata)
         }
+        // Picture destinations - parse embedded images
+        "pict" => Some(DestinationBehavior::Pict),
+        "shppict" => Some(DestinationBehavior::Shppict),
+        "nonshppict" => Some(DestinationBehavior::Nonshppict),
         // Destinations that represent currently unsupported visible content.
-        "pict" | "obj" | "objclass" | "objdata" | "shppict" | "nonshppict" | "picprop"
+        "obj" | "objclass" | "objdata" | "picprop"
         | "datafield" | "header" | "headerl" | "headerr" | "footer" | "footerl" | "footerr"
         | "footnote" | "annotation" | "pn" | "pntext" | "pntxtb" | "pntxta" | "pnseclvl" => Some(
             DestinationBehavior::Dropped("Dropped unsupported RTF destination content"),
@@ -123,6 +133,40 @@ pub fn maybe_start_destination(state: &mut RuntimeState, word: &str) -> bool {
                 state.destinations.destination_marker = false;
                 state.mark_current_group_non_destination();
                 return false; // Don't skip - continue processing
+            }
+            DestinationBehavior::Pict => {
+                // Picture destination - enter image parsing mode
+                // Don't skip - we need to capture the image data
+                state.image.start_pict(state.current_depth);
+                state.destinations.destination_marker = false;
+                state.mark_current_group_non_destination();
+                return false; // Don't skip - continue processing
+            }
+            DestinationBehavior::Shppict => {
+                // Shape picture - mark that we're in a shppict group
+                // This is preferred over nonshppict when both exist
+                state.image.in_shppict = true;
+                state.destinations.destination_marker = false;
+                state.mark_current_group_non_destination();
+                return false; // Don't skip - continue processing
+            }
+            DestinationBehavior::Nonshppict => {
+                // Non-shape picture - mark that we've seen this
+                // Will be skipped if shppict content exists
+                state.image.seen_nonshppict = true;
+                // If we already have shppict content, skip this group
+                if state.image.in_shppict {
+                    state.report_builder.dropped_content(
+                        "Dropped nonshppict in favor of shppict",
+                        None,
+                    );
+                    state.destinations.enter_destination();
+                } else {
+                    // Otherwise, process normally (may contain pict)
+                    state.destinations.destination_marker = false;
+                    state.mark_current_group_non_destination();
+                    return false;
+                }
             }
         }
         state.destinations.destination_marker = false;
@@ -280,13 +324,25 @@ mod tests {
     #[test]
     fn test_destination_behavior_dropped() {
         assert!(matches!(
-            destination_behavior("pict"),
-            Some(DestinationBehavior::Dropped(_))
-        ));
-        assert!(matches!(
             destination_behavior("obj"),
             Some(DestinationBehavior::Dropped(_))
         ));
+    }
+
+    #[test]
+    fn test_destination_behavior_pict() {
+        assert_eq!(
+            destination_behavior("pict"),
+            Some(DestinationBehavior::Pict)
+        );
+        assert_eq!(
+            destination_behavior("shppict"),
+            Some(DestinationBehavior::Shppict)
+        );
+        assert_eq!(
+            destination_behavior("nonshppict"),
+            Some(DestinationBehavior::Nonshppict)
+        );
     }
 
     #[test]

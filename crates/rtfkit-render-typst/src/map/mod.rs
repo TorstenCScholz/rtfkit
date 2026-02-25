@@ -14,7 +14,9 @@
 //! - `paragraph`: Paragraph and run mapping
 //! - `list`: List mapping with level preservation
 //! - `table`: Table mapping with merge support
+//! - `image`: Image mapping with embedded data URIs
 
+mod image;
 mod list;
 mod paragraph;
 mod table;
@@ -25,6 +27,7 @@ use rtfkit_style_tokens::{StyleProfile, StyleProfileName, builtins, serialize::t
 use crate::error::WarningKind;
 use crate::options::{Margins, RenderOptions};
 
+pub use image::{ImageOutput, map_image_block};
 pub use list::{ListOutput, map_list};
 pub use paragraph::{ParagraphOutput, map_paragraph};
 pub use table::{TableOutput, map_table};
@@ -165,6 +168,13 @@ pub fn map_block(block: &IrBlock) -> BlockOutput {
             BlockOutput {
                 typst_source: output.typst_source,
                 warnings: output.warnings,
+            }
+        }
+        IrBlock::ImageBlock(image) => {
+            let output = map_image_block(image);
+            BlockOutput {
+                typst_source: output.typst_source,
+                warnings: Vec::new(),
             }
         }
     }
@@ -349,6 +359,51 @@ mod tests {
         assert!(output.typst_source.contains("- List item"));
         assert!(output.typst_source.contains("#table("));
         assert!(output.typst_source.contains("Outro"));
+    }
+
+    #[test]
+    fn test_map_document_with_image() {
+        use rtfkit_core::{ImageBlock, ImageFormat};
+
+        let image = ImageBlock::with_dimensions(
+            ImageFormat::Png,
+            vec![0x89, 0x50, 0x4E, 0x47],
+            1440, // 1 inch
+            720,  // 0.5 inch
+        );
+
+        let doc = Document::from_blocks(vec![Block::ImageBlock(image)]);
+
+        let options = RenderOptions::default();
+        let output = map_document(&doc, &options);
+
+        assert!(output.typst_source.contains("#image("));
+        assert!(output.typst_source.contains("data:image/png;base64,"));
+        assert!(output.typst_source.contains("width: 1.00in"));
+        assert!(output.typst_source.contains("height: 0.50in"));
+    }
+
+    #[test]
+    fn test_map_document_with_image_without_dimensions() {
+        use rtfkit_core::{ImageBlock, ImageFormat};
+
+        let image = ImageBlock::new(ImageFormat::Jpeg, vec![0xFF, 0xD8, 0xFF, 0xE0]);
+
+        let doc = Document::from_blocks(vec![Block::ImageBlock(image)]);
+
+        let options = RenderOptions::default();
+        let output = map_document(&doc, &options);
+
+        assert!(output.typst_source.contains("#image("));
+        assert!(output.typst_source.contains("data:image/jpeg;base64,"));
+        // The image function should not have width/height parameters
+        // (but the page setup will have width/height for page dimensions)
+        // Check that the image line doesn't contain width/height params
+        let image_line = output.typst_source.lines()
+            .find(|line| line.contains("#image("))
+            .expect("Should have an image line");
+        assert!(!image_line.contains("width:"));
+        assert!(!image_line.contains("height:"));
     }
 
     #[test]

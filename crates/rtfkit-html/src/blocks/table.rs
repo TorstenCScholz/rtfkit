@@ -316,6 +316,7 @@ fn cell_to_html(
                 super::list::list_to_html_with_warnings(list, buf, dropped_reasons)
             }
             Block::TableBlock(nested) => table_to_html_with_warnings(nested, buf, dropped_reasons),
+            Block::ImageBlock(image) => super::image::image_to_html(image, buf),
         }
     }
 

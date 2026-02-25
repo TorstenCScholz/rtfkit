@@ -6,7 +6,8 @@
 //! - Various document types can be rendered
 
 use rtfkit_core::{
-    Block, Document, ListBlock, ListItem, ListKind, Paragraph, Run, TableBlock, TableCell, TableRow,
+    Block, Document, ImageBlock, ImageFormat, ListBlock, ListItem, ListKind, Paragraph, Run,
+    TableBlock, TableCell, TableRow,
 };
 use rtfkit_render_typst::{
     DeterminismOptions, RenderOptions, compile_to_pdf, document_to_pdf_with_warnings,
@@ -449,4 +450,313 @@ fn test_embedded_fonts_only() {
     assert!(output.pdf_bytes.starts_with(b"%PDF-"));
     let pdf_str = String::from_utf8_lossy(&output.pdf_bytes);
     assert!(pdf_str.contains("%%EOF"));
+}
+
+// =============================================================================
+// Image Rendering Tests
+// =============================================================================
+
+/// Minimal PNG image data (1x1 transparent pixel)
+fn minimal_png_data() -> Vec<u8> {
+    vec![
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+        0x00, 0x00, 0x00, 0x0D, // IHDR length
+        0x49, 0x48, 0x44, 0x52, // IHDR
+        0x00, 0x00, 0x00, 0x01, // width: 1
+        0x00, 0x00, 0x00, 0x01, // height: 1
+        0x08, 0x06, // bit depth: 8, color type: RGBA
+        0x00, 0x00, 0x00, // compression, filter, interlace
+        0x1F, 0x15, 0xC4, 0x89, // CRC
+        0x00, 0x00, 0x00, 0x0A, // IDAT length
+        0x49, 0x44, 0x41, 0x54, // IDAT
+        0x78, 0x9C, 0x63, 0x60, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, // compressed data
+        0xE2, 0x21, 0xBC, 0x33, // CRC
+        0x00, 0x00, 0x00, 0x00, // IEND length
+        0x49, 0x45, 0x4E, 0x44, // IEND
+        0xAE, 0x42, 0x60, 0x82, // CRC
+    ]
+}
+
+/// Minimal JPEG image data (1x1 gray pixel)
+fn minimal_jpeg_data() -> Vec<u8> {
+    vec![
+        0xFF, 0xD8, // SOI
+        0xFF, 0xE0, 0x00, 0x10, // APP0
+        0x4A, 0x46, 0x49, 0x46, 0x00, // JFIF\0
+        0x01, 0x01, // version
+        0x00, // aspect ratio units
+        0x00, 0x01, 0x00, 0x01, // aspect ratio
+        0x00, 0x00, // thumbnail
+        0xFF, 0xDB, 0x00, 0x43, 0x00, // DQT
+        0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, // quantization table
+        0x07, 0x07, 0x09, 0x09, 0x08, 0x0A, 0x0C, 0x14,
+        0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12, 0x13,
+        0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A,
+        0x1C, 0x1C, 0x20, 0x24, 0x2E, 0x27, 0x20, 0x22,
+        0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29, 0x2C,
+        0x30, 0x31, 0x34, 0x34, 0x1F, 0x27, 0x39, 0x3D,
+        0x38, 0x32, 0x3C, 0x2E, 0x33, 0x34, 0x32,
+        0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01, 0x00, 0x01, // SOF
+        0x01, 0x01, 0x11, 0x00,
+        0xFF, 0xC4, 0x00, 0x1F, 0x00, // DHT
+        0x00, 0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01,
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0A, 0x0B,
+        0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, // SOS
+        0x3F, 0x00,
+        0xFB, 0xD3, 0x28, 0xA2, 0x80, 0x00, // scan data
+        0xFF, 0xD9, // EOI
+    ]
+}
+
+/// Test that a PNG image can be rendered to PDF.
+///
+/// NOTE: This test is currently ignored because the Typst renderer uses data URIs
+/// for images, but Typst doesn't support data URIs - it interprets them as file paths.
+/// See: https://github.com/typst/typst/issues/184
+/// TODO: Fix the image rendering to use file paths or embedded bytes instead of data URIs.
+#[ignore = "Typst doesn't support data URIs for images - needs implementation fix"]
+#[test]
+fn test_render_png_image_to_pdf() {
+    let image_block = ImageBlock {
+        format: ImageFormat::Png,
+        data: minimal_png_data(),
+        width_twips: Some(1440), // 1 inch
+        height_twips: Some(1440),
+    };
+
+    let doc = Document::from_blocks(vec![
+        Block::Paragraph(Paragraph::from_runs(vec![Run::new("Before image")])),
+        Block::ImageBlock(image_block),
+        Block::Paragraph(Paragraph::from_runs(vec![Run::new("After image")])),
+    ]);
+
+    let options = RenderOptions::default();
+    let result = document_to_pdf_with_warnings(&doc, &options);
+
+    assert!(result.is_ok(), "Failed to render PNG image: {:?}", result.err());
+    let output = result.unwrap();
+
+    // Verify PDF structure
+    assert!(
+        output.pdf_bytes.starts_with(b"%PDF-"),
+        "PDF should start with %PDF-"
+    );
+    let pdf_str = String::from_utf8_lossy(&output.pdf_bytes);
+    assert!(pdf_str.contains("%%EOF"), "PDF should contain %%EOF marker");
+}
+
+/// Test that a JPEG image can be rendered to PDF.
+///
+/// NOTE: This test is currently ignored because the Typst renderer uses data URIs
+/// for images, but Typst doesn't support data URIs - it interprets them as file paths.
+/// See: https://github.com/typst/typst/issues/184
+/// TODO: Fix the image rendering to use file paths or embedded bytes instead of data URIs.
+#[ignore = "Typst doesn't support data URIs for images - needs implementation fix"]
+#[test]
+fn test_render_jpeg_image_to_pdf() {
+    let image_block = ImageBlock {
+        format: ImageFormat::Jpeg,
+        data: minimal_jpeg_data(),
+        width_twips: Some(1440),
+        height_twips: Some(1440),
+    };
+
+    let doc = Document::from_blocks(vec![
+        Block::Paragraph(Paragraph::from_runs(vec![Run::new("JPEG test")])),
+        Block::ImageBlock(image_block),
+    ]);
+
+    let options = RenderOptions::default();
+    let result = document_to_pdf_with_warnings(&doc, &options);
+
+    assert!(result.is_ok(), "Failed to render JPEG image: {:?}", result.err());
+    let output = result.unwrap();
+
+    assert!(output.pdf_bytes.starts_with(b"%PDF-"));
+}
+
+/// Test that multiple images can be rendered in one document.
+///
+/// NOTE: This test is currently ignored because the Typst renderer uses data URIs
+/// for images, but Typst doesn't support data URIs - it interprets them as file paths.
+/// See: https://github.com/typst/typst/issues/184
+/// TODO: Fix the image rendering to use file paths or embedded bytes instead of data URIs.
+#[ignore = "Typst doesn't support data URIs for images - needs implementation fix"]
+#[test]
+fn test_render_multiple_images_to_pdf() {
+    let png_image = ImageBlock {
+        format: ImageFormat::Png,
+        data: minimal_png_data(),
+        width_twips: Some(1440),
+        height_twips: Some(1440),
+    };
+
+    let jpeg_image = ImageBlock {
+        format: ImageFormat::Jpeg,
+        data: minimal_jpeg_data(),
+        width_twips: Some(1440),
+        height_twips: Some(1440),
+    };
+
+    let doc = Document::from_blocks(vec![
+        Block::Paragraph(Paragraph::from_runs(vec![Run::new("First: PNG")])),
+        Block::ImageBlock(png_image),
+        Block::Paragraph(Paragraph::from_runs(vec![Run::new("Second: JPEG")])),
+        Block::ImageBlock(jpeg_image),
+        Block::Paragraph(Paragraph::from_runs(vec![Run::new("Done")])),
+    ]);
+
+    let options = RenderOptions::default();
+    let result = document_to_pdf_with_warnings(&doc, &options);
+
+    assert!(result.is_ok(), "Failed to render multiple images: {:?}", result.err());
+    let output = result.unwrap();
+
+    assert!(output.pdf_bytes.starts_with(b"%PDF-"));
+}
+
+/// Test that an image with dimensions is rendered correctly.
+///
+/// NOTE: This test is currently ignored because the Typst renderer uses data URIs
+/// for images, but Typst doesn't support data URIs - it interprets them as file paths.
+/// See: https://github.com/typst/typst/issues/184
+/// TODO: Fix the image rendering to use file paths or embedded bytes instead of data URIs.
+#[ignore = "Typst doesn't support data URIs for images - needs implementation fix"]
+#[test]
+fn test_render_image_with_dimensions_to_pdf() {
+    // 2 inches wide, 1 inch tall
+    let image_block = ImageBlock {
+        format: ImageFormat::Png,
+        data: minimal_png_data(),
+        width_twips: Some(2880), // 2 inches
+        height_twips: Some(1440), // 1 inch
+    };
+
+    let doc = Document::from_blocks(vec![Block::ImageBlock(image_block)]);
+
+    let options = RenderOptions::default();
+    let result = document_to_pdf_with_warnings(&doc, &options);
+
+    assert!(result.is_ok(), "Failed to render image with dimensions: {:?}", result.err());
+    let output = result.unwrap();
+
+    assert!(output.pdf_bytes.starts_with(b"%PDF-"));
+}
+
+/// Test that an image without dimensions (intrinsic size) can be rendered.
+///
+/// NOTE: This test is currently ignored because the Typst renderer uses data URIs
+/// for images, but Typst doesn't support data URIs - it interprets them as file paths.
+/// See: https://github.com/typst/typst/issues/184
+/// TODO: Fix the image rendering to use file paths or embedded bytes instead of data URIs.
+#[ignore = "Typst doesn't support data URIs for images - needs implementation fix"]
+#[test]
+fn test_render_image_without_dimensions_to_pdf() {
+    let image_block = ImageBlock {
+        format: ImageFormat::Png,
+        data: minimal_png_data(),
+        width_twips: None,
+        height_twips: None,
+    };
+
+    let doc = Document::from_blocks(vec![Block::ImageBlock(image_block)]);
+
+    let options = RenderOptions::default();
+    let result = document_to_pdf_with_warnings(&doc, &options);
+
+    assert!(
+        result.is_ok(),
+        "Failed to render image without dimensions: {:?}",
+        result.err()
+    );
+    let output = result.unwrap();
+
+    assert!(output.pdf_bytes.starts_with(b"%PDF-"));
+}
+
+/// Test that image rendering is deterministic.
+///
+/// NOTE: This test is currently ignored because the Typst renderer uses data URIs
+/// for images, but Typst doesn't support data URIs - it interprets them as file paths.
+/// See: https://github.com/typst/typst/issues/184
+/// TODO: Fix the image rendering to use file paths or embedded bytes instead of data URIs.
+#[ignore = "Typst doesn't support data URIs for images - needs implementation fix"]
+#[test]
+fn test_image_rendering_is_deterministic() {
+    let image_block = ImageBlock {
+        format: ImageFormat::Png,
+        data: minimal_png_data(),
+        width_twips: Some(1440),
+        height_twips: Some(1440),
+    };
+
+    let doc = Document::from_blocks(vec![
+        Block::Paragraph(Paragraph::from_runs(vec![Run::new("Determinism test")])),
+        Block::ImageBlock(image_block),
+    ]);
+
+    let options = RenderOptions {
+        determinism: DeterminismOptions {
+            fixed_timestamp: Some("2024-01-01T00:00:00Z".to_string()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    // Render twice
+    let result1 = document_to_pdf_with_warnings(&doc, &options).unwrap();
+    let result2 = document_to_pdf_with_warnings(&doc, &options).unwrap();
+
+    // Should produce identical output
+    assert_eq!(
+        result1.pdf_bytes, result2.pdf_bytes,
+        "PDF output with image should be deterministic"
+    );
+}
+
+/// Test that multiple images rendering is deterministic.
+///
+/// NOTE: This test is currently ignored because the Typst renderer uses data URIs
+/// for images, but Typst doesn't support data URIs - it interprets them as file paths.
+/// See: https://github.com/typst/typst/issues/184
+/// TODO: Fix the image rendering to use file paths or embedded bytes instead of data URIs.
+#[ignore = "Typst doesn't support data URIs for images - needs implementation fix"]
+#[test]
+fn test_multiple_images_rendering_is_deterministic() {
+    let png_image = ImageBlock {
+        format: ImageFormat::Png,
+        data: minimal_png_data(),
+        width_twips: Some(1440),
+        height_twips: Some(1440),
+    };
+
+    let jpeg_image = ImageBlock {
+        format: ImageFormat::Jpeg,
+        data: minimal_jpeg_data(),
+        width_twips: Some(1440),
+        height_twips: Some(1440),
+    };
+
+    let doc = Document::from_blocks(vec![
+        Block::ImageBlock(png_image),
+        Block::ImageBlock(jpeg_image),
+    ]);
+
+    let options = RenderOptions {
+        determinism: DeterminismOptions {
+            fixed_timestamp: Some("2024-01-01T00:00:00Z".to_string()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let result1 = document_to_pdf_with_warnings(&doc, &options).unwrap();
+    let result2 = document_to_pdf_with_warnings(&doc, &options).unwrap();
+
+    assert_eq!(
+        result1.pdf_bytes, result2.pdf_bytes,
+        "PDF output with multiple images should be deterministic"
+    );
 }

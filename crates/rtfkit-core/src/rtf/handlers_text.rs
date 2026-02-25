@@ -12,6 +12,12 @@ use super::state::RuntimeState;
 ///
 /// This is the main entry point for text processing during RTF parsing.
 pub fn handle_text(state: &mut RuntimeState, text: String) {
+    // If parsing a pict group, accumulate hex data
+    if state.image.parsing_pict {
+        state.image.append_hex(&text);
+        return;
+    }
+
     // Skip fallback characters if needed (after \u escape)
     if state.skip_next_chars > 0 {
         let skip = state.skip_next_chars.min(text.chars().count());

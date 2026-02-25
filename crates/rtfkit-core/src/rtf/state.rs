@@ -5,6 +5,7 @@
 
 use super::state_destinations::DestinationState;
 use super::state_fields::FieldState;
+use super::state_images::ImageParsingState;
 use super::state_lists::ListState;
 use super::state_resources::ResourceState;
 use super::state_style::StyleState;
@@ -34,6 +35,8 @@ pub struct RuntimeState {
     pub fields: FieldState,
     /// Resource state (font and color tables)
     pub resources: ResourceState,
+    /// Image state (embedded pictures)
+    pub image: ImageParsingState,
 
     // =============================================================================
     // Core Parsing State
@@ -83,6 +86,12 @@ pub struct RuntimeState {
     /// Used for hard-limit violations discovered in helper methods that
     /// don't return `Result` directly.
     pub hard_failure: Option<ParseError>,
+
+    // =============================================================================
+    // Image Parsing State
+    // =============================================================================
+    /// Cumulative bytes used by decoded images (for limit enforcement)
+    pub image_bytes_used: usize,
 }
 
 impl RuntimeState {
@@ -96,6 +105,7 @@ impl RuntimeState {
             tables: TableState::new(),
             fields: FieldState::new(),
             resources: ResourceState::new(),
+            image: ImageParsingState::new(),
 
             // Core parsing state
             group_stack: Vec::new(),
@@ -119,6 +129,9 @@ impl RuntimeState {
 
             // Error tracking
             hard_failure: None,
+
+            // Image parsing
+            image_bytes_used: 0,
         }
     }
 

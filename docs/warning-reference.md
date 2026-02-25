@@ -378,6 +378,72 @@ Common message values include:
 
 **Impact**: Pattern is rendered as solid fill using the fill color. DOCX output preserves patterns fully.
 
+---
+
+### `unsupported_image_format`
+
+Emitted when an RTF image is in an unsupported format.
+
+**Severity**: `warning`
+
+**Strict Mode**: **Causes failure** - always accompanied by `DroppedContent`.
+
+**JSON Format**:
+```json
+{
+  "type": "unsupported_image_format",
+  "format": "wmetafile",
+  "severity": "warning"
+}
+```
+
+**Common Examples**:
+- `\wmetafile` - Windows Metafile (WMF)
+- `\emfblip` - Enhanced Metafile (EMF)
+
+**Behavior**:
+- Default mode: Image is dropped, conversion continues with warning
+- Strict mode: Conversion fails with exit code 4
+
+**Recommendation**: Convert images to PNG or JPEG format before embedding in RTF.
+
+---
+
+### `malformed_image_hex_payload`
+
+Emitted when the hex data for an embedded image is invalid.
+
+**Severity**: `warning`
+
+**Strict Mode**: **Causes failure** - always accompanied by `DroppedContent`.
+
+**JSON Format**:
+```json
+{
+  "type": "malformed_image_hex_payload",
+  "reason": "odd-length hex string",
+  "severity": "warning"
+}
+```
+
+**Stable Reason Strings**:
+
+| Reason String | Meaning |
+|---------------|---------|
+| `"odd-length hex string"` | Hex data has odd number of characters |
+| `"invalid hex characters"` | Hex data contains non-hex characters |
+
+**Common Causes**:
+- Corrupted RTF file
+- Invalid characters in hex data (e.g., `ZZ` instead of valid hex)
+- Truncated image data
+
+**Behavior**:
+- Default mode: Image is dropped, conversion continues with warning
+- Strict mode: Conversion fails with exit code 4
+
+**Recommendation**: Ensure the RTF file is not corrupted and the image data is properly encoded.
+
 ## Strict Mode
 
 When running with `--strict`, the conversion fails (exit code 4) if any `DroppedContent` warnings are present.
@@ -429,6 +495,8 @@ The following reason strings are part of the stable API contract:
 - `"Malformed or unsupported hyperlink URL"`
 - `"Unsupported hyperlink URL scheme"`
 - `"Nested fields are not supported"`
+- `"unsupported image format"`
+- `"malformed image hex payload"`
 
 **`MergeConflict` reasons**:
 - `"Orphan merge continuation without start - treating as standalone cell"`

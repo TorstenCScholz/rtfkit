@@ -57,6 +57,15 @@ pub enum ParseError {
     /// Empty input.
     #[error("Invalid RTF: empty input")]
     EmptyInput,
+
+    /// Cumulative decoded image bytes exceed the configured limit.
+    #[error("Image bytes exceeded: {total} bytes exceeds limit of {limit} bytes")]
+    ImageBytesExceeded {
+        /// Total bytes after adding current image
+        total: usize,
+        /// Configured maximum bytes
+        limit: usize,
+    },
 }
 
 // =============================================================================

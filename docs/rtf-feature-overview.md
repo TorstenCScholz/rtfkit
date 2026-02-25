@@ -39,6 +39,12 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
   - vertical merges (`\clvmgf`, `\clvmrg`)
   - cell vertical alignment (`\clvertalt`, `\clvertalc`, `\clvertalb`)
   - deterministic recovery for malformed merge/table structures
+- **Embedded images**:
+  - PNG images (`\pngblip`)
+  - JPEG images (`\jpegblip`)
+  - image dimensions (`\picwgoal`, `\pichgoal`, `\picw`, `\pich`)
+  - image scaling (`\picscalex`, `\picscaley`)
+  - shape picture handling (`\shppict`, `\nonshppict`)
 
 ## Partially supported / degraded
 
@@ -49,13 +55,17 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
   - percentage patterns (e.g., 25%, 50%) are rendered as solid fill in HTML/Typst
   - `PatternDegraded` warning emitted for Typst output
 - **Some malformed table/list inputs** are repaired with warnings (and `DroppedContent` when semantics are lost)
+- **WMF/EMF images** are dropped with `unsupported_image_format` warning
+- **Malformed image hex data** is dropped with `malformed_image_hex_payload` warning
 - **Warning-cap behavior** preserves strict-mode signal (`DroppedContent`)
 
 ## Not yet supported
 
-- **Images/embedded objects** as first-class output:
-  - `\pict`, `\obj`, related object destinations are currently dropped with warnings
 - **Full RTF table styling parity** (complex borders/layout behavior)
+- **WMF/EMF image formats** - Vector image formats are dropped with warning; convert to PNG/JPEG before embedding
+- **Inline images** - Images are block-level only
+- **Image cropping** - `\cropl`, `\cropr`, `\cropt`, `\cropb` controls not supported
+- **Floating/anchored images** - Images are inline with text flow
 
 ## Notes
 

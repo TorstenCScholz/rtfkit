@@ -921,10 +921,69 @@ impl TableCell {
     }
 }
 
+// =============================================================================
+// Image Types for Phase 6 (Images)
+// =============================================================================
+
+/// Image format for embedded pictures.
+///
+/// Represents the supported image formats for RTF `\pict` groups.
+/// RTF supports various image formats, but we currently only support
+/// the most common ones: PNG and JPEG.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageFormat {
+    /// PNG image format
+    Png,
+    /// JPEG image format
+    Jpeg,
+}
+
+/// An embedded image block.
+///
+/// Represents an image embedded in the document via RTF `\pict` groups.
+/// The image data is stored as raw bytes in the format specified by `format`.
+/// Dimensions are stored in twips (1/20th of a point) when available.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ImageBlock {
+    /// The image format (PNG or JPEG)
+    pub format: ImageFormat,
+    /// Raw image data bytes
+    pub data: Vec<u8>,
+    /// Image width in twips (1/20th point), if specified
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width_twips: Option<i32>,
+    /// Image height in twips (1/20th point), if specified
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height_twips: Option<i32>,
+}
+
+impl ImageBlock {
+    /// Creates a new image block with the given format and data.
+    pub fn new(format: ImageFormat, data: Vec<u8>) -> Self {
+        Self {
+            format,
+            data,
+            width_twips: None,
+            height_twips: None,
+        }
+    }
+
+    /// Creates an image block with dimensions.
+    pub fn with_dimensions(format: ImageFormat, data: Vec<u8>, width_twips: i32, height_twips: i32) -> Self {
+        Self {
+            format,
+            data,
+            width_twips: Some(width_twips),
+            height_twips: Some(height_twips),
+        }
+    }
+}
+
 /// A block-level element in the document.
 ///
 /// `Block` represents the top-level structural elements of a document.
-/// Currently supports paragraphs, lists, and tables.
+/// Currently supports paragraphs, lists, tables, and images.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Block {
@@ -934,6 +993,8 @@ pub enum Block {
     ListBlock(ListBlock),
     /// A table block containing rows and cells
     TableBlock(TableBlock),
+    /// An image block containing embedded picture data
+    ImageBlock(ImageBlock),
 }
 
 /// The root document structure containing all content.

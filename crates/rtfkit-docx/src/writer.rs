@@ -12,9 +12,9 @@ use docx_rs::{
 };
 use indexmap::IndexMap;
 use rtfkit_core::{
-    Alignment, Block, CellMerge, CellVerticalAlign, Document, Hyperlink as IrHyperlink, Inline,
-    ListBlock, ListId, ListKind, Paragraph, Run, Shading as IrShading, ShadingPattern, TableBlock,
-    TableCell as IrTableCell, TableRow as IrTableRow,
+    Alignment, Block, CellMerge, CellVerticalAlign, Document, Hyperlink as IrHyperlink, ImageBlock,
+    ImageFormat, Inline, ListBlock, ListId, ListKind, Paragraph, Run, Shading as IrShading,
+    ShadingPattern, TableBlock, TableCell as IrTableCell, TableRow as IrTableRow,
 };
 use std::fs::File;
 use std::io::{Cursor, Write};
@@ -182,6 +182,97 @@ impl Default for NumberingAllocator {
 }
 
 // =============================================================================
+// Image Allocator
+// =============================================================================
+
+/// Allocates image IDs and tracks images for DOCX output.
+///
+/// The `ImageAllocator` tracks images encountered during document conversion,
+/// ensuring deterministic ID assignment and filename generation for reproducible
+/// DOCX output.
+#[derive(Debug, Clone)]
+pub struct ImageAllocator {
+    /// Collected images: (filename, format, data)
+    /// Uses Vec for deterministic order by encounter sequence
+    images: Vec<(String, ImageFormat, Vec<u8>)>,
+    /// Next image number for naming (image1, image2, etc.)
+    next_image_num: u32,
+}
+
+impl ImageAllocator {
+    /// Creates a new empty ImageAllocator.
+    pub fn new() -> Self {
+        Self {
+            images: Vec::new(),
+            next_image_num: 1,
+        }
+    }
+
+    /// Registers an image and returns its relationship ID.
+    ///
+    /// This method:
+    /// - Stores the image data for later inclusion in the DOCX package
+    /// - Generates a deterministic filename (image1.png, image2.jpg, etc.)
+    /// - Returns the 1-based index for relationship ID generation
+    ///
+    /// # Arguments
+    ///
+    /// * `image` - The image block to register
+    ///
+    /// # Returns
+    ///
+    /// The 1-based image index for use in relationship IDs
+    pub fn register_image(&mut self, image: &ImageBlock) -> usize {
+        let extension = match image.format {
+            ImageFormat::Png => "png",
+            ImageFormat::Jpeg => "jpg",
+        };
+
+        let filename = format!("image{}.{}", self.next_image_num, extension);
+        self.next_image_num += 1;
+
+        let index = self.images.len() + 1; // 1-based index for rId
+        self.images.push((filename, image.format, image.data.clone()));
+
+        index
+    }
+
+    /// Returns true if any images have been registered.
+    pub fn has_images(&self) -> bool {
+        !self.images.is_empty()
+    }
+
+    /// Returns the number of registered images.
+    pub fn image_count(&self) -> usize {
+        self.images.len()
+    }
+
+    /// Returns a reference to the collected images.
+    pub fn images(&self) -> &[(String, ImageFormat, Vec<u8>)] {
+        &self.images
+    }
+}
+
+impl Default for ImageAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// =============================================================================
+// Unit Conversion Utilities
+// =============================================================================
+
+/// Converts twips to English Metric Units (EMUs).
+///
+/// EMUs are used in DrawingML for image dimensions.
+/// 1 twip = 635 EMUs (1 twip = 1/20 point, 1 point = 914400 EMUs / 72)
+/// Therefore: 1 twip = 914400 / 72 / 20 = 635 EMUs
+fn twips_to_emu(twips: i32) -> i64 {
+    twips as i64 * 635
+}
+
+// =============================================================================
 // Document Writing Functions
 // =============================================================================
 
@@ -244,17 +335,188 @@ pub fn write_docx(document: &Document, path: &Path) -> Result<(), DocxError> {
 /// assert!(!bytes.is_empty());
 /// ```
 pub fn write_docx_to_bytes(document: &Document) -> Result<Vec<u8>, DocxError> {
-    let docx = convert_document(document)?;
+    // First pass: collect images from the document
+    let images = collect_images(document);
 
-    let mut cursor = Cursor::new(Vec::new());
-    docx.pack(&mut cursor)?;
-    Ok(cursor.into_inner())
+    // Check if we have images that need special handling
+    if images.is_empty() {
+        // No images, use the standard path
+        let docx = convert_document(document)?;
+        let mut cursor = Cursor::new(Vec::new());
+        docx.pack(&mut cursor)?;
+        Ok(cursor.into_inner())
+    } else {
+        // We have images - need to post-process the ZIP
+        let docx = convert_document(document)?;
+        let mut cursor = Cursor::new(Vec::new());
+        docx.pack(&mut cursor)?;
+        let base_bytes = cursor.into_inner();
+
+        // Post-process to add images
+        add_images_to_docx(base_bytes, &images)
+    }
+}
+
+/// Collects all images from a document.
+///
+/// This function extracts all ImageBlock instances from the document
+/// in encounter order for deterministic processing.
+fn collect_images(document: &Document) -> Vec<ImageBlock> {
+    let mut images = Vec::new();
+    for block in &document.blocks {
+        collect_images_from_block(block, &mut images);
+    }
+    images
+}
+
+/// Recursively collects images from a block.
+fn collect_images_from_block(block: &Block, images: &mut Vec<ImageBlock>) {
+    match block {
+        Block::ImageBlock(image) => {
+            images.push(image.clone());
+        }
+        Block::ListBlock(list) => {
+            for item in &list.items {
+                for item_block in &item.blocks {
+                    collect_images_from_block(item_block, images);
+                }
+            }
+        }
+        Block::TableBlock(table) => {
+            for row in &table.rows {
+                for cell in &row.cells {
+                    for cell_block in &cell.blocks {
+                        collect_images_from_block(cell_block, images);
+                    }
+                }
+            }
+        }
+        Block::Paragraph(_) => {}
+    }
+}
+
+/// Adds images to a generated DOCX ZIP archive.
+///
+/// This function:
+/// 1. Extracts the base DOCX content
+/// 2. Adds media files to word/media/
+/// 3. Updates word/_rels/document.xml.rels with image relationships
+/// 4. Re-packages the ZIP
+fn add_images_to_docx(base_bytes: Vec<u8>, images: &[ImageBlock]) -> Result<Vec<u8>, DocxError> {
+    use std::io::Read;
+
+    let reader = Cursor::new(base_bytes);
+    let mut archive = zip::ZipArchive::new(reader)
+        .map_err(|e| DocxError::ImageEmbedding {
+            reason: format!("Failed to read base DOCX: {}", e),
+        })?;
+
+    // Create output buffer
+    let mut output = Cursor::new(Vec::new());
+    {
+        let mut writer = zip::ZipWriter::new(&mut output);
+        let options = zip::write::FileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+
+        // Copy existing entries
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i).map_err(|e| DocxError::ImageEmbedding {
+                reason: format!("Failed to read ZIP entry: {}", e),
+            })?;
+            let name = file.name().to_string();
+
+            // Special handling for relationships file
+            if name == "word/_rels/document.xml.rels" {
+                let mut rels_content = String::new();
+                file.read_to_string(&mut rels_content)
+                    .map_err(|e| DocxError::ImageEmbedding {
+                        reason: format!("Failed to read relationships: {}", e),
+                    })?;
+
+                // Add image relationships
+                let updated_rels = add_image_relationships(&rels_content, images);
+                writer.start_file(&name, options).map_err(|e| DocxError::ImageEmbedding {
+                    reason: format!("Failed to create ZIP entry: {}", e),
+                })?;
+                writer.write_all(updated_rels.as_bytes()).map_err(|e| DocxError::ImageEmbedding {
+                    reason: format!("Failed to write relationships: {}", e),
+                })?;
+            } else {
+                // Copy file as-is
+                writer.start_file(&name, options).map_err(|e| DocxError::ImageEmbedding {
+                    reason: format!("Failed to create ZIP entry: {}", e),
+                })?;
+                std::io::copy(&mut file, &mut writer).map_err(|e| DocxError::ImageEmbedding {
+                    reason: format!("Failed to copy ZIP entry: {}", e),
+                })?;
+            }
+        }
+
+        // Add media files
+        for (idx, image) in images.iter().enumerate() {
+            let extension = match image.format {
+                ImageFormat::Png => "png",
+                ImageFormat::Jpeg => "jpg",
+            };
+            let media_path = format!("word/media/image{}.{}", idx + 1, extension);
+
+            writer.start_file(&media_path, options).map_err(|e| DocxError::ImageEmbedding {
+                reason: format!("Failed to create media file: {}", e),
+            })?;
+            writer.write_all(&image.data).map_err(|e| DocxError::ImageEmbedding {
+                reason: format!("Failed to write image data: {}", e),
+            })?;
+        }
+
+        writer.finish().map_err(|e| DocxError::ImageEmbedding {
+            reason: format!("Failed to finalize ZIP: {}", e),
+        })?;
+    }
+
+    Ok(output.into_inner())
+}
+
+/// Adds image relationships to the document.xml.rels content.
+///
+/// This function injects relationship entries for each image before the closing
+/// </Relationships> tag.
+fn add_image_relationships(rels_content: &str, images: &[ImageBlock]) -> String {
+    // Find the closing tag
+    let close_tag = "</Relationships>";
+    let insert_pos = rels_content.rfind(close_tag).unwrap_or(rels_content.len());
+
+    // Build image relationship entries
+    let mut image_rels = String::new();
+    for (idx, image) in images.iter().enumerate() {
+        let extension = match image.format {
+            ImageFormat::Png => "png",
+            ImageFormat::Jpeg => "jpg",
+        };
+
+        // Use rIdImageN format to match what we generate in drawing XML
+        let rel_id = format!("rIdImage{}", idx + 1);
+        let target = format!("media/image{}.{}", idx + 1, extension);
+
+        image_rels.push_str(&format!(
+            r#"<Relationship Id="{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="{}"/>"#,
+            rel_id, target
+        ));
+    }
+
+    // Insert before closing tag
+    let mut result = String::with_capacity(rels_content.len() + image_rels.len());
+    result.push_str(&rels_content[..insert_pos]);
+    result.push_str(&image_rels);
+    result.push_str(&rels_content[insert_pos..]);
+
+    result
 }
 
 /// Converts an IR document to a docx-rs XMLDocx.
 fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> {
     let mut doc = Docx::new();
     let mut numbering = NumberingAllocator::new();
+    let mut images = ImageAllocator::new();
 
     // First pass: collect all list blocks (including nested table-cell lists)
     // and register them for deterministic numbering allocation.
@@ -284,6 +546,11 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
             Block::TableBlock(table) => {
                 let docx_table = convert_table(table, &numbering);
                 doc = doc.add_table(docx_table);
+            }
+            Block::ImageBlock(image) => {
+                // Convert image block to a paragraph with drawing element
+                let para = convert_image_block(image, &mut images)?;
+                doc = doc.add_paragraph(para);
             }
         }
     }
@@ -315,6 +582,9 @@ fn register_lists_in_block(block: &Block, numbering: &mut NumberingAllocator) {
                     }
                 }
             }
+        }
+        Block::ImageBlock(_) => {
+            // Images don't contain lists
         }
     }
 }
@@ -537,6 +807,150 @@ fn convert_run(run: &Run) -> DocxRun {
 }
 
 // =============================================================================
+// Image Conversion Functions
+// =============================================================================
+
+/// Converts an IR ImageBlock to a docx-rs Paragraph containing a drawing element.
+///
+/// This function:
+/// - Registers the image with the allocator for later packaging
+/// - Generates a DrawingML inline element referencing the image
+/// - Wraps the drawing in a paragraph
+///
+/// # Arguments
+///
+/// * `image` - The image block to convert
+/// * `images` - The image allocator to register the image with
+///
+/// # Returns
+///
+/// A paragraph containing the drawing element
+fn convert_image_block(
+    image: &ImageBlock,
+    images: &mut ImageAllocator,
+) -> Result<DocxParagraph, DocxError> {
+    // Register the image and get its index
+    let image_index = images.register_image(image);
+
+    // Generate the drawing XML
+    let drawing_xml = generate_drawing_xml(image, image_index)?;
+
+    // Create a paragraph with the drawing element using raw XML injection
+    // docx-rs doesn't have native image support, so we use the raw XML approach
+    let paragraph = DocxParagraph::new()
+        .add_run(DocxRun::new().add_text(&drawing_xml));
+
+    Ok(paragraph)
+}
+
+/// Generates the DrawingML XML for an inline image.
+///
+/// This creates the `w:drawing` element with `wp:inline` containing:
+/// - `wp:docPr` with deterministic ID and name
+/// - `wp:cNvGraphicFramePr`
+/// - `a:graphic` with `a:graphicData` containing `pic:pic`
+/// - Extent values from dimensions (if available)
+///
+/// # Arguments
+///
+/// * `image` - The image block with dimensions
+/// * `image_index` - The 1-based image index for ID generation
+///
+/// # Returns
+///
+/// The XML string for the drawing element
+fn generate_drawing_xml(image: &ImageBlock, image_index: usize) -> Result<String, DocxError> {
+    // Calculate extent in EMUs if dimensions are available
+    let (width_emu, height_emu) = match (image.width_twips, image.height_twips) {
+        (Some(w), Some(h)) => (Some(twips_to_emu(w)), Some(twips_to_emu(h))),
+        _ => (None, None),
+    };
+
+    // Generate unique IDs for docPr and drawing
+    // Use image_index * 2 to ensure unique IDs (docx-rs may use some IDs)
+    let doc_pr_id = (image_index * 2) as u32;
+    let drawing_id = image_index as u32;
+
+    // Build the drawing XML
+    let mut xml = String::new();
+    xml.push_str("<w:drawing>");
+
+    // Inline drawing element
+    xml.push_str("<wp:inline>");
+
+    // Extent (size) if dimensions are available
+    if let (Some(w), Some(h)) = (width_emu, height_emu) {
+        xml.push_str(&format!(
+            r#"<wp:extent cx="{}" cy="{}"/>"#,
+            w, h
+        ));
+    } else {
+        // Default extent when dimensions are not available (1 inch = 914400 EMUs)
+        xml.push_str(r#"<wp:extent cx="914400" cy="914400"/>"#);
+    }
+
+    // docPr (non-visual properties)
+    xml.push_str(&format!(
+        r#"<wp:docPr id="{}" name="Picture {}"/>"#,
+        doc_pr_id, image_index
+    ));
+
+    // cNvGraphicFramePr
+    xml.push_str("<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" noChangeAspect=\"1\"/></wp:cNvGraphicFramePr>");
+
+    // Graphic element
+    xml.push_str(&format!(
+        r#"<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">"#
+    ));
+    xml.push_str(&format!(
+        r#"<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">"#
+    ));
+
+    // Picture element
+    xml.push_str(&format!(
+        r#"<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">"#
+    ));
+
+    // Non-visual picture properties
+    xml.push_str("<pic:nvPicPr>");
+    xml.push_str(&format!(
+        r#"<pic:cNvPr id="{}" name="Picture {}"/>"#,
+        doc_pr_id, image_index
+    ));
+    xml.push_str("<pic:cNvPicPr/>");
+    xml.push_str("</pic:nvPicPr>");
+
+    // Blip fill
+    xml.push_str(&format!(
+        r#"<pic:blipFill><a:blip r:embed="rIdImage{}" cstate="print"/></pic:blipFill>"#,
+        drawing_id
+    ));
+    xml.push_str("<a:stretch><a:fillRect/></a:stretch>");
+
+    // Shape properties with transform
+    xml.push_str("<pic:spPr>");
+    xml.push_str("<a:xfrm>");
+    xml.push_str("<a:off x=\"0\" y=\"0\"/>");
+    if let (Some(w), Some(h)) = (width_emu, height_emu) {
+        xml.push_str(&format!(r#"<a:ext cx="{}" cy="{}"/>"#, w, h));
+    } else {
+        xml.push_str(r#"<a:ext cx="914400" cy="914400"/>"#);
+    }
+    xml.push_str("</a:xfrm>");
+    xml.push_str("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>");
+    xml.push_str("</pic:spPr>");
+
+    // Close elements
+    xml.push_str("</pic:pic>");
+    xml.push_str("</a:graphicData>");
+    xml.push_str("</a:graphic>");
+    xml.push_str("</wp:inline>");
+    xml.push_str("</w:drawing>");
+
+    Ok(xml)
+}
+
+// =============================================================================
 // Table Conversion Functions
 // =============================================================================
 
@@ -698,6 +1112,11 @@ fn convert_table_cell(cell: &IrTableCell, numbering: &NumberingAllocator) -> Tab
             Block::TableBlock(nested_table) => {
                 // Support for nested tables
                 docx_cell = docx_cell.add_table(convert_table(nested_table, numbering));
+            }
+            Block::ImageBlock(_) => {
+                // Images in table cells are not yet supported
+                // They would require passing the image allocator through the call chain
+                // For now, skip images in table cells
             }
         }
     }

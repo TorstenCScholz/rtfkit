@@ -16,6 +16,13 @@ pub enum DocxError {
     /// An error occurred during ZIP compression.
     #[error("ZIP error: {0}")]
     Zip(#[from] zip::result::ZipError),
+
+    /// Failed to embed image in the document.
+    #[error("Image embedding failed: {reason}")]
+    ImageEmbedding {
+        /// Human-readable reason for the failure
+        reason: String,
+    },
 }
 
 #[cfg(test)]

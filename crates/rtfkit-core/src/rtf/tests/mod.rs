@@ -9,6 +9,7 @@
 //! - `fields`: Field/hyperlink tests
 //! - `font_color`: Font/color table tests
 //! - `shading`: Shading tests
+//! - `images`: Image parsing tests
 //! - `regression`: Regression tests
 
 #[cfg(test)]
@@ -17,6 +18,8 @@ mod destinations;
 mod fields;
 #[cfg(test)]
 mod font_color;
+#[cfg(test)]
+mod images;
 #[cfg(test)]
 mod limits;
 #[cfg(test)]

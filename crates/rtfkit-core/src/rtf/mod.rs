@@ -44,10 +44,14 @@ mod tokenizer;
 mod state;
 mod state_destinations;
 mod state_fields;
+mod state_images;
 mod state_lists;
 mod state_resources;
 mod state_style;
 mod state_tables;
+
+// Public re-exports from state modules
+pub use state_images::{decode_pict_hex, resolve_image_dimensions, ImageByteTracker, ImageParsingState, PictDecodeError};
 
 // Internal modules - Phase 3 (handlers)
 mod handlers_control_words;

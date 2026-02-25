@@ -133,6 +133,29 @@ Parse error: Table cell count exceeds maximum: 1500 cells exceeds limit of 1000
 Parse error: Merge span exceeds maximum: 1500 cells exceeds limit of 1000
 ```
 
+### `max_image_bytes_total`
+
+| Property | Value |
+|----------|-------|
+| Default | 50 MiB (52,428,800 bytes) |
+| Type | `usize` |
+| Error | `ParseError::ImageBytesExceeded` |
+
+**Purpose**: Prevents memory exhaustion from documents with large or many embedded images.
+
+**Behavior**: When the cumulative decoded image bytes exceed this limit, parsing fails immediately with a hard parse failure (exit code 2). No partial output is created.
+
+**When to adjust**:
+- Increase for environments processing documents with many high-resolution images
+- Decrease for constrained environments
+
+**Example error**:
+```
+Parse error: Image bytes exceeded: 60000000 bytes exceeds limit of 52428800
+```
+
+**To disable**: Use `ParserLimits::none()` (not recommended for untrusted input).
+
 ## Exit Code Behavior
 
 When a limit is exceeded, rtfkit exits with a specific exit code:
@@ -140,7 +163,7 @@ When a limit is exceeded, rtfkit exits with a specific exit code:
 | Exit Code | Meaning | Limit-Related Cause |
 |-----------|---------|---------------------|
 | 0 | Success | — |
-| 2 | Parse/validation failure | `max_input_bytes`, `max_group_depth`, `max_rows_per_table`, `max_cells_per_row`, `max_merge_span` |
+| 2 | Parse/validation failure | `max_input_bytes`, `max_group_depth`, `max_rows_per_table`, `max_cells_per_row`, `max_merge_span`, `max_image_bytes_total` |
 | 3 | Writer/IO failure | — |
 | 4 | Strict-mode violation | — |
 
@@ -159,7 +182,8 @@ let limits = ParserLimits::new()
     .with_max_warning_count(2000)
     .with_max_rows_per_table(20000)
     .with_max_cells_per_row(2000)
-    .with_max_merge_span(2000);
+    .with_max_merge_span(2000)
+    .with_max_image_bytes_total(100 * 1024 * 1024);  // 100 MiB
 ```
 
 ### No Limits (Not Recommended)
@@ -223,6 +247,7 @@ cargo test --test limits_tests
 
 | Version | Change |
 |---------|--------|
+| 0.11.0 | Added `max_image_bytes_total` limit for embedded images |
 | 0.6.0 | Added limits test matrix, updated documentation |
 | 0.5.0 | Added table-specific limits (rows, cells, merge span) |
 | 0.2.0 | Added initial limits (input size, depth, warnings) |

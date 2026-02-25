@@ -4,6 +4,7 @@
 
 use super::state::RuntimeState;
 use crate::Alignment;
+use crate::ImageFormat;
 
 // =============================================================================
 // Main Control Word Handler
@@ -142,10 +143,68 @@ pub fn handle_control_word(state: &mut RuntimeState, word: &str, parameter: Opti
             if super::handlers_resources::handle_resource_control_word(state, word, parameter) {
                 return;
             }
+            if handle_image_control_word(state, word, parameter) {
+                return;
+            }
             state
                 .report_builder
                 .unsupported_control_word(word, parameter);
         }
+    }
+}
+
+// =============================================================================
+// Image Control Word Handler
+// =============================================================================
+
+/// Handle image-related control words.
+///
+/// These control words are only effective when `state.image.parsing_pict` is true.
+/// Returns `true` if the control word was handled.
+pub fn handle_image_control_word(state: &mut RuntimeState, word: &str, parameter: Option<i32>) -> bool {
+    // Only process image control words when parsing a pict group
+    if !state.image.parsing_pict {
+        return false;
+    }
+
+    match word {
+        // Format identification
+        "pngblip" => {
+            state.image.format = Some(ImageFormat::Png);
+            true
+        }
+        "jpegblip" => {
+            state.image.format = Some(ImageFormat::Jpeg);
+            true
+        }
+        // Dimensions in twips
+        "picw" => {
+            state.image.picw = parameter;
+            true
+        }
+        "pich" => {
+            state.image.pich = parameter;
+            true
+        }
+        // Goal dimensions in twips (preferred over picw/pich)
+        "picwgoal" => {
+            state.image.picwgoal = parameter;
+            true
+        }
+        "pichgoal" => {
+            state.image.pichgoal = parameter;
+            true
+        }
+        // Scaling percentages (default 100)
+        "picscalex" => {
+            state.image.picscalex = parameter.unwrap_or(100);
+            true
+        }
+        "picscaley" => {
+            state.image.picscaley = parameter.unwrap_or(100);
+            true
+        }
+        _ => false,
     }
 }
 
