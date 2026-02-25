@@ -77,4 +77,7 @@ Left-aligned text
 
 #align(right)[Right-aligned text]
 
-#align(justify)[Justified text]
+#[
+  #set par(justify: true)
+  Justified text
+]

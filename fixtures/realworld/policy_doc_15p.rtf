@@ -1,6 +1,6 @@
 {\rtf1\ansi\ansicpg1252\deff0
 {\fonttbl{\f0 Calibri;}{\f1 Cambria;}{\f2 Consolas;}}
-{\colortbl;\red0\green0\blue0;\red0\green89\blue179;\red230\green230\blue230;\red180\green0\blue0;}
+{\colortbl;\red0\green0\blue0;\red0\green89\blue179;\red230\green230\blue230;\red180\green0\blue0;\red0\green128\blue0;\red255\green255\blue0;\red128\green0\blue128;\red255\green165\blue0;}
 \paperw12240\paperh15840\margl1440\margr1440\margt1200\margb1200
 {\header \pard\qr\fs18 Confidential Internal Draft \tab Global Policy and Controls Handbook\par}
 {\footer \pard\qc\fs18 Page {\field{\*\fldinst PAGE}{\fldrslt 1}} of {\field{\*\fldinst NUMPAGES}{\fldrslt 1}}\par}
@@ -10,9 +10,12 @@
 {\list\listtemplateid1\listid1
 {\listlevel\levelnfc23\levelnfcn23\leveljc0\levelfollow0\levelstartat1\levelspace0\levelindent0{\leveltext\'01\u8226?;}{\levelnumbers;}\fi-360\li720}
 {\listlevel\levelnfc23\levelnfcn23\leveljc0\levelfollow0\levelstartat1\levelspace0\levelindent0{\leveltext\'01\u9702?;}{\levelnumbers;}\fi-360\li1440}
+{\listlevel\levelnfc23\levelnfcn23\leveljc0\levelfollow0\levelstartat1\levelspace0\levelindent0{\leveltext\'01\u9679?;}{\levelnumbers;}\fi-360\li2160}
 {\listname ;}\listid1}
 {\list\listtemplateid2\listid2
 {\listlevel\levelnfc0\levelnfcn0\leveljc0\levelfollow0\levelstartat1\levelspace0\levelindent0{\leveltext\'02\'00.;}{\levelnumbers\'01;}\fi-360\li720}
+{\listlevel\levelnfc0\levelnfcn0\leveljc0\levelfollow0\levelstartat1\levelspace0\levelindent0{\leveltext\'04\'00.\'01.;}{\levelnumbers\'01\'03;}\fi-360\li1440}
+{\listlevel\levelnfc0\levelnfcn0\leveljc0\levelfollow0\levelstartat1\levelspace0\levelindent0{\leveltext\'06\'00.\'01.\'02.;}{\levelnumbers\'01\'03\'05;}\fi-360\li2160}
 {\listname ;}\listid2}}
 {\listoverridetable{\listoverride\listid1\listoverridecount0\ls1}{\listoverride\listid2\listoverridecount0\ls2}}
 \viewkind4\uc1
@@ -320,4 +323,83 @@
 \intbl Defect density\cell 24\cell 33\cell Trending down with patch-cycle enforcement\cell\row
 \pard\fs20 Closing note 15: decisions are pending on governance and long-tail remediation ownership.\par
 {\footnote \pard\plain\fs18 Footnote 15: legal review requested for archived exceptions and risk acceptance boundaries.}\par
+\page
+\pard\sb220\sa120\fs26\b 16. Formatting Showcase\b0\par
+\pard\fs20 This section demonstrates all supported RTF formatting features in rtfkit.\par
+\pard\sb180\sa120\fs24\b Text Formatting Examples\b0\par
+\pard\fs20 This is \i italic text\i0  and this is \ul underlined text\ulnone .\par
+\pard\fs20 This is \b\i bold italic\i0\b0  and \b\ul bold underlined\ulnone\b0  text.\par
+\pard\fs20 This is \i\ul italic underlined\ulnone\i0  text.\par
+\pard\fs20 This is \b\i\ul bold italic underlined\ulnone\i0\b0  all together.\par
+\pard\fs20 This is \cf2 blue text\cf0  and this is \cf4 red text\cf0 .\par
+\pard\fs20 This is \cf5 green text\cf0  and this is \cf7 orange text\cf0 .\par
+\pard\fs20 This has \highlight3 gray highlight\highlight0  and this has \highlight6 yellow highlight\highlight0 .\par
+\pard\fs20 This demonstrates \cb4 red background\cb0  using \\\cbN  control word.\par
+\pard\fs20 Before \plain\fs24\cf2\i reset\plain\fs20  - after plain reset (back to normal).\par
+\pard\sb180\sa120\fs24\b Paragraph Alignment Examples\b0\par
+\pard\ql\fs20 This paragraph is left-aligned (default).\par
+\pard\qc\fs20 This paragraph is centered.\par
+\pard\qr\fs20 This paragraph is right-aligned.\par
+\pard\qj\fs20 This paragraph is justified. The text should stretch across the full width of the page with even spacing between words. This demonstrates the justified alignment feature supported by rtfkit.\par
+\pard\sb180\sa120\fs24\b Special Characters Examples\b0\par
+\pard\fs20 Escaped symbols: backslash \\\\ , open brace \\{ , close brace \\} .\par
+\pard\fs20 Non-breaking space: before\~after (prevents line break).\par
+\pard\fs20 Non-breaking hyphen: pre\-post (prevents line break at hyphen).\par
+\pard\fs20 Line break example:\line This text appears on a new line but in the same paragraph.\par
+\pard\sb180\sa120\fs24\b Deep Nested Lists\b0\par
+\pard\ls2\ilvl0 First level item A\par
+\pard\ls2\ilvl1 Second level item A.1\par
+\pard\ls2\ilvl2 Third level item A.1.a\par
+\pard\ls2\ilvl2 Third level item A.1.b\par
+\pard\ls2\ilvl1 Second level item A.2\par
+\pard\ls2\ilvl0 First level item B\par
+\pard\ls1\ilvl0 Bullet level 1\par
+\pard\ls1\ilvl1 Bullet level 2\par
+\pard\ls1\ilvl2 Bullet level 3\par
+\pard\sb180\sa120\fs24\b Paragraph Shading Examples\b0\par
+\pard\fs20\cbpat3 This paragraph has gray background shading using \\\cbpat .\par
+\pard\fs20\cbpat4 This paragraph has red background shading.\par
+\pard\fs20\shading5000 This paragraph has 50% shading pattern.\par
+\pard\fs20\shading2500 This paragraph has 25% shading pattern.\par
+\pard\sb180\sa120\fs24\b Table with Cell Merges\b0\par
+\trowd\trgaph108\trleft0\cellx2500\cellx5000\cellx7500\cellx10000
+\intbl Header 1\cell Header 2\cell Header 3\cell Header 4\cell\row
+\trowd\trgaph108\trleft0\clmgf\cellx2500\cellx5000\cellx7500\cellx10000
+\intbl Merged A\cell B\cell C\cell D\cell\row
+\trowd\trgaph108\trleft0\clmrg\cellx2500\cellx5000\cellx7500\cellx10000
+\intbl \cell B2\cell C2\cell D2\cell\row
+\trowd\trgaph108\trleft0\cellx2500\clmgf\cellx5000\clmrg\cellx7500\cellx10000
+\intbl A3\cell Merged B-C\cell \cell D3\cell\row
+\pard\sb180\sa120\fs24\b Table with Vertical Merges\b0\par
+\trowd\trgaph108\trleft0\clvmgf\cellx2500\cellx5000\cellx7500\cellx10000
+\intbl VMerge Top\cell B1\cell C1\cell D1\cell\row
+\trowd\trgaph108\trleft0\clvmrg\cellx2500\cellx5000\cellx7500\cellx10000
+\intbl \cell B2\cell C2\cell D2\cell\row
+\trowd\trgaph108\trleft0\clvmrg\cellx2500\cellx5000\cellx7500\cellx10000
+\intbl \cell B3\cell C3\cell D3\cell\row
+\pard\sb180\sa120\fs24\b Table with Cell Vertical Alignment\b0\par
+\trowd\trgaph108\trleft0\clvertalt\cellx2500\clvertalc\cellx5000\clvertalb\cellx7500\cellx10000
+\intbl Top aligned\cell Center aligned\cell Bottom aligned\cell Default\cell\row
+\pard\sb180\sa120\fs24\b Table with Row Alignment\b0\par
+\trowd\trgaph108\trleft0\trql\cellx2500\cellx5000\cellx7500\cellx10000
+\intbl Left row\cell A\cell B\cell C\cell\row
+\trowd\trgaph108\trleft0\trqc\cellx2500\cellx5000\cellx7500\cellx10000
+\intbl Center row\cell A\cell B\cell C\cell\row
+\trowd\trgaph108\trleft0\trqr\cellx2500\cellx5000\cellx7500\cellx10000
+\intbl Right row\cell A\cell B\cell C\cell\row
+\pard\sb180\sa120\fs24\b Table with Cell Shading\b0\par
+\trowd\trgaph108\trleft0\clcbpat3\cellx2500\clcbpat4\cellx5000\clcbpat5\cellx7500\clcbpat6\cellx10000
+\intbl Gray cell\cell Red cell\cell Green cell\cell Yellow cell\cell\row
+\trowd\trgaph108\trleft0\clshdng2500\cellx2500\clshdng5000\cellx5000\clshdng7500\cellx7500\clshdng10000\cellx10000
+\intbl 25% shade\cell 50% shade\cell 75% shade\cell 100% shade\cell\row
+\pard\sb180\sa120\fs24\b Table with Row Shading\b0\par
+\trowd\trgaph108\trleft0\trcbpat3\cellx2500\cellx5000\cellx7500\cellx10000
+\intbl Row shaded\cell All cells\cell Same color\cell Gray\cell\row
+\trowd\trgaph108\trleft0\trcbpat4\cellx2500\clcbpat5\cellx5000\cellx7500\cellx10000
+\intbl Red row\cell Green override\cell Back to red\cell Red\cell\row
+\pard\sb180\sa120\fs24\b Theme Color Examples\b0\par
+\pard\fs20\themecolor2 This text uses theme color 2 (accent1).\par
+\pard\fs20\themecolor3\ctint500 This text uses theme color 3 with 50% tint.\par
+\pard\fs20\themecolor4\cshade500 This text uses theme color 4 with 50% shade.\par
+\pard\fs20 End of formatting showcase.\par
 }

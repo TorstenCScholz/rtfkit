@@ -18,7 +18,7 @@
 //! | `Alignment::Left` | (default, no directive) |
 //! | `Alignment::Center` | `#align(center)[...]` |
 //! | `Alignment::Right` | `#align(right)[...]` |
-//! | `Alignment::Justify` | `#align(justify)[...]` |
+//! | `Alignment::Justify` | `#[#set par(justify: true) ...]` |
 //!
 //! ## Special Character Escaping
 //!
@@ -79,7 +79,9 @@ pub fn map_paragraph(paragraph: &Paragraph) -> ParagraphOutput {
             Alignment::Left => content,
             Alignment::Center => format!("#align(center)[{}]", content),
             Alignment::Right => format!("#align(right)[{}]", content),
-            Alignment::Justify => format!("#align(justify)[{}]", content),
+            // Typst doesn't have a "justify" alignment value. Instead, we use
+            // #set par(justify: true) wrapped in a content block to scope it.
+            Alignment::Justify => format!("#[\n  #set par(justify: true)\n  {}\n]", content),
         }
     };
 
@@ -575,7 +577,10 @@ mod tests {
         paragraph.alignment = Alignment::Justify;
 
         let output = map_paragraph(&paragraph);
-        assert_eq!(output.typst_source, "#align(justify)[justified]");
+        assert_eq!(
+            output.typst_source,
+            "#[\n  #set par(justify: true)\n  justified\n]"
+        );
     }
 
     #[test]
