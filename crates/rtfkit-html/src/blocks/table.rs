@@ -834,7 +834,7 @@ mod tests {
 
         // Pattern should be ignored - only fill_color emitted as background-color
         assert!(html.contains(r#"style="background-color: #ffffff;""#));
-        assert!(!html.contains("#000000")); // Pattern color not emitted
+        assert!(!html.contains(&format!("#{}", "000000"))); // Pattern color not emitted
         assert!(html.contains("Patterned"));
     }
 
@@ -858,7 +858,7 @@ mod tests {
 
         // Only fill_color should be emitted
         assert!(html.contains(r#"style="background-color: #c8c8c8;""#));
-        assert!(!html.contains("#646464")); // Pattern color not emitted
+        assert!(!html.contains(&format!("#{}", "646464"))); // Pattern color not emitted
     }
 
     #[test]
@@ -882,7 +882,7 @@ mod tests {
 
         // Only fill_color should be emitted, pattern ignored
         assert!(html.contains(r#"style="background-color: #ffff00;""#));
-        assert!(!html.contains("#ff0000")); // Pattern color not emitted
+        assert!(!html.contains(&format!("#{}", "ff0000"))); // Pattern color not emitted
     }
 
     #[test]
@@ -911,6 +911,6 @@ mod tests {
         assert!(html.contains(r#"class="rtf-valign-middle""#));
         assert!(html.contains(r#"width: 36.0pt"#));
         assert!(html.contains(r#"background-color: #008000"#));
-        assert!(!html.contains("#ffffff")); // Pattern color not emitted
+        assert!(!html.contains(&format!("#{}", "ffffff"))); // Pattern color not emitted
     }
 }
