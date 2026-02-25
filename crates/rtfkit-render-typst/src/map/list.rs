@@ -25,7 +25,7 @@
 
 use rtfkit_core::{ListBlock as IrListBlock, ListItem as IrListItem, ListKind as IrListKind};
 
-use super::{MappingWarning, map_block};
+use super::{map_block, MappingWarning, TypstAssetAllocator};
 
 /// Result of mapping a list to Typst source.
 #[derive(Debug, Clone, PartialEq)]
@@ -50,6 +50,14 @@ pub struct ListOutput {
 ///
 /// This function is deterministic: the same input always produces the same output.
 pub fn map_list(list: &IrListBlock) -> ListOutput {
+    let mut assets = TypstAssetAllocator::new();
+    map_list_with_assets(list, &mut assets)
+}
+
+pub(crate) fn map_list_with_assets(
+    list: &IrListBlock,
+    assets: &mut TypstAssetAllocator,
+) -> ListOutput {
     let mut warnings = Vec::new();
 
     // Track mixed kind fallback
@@ -57,7 +65,7 @@ pub fn map_list(list: &IrListBlock) -> ListOutput {
         warnings.push(MappingWarning::ListMixedKindFallbackToBullet);
     }
 
-    let typst_source = map_list_items(&list.items, list.kind, &mut warnings);
+    let typst_source = map_list_items(&list.items, list.kind, assets, &mut warnings);
 
     ListOutput {
         typst_source,
@@ -71,6 +79,7 @@ pub fn map_list(list: &IrListBlock) -> ListOutput {
 fn map_list_items(
     items: &[IrListItem],
     kind: IrListKind,
+    assets: &mut TypstAssetAllocator,
     warnings: &mut Vec<MappingWarning>,
 ) -> String {
     if items.is_empty() {
@@ -89,7 +98,7 @@ fn map_list_items(
             });
         }
 
-        let item_content = map_list_item(item, warnings);
+        let item_content = map_list_item(item, assets, warnings);
         if item_content.is_empty() {
             previous_level = item.level;
             continue;
@@ -111,11 +120,15 @@ fn map_list_items(
 }
 
 /// Map a single list item's content to Typst source.
-fn map_list_item(item: &IrListItem, warnings: &mut Vec<MappingWarning>) -> String {
+fn map_list_item(
+    item: &IrListItem,
+    assets: &mut TypstAssetAllocator,
+    warnings: &mut Vec<MappingWarning>,
+) -> String {
     let mut content_parts = Vec::new();
 
     for block in &item.blocks {
-        let block_output = map_block(block);
+        let block_output = map_block(block, assets);
         if !block_output.typst_source.is_empty() {
             content_parts.push(block_output.typst_source);
             warnings.extend(block_output.warnings);
@@ -256,12 +269,10 @@ mod tests {
 
         // Should use bullet marker
         assert!(output.typst_source.starts_with('-'));
-        assert!(
-            output
-                .warnings
-                .iter()
-                .any(|w| matches!(w, crate::map::MappingWarning::ListMixedKindFallbackToBullet))
-        );
+        assert!(output
+            .warnings
+            .iter()
+            .any(|w| matches!(w, crate::map::MappingWarning::ListMixedKindFallbackToBullet)));
     }
 
     #[test]

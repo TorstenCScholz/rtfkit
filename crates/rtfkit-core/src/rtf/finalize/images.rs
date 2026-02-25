@@ -3,8 +3,10 @@
 //! This module contains logic for finalizing embedded images from RTF `\pict`
 //! groups into `Block::ImageBlock` IR nodes.
 
+use super::super::{
+    ImageByteTracker, ImageParsingState, decode_pict_hex, resolve_image_dimensions,
+};
 use crate::{Block, ImageBlock, ImageFormat};
-use super::super::{ImageParsingState, ImageByteTracker, decode_pict_hex, resolve_image_dimensions};
 
 // =============================================================================
 // Dropped Content Reason Strings
@@ -28,7 +30,10 @@ pub enum ImageFinalizationResult {
     /// Image was dropped due to error (contains reason string).
     Dropped(&'static str),
     /// Hard failure - byte limit exceeded.
-    ByteLimitExceeded,
+    ByteLimitExceeded {
+        /// Total decoded bytes after hypothetically adding this image.
+        attempted_total: usize,
+    },
 }
 
 // =============================================================================
@@ -79,9 +84,12 @@ pub fn finalize_image(
 
     // Step 3: Check byte limit (hard failure)
     let byte_count = data.len();
-    if !tracker.add(byte_count) {
-        return ImageFinalizationResult::ByteLimitExceeded;
+    if tracker.would_exceed(byte_count) {
+        return ImageFinalizationResult::ByteLimitExceeded {
+            attempted_total: tracker.total_bytes.saturating_add(byte_count),
+        };
     }
+    let _ = tracker.add(byte_count);
 
     // Step 4: Resolve dimensions
     let (width_twips, height_twips) = resolve_image_dimensions(state);
@@ -214,8 +222,9 @@ mod tests {
         let result = finalize_image(&state, &mut tracker);
 
         match result {
-            ImageFinalizationResult::ByteLimitExceeded => {
+            ImageFinalizationResult::ByteLimitExceeded { attempted_total } => {
                 // Expected
+                assert_eq!(attempted_total, 5);
             }
             _ => panic!("Expected ByteLimitExceeded"),
         }
@@ -230,7 +239,7 @@ mod tests {
         state.format = Some(ImageFormat::Png);
         state.hex_buffer = "48656c6c6f".to_string();
         state.picwgoal = Some(1440); // 1 inch
-        state.pichgoal = Some(720);  // 0.5 inch
+        state.pichgoal = Some(720); // 0.5 inch
 
         let mut tracker = ImageByteTracker::new(1000);
 
@@ -252,7 +261,7 @@ mod tests {
         state.hex_buffer = "48656c6c6f".to_string();
         state.picwgoal = Some(1000);
         state.pichgoal = Some(500);
-        state.picscalex = 50;  // 50% scale
+        state.picscalex = 50; // 50% scale
         state.picscaley = 50;
 
         let mut tracker = ImageByteTracker::new(1000);
@@ -261,7 +270,7 @@ mod tests {
 
         match result {
             ImageFinalizationResult::Success(Block::ImageBlock(img)) => {
-                assert_eq!(img.width_twips, Some(500));  // 1000 * 50 / 100
+                assert_eq!(img.width_twips, Some(500)); // 1000 * 50 / 100
                 assert_eq!(img.height_twips, Some(250)); // 500 * 50 / 100
             }
             _ => panic!("Expected Success with ImageBlock"),
@@ -328,7 +337,10 @@ mod tests {
         // Now try to add more - should fail
         let state4 = create_test_state(Some(ImageFormat::Jpeg), "54657374"); // 4 bytes
         let result4 = finalize_image(&state4, &mut small_tracker);
-        assert!(matches!(result4, ImageFinalizationResult::ByteLimitExceeded));
+        assert!(matches!(
+            result4,
+            ImageFinalizationResult::ByteLimitExceeded { attempted_total: 9 }
+        ));
     }
 
     #[test]

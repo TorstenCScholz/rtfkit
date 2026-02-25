@@ -25,7 +25,8 @@ use rtfkit_core::{ImageBlock, ImageFormat};
 /// `pixels = twips / 15` (based on 96 DPI, 1440 twips per inch).
 pub fn image_to_html(image: &ImageBlock, buf: &mut HtmlBuffer) {
     // Convert image data to base64
-    let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &image.data);
+    let base64_data =
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &image.data);
 
     // Determine MIME type based on format
     let mime_type = match image.format {
@@ -38,10 +39,7 @@ pub fn image_to_html(image: &ImageBlock, buf: &mut HtmlBuffer) {
 
     // Build attributes with stable ordering for determinism
     // Order: src, alt, width, height (when present)
-    let mut attrs: Vec<(&str, String)> = vec![
-        ("src", data_uri),
-        ("alt", String::new()),
-    ];
+    let mut attrs: Vec<(&str, String)> = vec![("src", data_uri), ("alt", String::new())];
 
     // Add dimensions if available (convert twips to pixels)
     if let Some(width_twips) = image.width_twips {
@@ -146,12 +144,7 @@ mod tests {
 
     #[test]
     fn test_image_to_html_attribute_ordering() {
-        let image = ImageBlock::with_dimensions(
-            ImageFormat::Png,
-            vec![0x00],
-            150,
-            300,
-        );
+        let image = ImageBlock::with_dimensions(ImageFormat::Png, vec![0x00], 150, 300);
         let mut buf = HtmlBuffer::new();
 
         image_to_html(&image, &mut buf);
@@ -206,7 +199,10 @@ mod tests {
         let html = buf.into_string();
 
         // "test" in base64 is "dGVzdA=="
-        assert!(html.contains("dGVzdA=="), "Base64 encoding should be correct");
+        assert!(
+            html.contains("dGVzdA=="),
+            "Base64 encoding should be correct"
+        );
     }
 
     #[test]

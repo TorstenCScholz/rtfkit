@@ -2481,6 +2481,7 @@ name = "rtfkit-docx"
 version = "0.1.0"
 dependencies = [
  "docx-rs",
+ "image",
  "indexmap",
  "rtfkit-core",
  "tempfile",
@@ -2502,9 +2503,9 @@ dependencies = [
 name = "rtfkit-render-typst"
 version = "0.1.0"
 dependencies = [
- "base64",
  "chrono",
  "ecow",
+ "image",
  "rtfkit-core",
  "rtfkit-style-tokens",
  "tempfile",

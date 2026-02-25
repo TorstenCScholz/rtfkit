@@ -67,7 +67,7 @@ EOF
 \pard\fs20 Program update ${i}: release cadence improved by ${i}% while cross-team coordination remains a top risk.\par
 {\field{\*\fldinst HYPERLINK "https://example.com/${slug}/section-${i}"}{\fldrslt Open source appendix ${i}}}\par
 {\field{\*\fldinst HYPERLINK "mailto:program-office@example.com"}{\fldrslt Contact program office}}\par
-{\pict\pngblip\picwgoal2160\pichgoal960 89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000A49444154789C6360000000020001E221BC330000000049454E44AE426082}\par
+{\pict\pngblip\picwgoal2160\pichgoal960 89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000D4944415478DA63F8CFC0F01F00050001FF56C72F0D0000000049454E44AE426082}\par
 \pard\ls1\ilvl0 Primary finding ${i}: scope pressure is concentrated in two delivery streams.\par
 \pard\ls1\ilvl1 Supporting evidence A.${i}: delivery lead-time variance widened after release cut-off.\par
 \pard\ls1\ilvl1 Supporting evidence B.${i}: staffing churn increased in one business unit.\par

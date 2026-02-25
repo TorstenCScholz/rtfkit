@@ -34,6 +34,7 @@ use typst::utils::LazyHash;
 use typst::{Library as TypstLibrary, LibraryExt as TypstLibraryExt, World as TypstWorld};
 
 use crate::error::{RenderError, Warning, WarningKind};
+use crate::map::TypstAssetBundle;
 
 /// Global font book and fonts, loaded once and reused.
 static FONTS: OnceLock<typst_kit::fonts::Fonts> = OnceLock::new();
@@ -67,6 +68,8 @@ pub struct TypstEngine {
     book: LazyHash<FontBook>,
     /// Font slots.
     fonts: &'static typst_kit::fonts::Fonts,
+    /// In-memory assets addressable by Typst virtual path.
+    assets: TypstAssetBundle,
     /// Optional fixed timestamp for determinism (Unix timestamp).
     fixed_timestamp: Option<i64>,
 }
@@ -77,12 +80,13 @@ impl TypstEngine {
     /// # Arguments
     ///
     /// * `source` - The Typst markup source code
+    /// * `assets` - In-memory assets that Typst may resolve via `#image` etc.
     /// * `fixed_timestamp` - Optional Unix timestamp for deterministic output
     ///
     /// # Returns
     ///
     /// A new `TypstEngine` ready for compilation.
-    pub fn new(source: &str, fixed_timestamp: Option<i64>) -> Self {
+    pub fn new(source: &str, assets: &TypstAssetBundle, fixed_timestamp: Option<i64>) -> Self {
         let fonts = get_fonts();
 
         // Create a fake file ID for the main source
@@ -100,6 +104,7 @@ impl TypstEngine {
             library: LazyHash::new(library),
             book: LazyHash::new(fonts.book.clone()),
             fonts,
+            assets: assets.clone(),
             fixed_timestamp,
         }
     }
@@ -140,18 +145,12 @@ impl TypstWorld for TypstEngine {
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
         let path = id.vpath().as_rootless_path().to_string_lossy();
-        
-        // Handle data URIs for images
-        if path.starts_with("data:image/") {
-            // Parse data URI: data:<mime-type>;base64,<data>
-            if let Some(base64_part) = path.strip_prefix("data:image/").and_then(|s| s.split_once(";base64,")) {
-                let decoded = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, base64_part.1)
-                    .map_err(|_| FileError::NotFound(path.to_string().into()))?;
-                return Ok(Bytes::from(decoded));
-            }
+
+        if let Some(bytes) = self.assets.get(path.as_ref()) {
+            return Ok(Bytes::new(bytes.to_vec()));
         }
 
-        // We don't support loading other external files - all content is in-memory
+        // We only serve bundled virtual assets.
         Err(FileError::NotFound(
             id.vpath().as_rootless_path().to_path_buf(),
         ))
@@ -195,6 +194,7 @@ impl TypstWorld for TypstEngine {
 /// # Arguments
 ///
 /// * `source` - The Typst markup source code
+/// * `assets` - In-memory assets referenced by Typst virtual paths
 /// * `fixed_timestamp` - Optional Unix timestamp for deterministic output
 ///
 /// # Returns
@@ -215,9 +215,10 @@ impl TypstWorld for TypstEngine {
 /// - Creation date: The fixed timestamp (when provided)
 pub fn compile_to_pdf(
     source: &str,
+    assets: &TypstAssetBundle,
     fixed_timestamp: Option<i64>,
 ) -> Result<(Vec<u8>, Vec<Warning>), RenderError> {
-    let engine = TypstEngine::new(source, fixed_timestamp);
+    let engine = TypstEngine::new(source, assets, fixed_timestamp);
 
     // Compile to paged document
     let warned = typst::compile::<PagedDocument>(&engine);
@@ -311,7 +312,7 @@ mod tests {
     #[test]
     fn test_engine_creation() {
         let source = "#set page(width: 210mm, height: 297mm)\nHello, World!";
-        let engine = TypstEngine::new(source, None);
+        let engine = TypstEngine::new(source, &TypstAssetBundle::default(), None);
         assert!(
             engine
                 .source(FileId::new_fake(VirtualPath::new("main.typ")))
@@ -323,14 +324,35 @@ mod tests {
     #[test]
     fn test_engine_with_fixed_timestamp() {
         let source = "Hello, World!";
-        let engine = TypstEngine::new(source, Some(1609459200)); // 2021-01-01 00:00:00 UTC
+        let engine = TypstEngine::new(source, &TypstAssetBundle::default(), Some(1609459200)); // 2021-01-01 00:00:00 UTC
         assert!(engine.source(engine.main_id).is_ok());
+    }
+
+    #[test]
+    fn test_engine_reads_bundled_asset_file() {
+        let mut assets = TypstAssetBundle::default();
+        assets
+            .files
+            .insert("assets/image-000001.png".to_string(), vec![1, 2, 3]);
+
+        let engine = TypstEngine::new("Hello", &assets, None);
+        let file_id = FileId::new_fake(VirtualPath::new("assets/image-000001.png"));
+        let bytes = engine.file(file_id).expect("asset should resolve");
+        assert_eq!(bytes.as_slice(), &[1, 2, 3]);
+    }
+
+    #[test]
+    fn test_engine_missing_asset_returns_not_found() {
+        let engine = TypstEngine::new("Hello", &TypstAssetBundle::default(), None);
+        let file_id = FileId::new_fake(VirtualPath::new("assets/missing.png"));
+        let err = engine.file(file_id).unwrap_err();
+        assert!(matches!(err, FileError::NotFound(_)));
     }
 
     #[test]
     fn test_compile_simple_document() {
         let source = "#set page(width: 210mm, height: 297mm)\nHello, World!";
-        let result = compile_to_pdf(source, None);
+        let result = compile_to_pdf(source, &TypstAssetBundle::default(), None);
         assert!(result.is_ok());
 
         let (pdf_bytes, warnings) = result.unwrap();
@@ -344,7 +366,7 @@ mod tests {
     fn test_compile_with_error() {
         // Invalid Typst syntax
         let source = "#invalid_function_that_does_not_exist()";
-        let result = compile_to_pdf(source, None);
+        let result = compile_to_pdf(source, &TypstAssetBundle::default(), None);
         assert!(result.is_err());
     }
 
@@ -353,8 +375,8 @@ mod tests {
         let source = "#set page(width: 210mm, height: 297mm)\nHello, World!";
         let fixed_ts = Some(1609459200); // Fixed timestamp
 
-        let (pdf1, _) = compile_to_pdf(source, fixed_ts).unwrap();
-        let (pdf2, _) = compile_to_pdf(source, fixed_ts).unwrap();
+        let (pdf1, _) = compile_to_pdf(source, &TypstAssetBundle::default(), fixed_ts).unwrap();
+        let (pdf2, _) = compile_to_pdf(source, &TypstAssetBundle::default(), fixed_ts).unwrap();
 
         // Same input with fixed timestamp should produce identical output
         assert_eq!(pdf1, pdf2);
@@ -367,7 +389,11 @@ mod tests {
         let fixed_ts = Some(1609459200); // 2021-01-01 00:00:00 UTC
 
         let results: Vec<Vec<u8>> = (0..5)
-            .map(|_| compile_to_pdf(source, fixed_ts).unwrap().0)
+            .map(|_| {
+                compile_to_pdf(source, &TypstAssetBundle::default(), fixed_ts)
+                    .unwrap()
+                    .0
+            })
             .collect();
 
         // All results should be identical
@@ -383,7 +409,7 @@ mod tests {
     #[test]
     fn test_pdf_valid_header() {
         let source = "Test content";
-        let (pdf_bytes, _) = compile_to_pdf(source, None).unwrap();
+        let (pdf_bytes, _) = compile_to_pdf(source, &TypstAssetBundle::default(), None).unwrap();
 
         // PDF must start with %PDF- and end with %%EOF
         assert!(pdf_bytes.starts_with(b"%PDF-"));

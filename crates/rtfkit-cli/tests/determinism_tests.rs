@@ -1437,10 +1437,7 @@ mod html_image_tests {
         );
 
         // Verify img element with data URI
-        assert!(
-            html.contains("<img"),
-            "HTML should contain img element"
-        );
+        assert!(html.contains("<img"), "HTML should contain img element");
         assert!(
             html.contains("src=\"data:image/png;base64,"),
             "HTML should contain PNG data URI"
@@ -1449,7 +1446,8 @@ mod html_image_tests {
         // Verify base64 data is present (non-empty)
         // The data URI should have content after the prefix
         assert!(
-            html.contains("src=\"data:image/png;base64,") && html.matches("src=\"data:image/png;base64,").count() == 1,
+            html.contains("src=\"data:image/png;base64,")
+                && html.matches("src=\"data:image/png;base64,").count() == 1,
             "HTML should have exactly one PNG data URI"
         );
     }
@@ -1470,10 +1468,7 @@ mod html_image_tests {
         );
 
         // Verify img element with data URI
-        assert!(
-            html.contains("<img"),
-            "HTML should contain img element"
-        );
+        assert!(html.contains("<img"), "HTML should contain img element");
         assert!(
             html.contains("src=\"data:image/jpeg;base64,"),
             "HTML should contain JPEG data URI"
@@ -1490,10 +1485,7 @@ mod html_image_tests {
         let html = std::fs::read_to_string(html_path).expect("Failed to read HTML file");
 
         // Verify img element exists
-        assert!(
-            html.contains("<img"),
-            "HTML should contain img element"
-        );
+        assert!(html.contains("<img"), "HTML should contain img element");
 
         // Verify dimension attributes are present
         // picwgoal2880 = 2 inches, pichgoal1440 = 1 inch
@@ -1857,11 +1849,6 @@ mod pdf_image_determinism {
     }
 
     /// Test PDF determinism for PNG image.
-    ///
-    /// NOTE: This test is currently ignored because the Typst renderer uses data URIs
-    /// for images, but Typst doesn't support data URIs - it interprets them as file paths.
-    /// TODO: Fix the image rendering to use file paths or embedded bytes instead of data URIs.
-    #[ignore = "Typst doesn't support data URIs for images - needs implementation fix"]
     #[test]
     fn pdf_image_png_is_deterministic() {
         let fixture = "image_png_simple.rtf";
@@ -1886,11 +1873,6 @@ mod pdf_image_determinism {
     }
 
     /// Test PDF determinism for JPEG image.
-    ///
-    /// NOTE: This test is currently ignored because the Typst renderer uses data URIs
-    /// for images, but Typst doesn't support data URIs - it interprets them as file paths.
-    /// TODO: Fix the image rendering to use file paths or embedded bytes instead of data URIs.
-    #[ignore = "Typst doesn't support data URIs for images - needs implementation fix"]
     #[test]
     fn pdf_image_jpeg_is_deterministic() {
         let fixture = "image_jpeg_simple.rtf";
@@ -1915,11 +1897,6 @@ mod pdf_image_determinism {
     }
 
     /// Test PDF determinism for multiple images.
-    ///
-    /// NOTE: This test is currently ignored because the Typst renderer uses data URIs
-    /// for images, but Typst doesn't support data URIs - it interprets them as file paths.
-    /// TODO: Fix the image rendering to use file paths or embedded bytes instead of data URIs.
-    #[ignore = "Typst doesn't support data URIs for images - needs implementation fix"]
     #[test]
     fn pdf_image_multiple_is_deterministic() {
         let fixture = "image_multiple.rtf";
@@ -1944,11 +1921,6 @@ mod pdf_image_determinism {
     }
 
     /// Test PDF determinism for image with dimensions.
-    ///
-    /// NOTE: This test is currently ignored because the Typst renderer uses data URIs
-    /// for images, but Typst doesn't support data URIs - it interprets them as file paths.
-    /// TODO: Fix the image rendering to use file paths or embedded bytes instead of data URIs.
-    #[ignore = "Typst doesn't support data URIs for images - needs implementation fix"]
     #[test]
     fn pdf_image_with_dimensions_is_deterministic() {
         let fixture = "image_with_dimensions.rtf";

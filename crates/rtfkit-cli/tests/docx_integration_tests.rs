@@ -1771,30 +1771,33 @@ fn test_docx_image_png() {
 
     // Verify DOCX contains media file
     assert!(
-        file_exists_in_docx(&docx_path, "word/media/image1.png"),
-        "DOCX should contain word/media/image1.png"
+        file_exists_in_docx(&docx_path, "word/media/rIdImage1.png"),
+        "DOCX should contain word/media/rIdImage1.png"
     );
 
     // Verify relationship entry exists
     if let Some(rels_xml) = extract_rels_xml(&docx_path) {
         assert!(
-            rels_xml.contains("media/image1.png"),
-            "Relationships should reference media/image1.png"
+            rels_xml.contains("media/rIdImage1.png"),
+            "Relationships should reference media/rIdImage1.png"
         );
         assert!(
-            rels_xml.contains("http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"),
+            rels_xml.contains(
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+            ),
             "Relationship should have image relationship type"
         );
     } else {
         panic!("document.xml.rels not found in DOCX");
     }
 
-    // Note: The drawing element is currently being output as escaped text
-    // (&lt;w:drawing&gt;) instead of actual XML. This is a known issue.
-    // For now, check that the drawing markup exists in some form.
     assert!(
-        xml.contains("&lt;w:drawing&gt;") || xml.contains("<w:drawing>"),
-        "document.xml should contain drawing markup (may be escaped)"
+        xml.contains("<w:drawing>"),
+        "document.xml should contain native w:drawing XML"
+    );
+    assert!(
+        !xml.contains("&lt;w:drawing&gt;"),
+        "document.xml should not contain escaped drawing XML"
     );
 }
 
@@ -1806,28 +1809,29 @@ fn test_docx_image_jpeg() {
 
     // Verify DOCX contains media file
     assert!(
-        file_exists_in_docx(&docx_path, "word/media/image1.jpg"),
-        "DOCX should contain word/media/image1.jpg"
+        file_exists_in_docx(&docx_path, "word/media/rIdImage1.png"),
+        "DOCX should contain word/media/rIdImage1.png (JPEG normalized to PNG)"
     );
 
     // Verify relationship entry exists
     if let Some(rels_xml) = extract_rels_xml(&docx_path) {
         assert!(
-            rels_xml.contains("media/image1.jpg"),
-            "Relationships should reference media/image1.jpg"
+            rels_xml.contains("media/rIdImage1.png"),
+            "Relationships should reference media/rIdImage1.png"
         );
         assert!(
-            rels_xml.contains("http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"),
+            rels_xml.contains(
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+            ),
             "Relationship should have image relationship type"
         );
     } else {
         panic!("document.xml.rels not found in DOCX");
     }
 
-    // Note: The drawing element is currently being output as escaped text
     assert!(
-        xml.contains("&lt;w:drawing&gt;") || xml.contains("<w:drawing>"),
-        "document.xml should contain drawing markup (may be escaped)"
+        xml.contains("<w:drawing>"),
+        "document.xml should contain native w:drawing XML"
     );
 }
 
@@ -1840,49 +1844,41 @@ fn test_docx_image_multiple() {
     // Verify DOCX contains multiple media files
     let media_files = list_docx_files(&docx_path, "word/media/");
     assert!(
-        media_files.len() >= 3,
-        "DOCX should contain at least 3 media files, found: {:?}",
+        media_files.len() >= 2,
+        "DOCX should contain at least 2 media files, found: {:?}",
         media_files
     );
 
-    // Verify specific files exist
+    // Verify deterministic image IDs exist.
+    // `docx-rs` deduplicates identical image bytes, so we assert a lower bound.
     assert!(
-        file_exists_in_docx(&docx_path, "word/media/image1.png"),
-        "DOCX should contain word/media/image1.png"
+        file_exists_in_docx(&docx_path, "word/media/rIdImage1.png"),
+        "DOCX should contain word/media/rIdImage1.png"
     );
     assert!(
-        file_exists_in_docx(&docx_path, "word/media/image2.jpg"),
-        "DOCX should contain word/media/image2.jpg"
-    );
-    assert!(
-        file_exists_in_docx(&docx_path, "word/media/image3.png"),
-        "DOCX should contain word/media/image3.png"
+        file_exists_in_docx(&docx_path, "word/media/rIdImage2.png"),
+        "DOCX should contain word/media/rIdImage2.png"
     );
 
-    // Verify multiple relationship entries
+    // Verify multiple relationship entries (deduplication may reduce count vs. IR blocks).
     if let Some(rels_xml) = extract_rels_xml(&docx_path) {
         assert!(
-            rels_xml.contains("image1.png"),
-            "Relationships should reference image1.png"
+            rels_xml.contains("rIdImage1"),
+            "Relationships should reference rIdImage1"
         );
         assert!(
-            rels_xml.contains("image2.jpg"),
-            "Relationships should reference image2.jpg"
-        );
-        assert!(
-            rels_xml.contains("image3.png"),
-            "Relationships should reference image3.png"
+            rels_xml.contains("rIdImage2"),
+            "Relationships should reference rIdImage2"
         );
     } else {
         panic!("document.xml.rels not found in DOCX");
     }
 
-    // Note: Drawing elements are currently being output as escaped text
-    // Count occurrences of drawing markup (escaped or not)
-    let drawing_count = xml.matches("&lt;w:drawing&gt;").count() + xml.matches("<w:drawing>").count();
+    // Three ImageBlock entries should still yield three drawing runs even if media bytes dedupe.
+    let drawing_count = xml.matches("<w:drawing>").count();
     assert!(
         drawing_count >= 3,
-        "document.xml should contain at least 3 drawing markups, found {}",
+        "document.xml should contain at least 3 drawing elements, found {}",
         drawing_count
     );
 }
@@ -1895,22 +1891,21 @@ fn test_docx_image_with_dimensions() {
 
     // Verify DOCX contains media file
     assert!(
-        file_exists_in_docx(&docx_path, "word/media/image1.png"),
-        "DOCX should contain word/media/image1.png"
+        file_exists_in_docx(&docx_path, "word/media/rIdImage1.png"),
+        "DOCX should contain word/media/rIdImage1.png"
     );
 
-    // Note: Drawing element is currently being output as escaped text
     assert!(
-        xml.contains("&lt;w:drawing&gt;") || xml.contains("<w:drawing>"),
-        "document.xml should contain drawing markup (may be escaped)"
+        xml.contains("<w:drawing>"),
+        "document.xml should contain native w:drawing XML"
     );
 
-    // Verify extent element exists (for dimensions) - may be escaped
+    // Verify extent element exists with expected dimensions.
     // picwgoal2880 = 2 inches = 1828800 EMUs (914400 EMUs per inch)
     // pichgoal1440 = 1 inch = 914400 EMUs
     assert!(
-        xml.contains("cx=") || xml.contains("&quot;cx&quot;"),
-        "document.xml should have cx attribute for image dimensions"
+        xml.contains("wp:extent cx=\"1828800\" cy=\"914400\""),
+        "document.xml should have expected extent from RTF twip dimensions"
     );
 }
 

@@ -15,7 +15,7 @@ typst-pdf = "0.14"
 typst-kit = { version = "0.14", features = ["embed-fonts"] }
 ecow = "0.2"
 chrono = "0.4"
-base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 [dev-dependencies]
 tempfile = "3"

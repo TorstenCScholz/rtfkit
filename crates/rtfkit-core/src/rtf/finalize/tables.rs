@@ -87,7 +87,9 @@ pub fn finalize_current_cell(state: &mut RuntimeState) {
             .copied()
             .flatten();
 
-        if let Some(shading) = super::shading::build_shading(state, cell_cbpat, cell_cfpat, cell_shading) {
+        if let Some(shading) =
+            super::shading::build_shading(state, cell_cbpat, cell_cfpat, cell_shading)
+        {
             cell_with_props.shading = Some(shading);
         }
         // 2. Fall back to row shading if cell has no explicit shading

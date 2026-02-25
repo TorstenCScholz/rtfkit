@@ -42,12 +42,14 @@ pub fn handle_resource_control_word(
         }
         // \\highlightN - Highlight color index
         "highlight" => {
-            state.style.highlight_color_index = parameter.and_then(|n| if n > 0 { Some(n) } else { None });
+            state.style.highlight_color_index =
+                parameter.and_then(|n| if n > 0 { Some(n) } else { None });
             true
         }
         // \\cbN - Background color index
         "cb" => {
-            state.style.background_color_index = parameter.and_then(|n| if n > 0 { Some(n) } else { None });
+            state.style.background_color_index =
+                parameter.and_then(|n| if n > 0 { Some(n) } else { None });
             true
         }
         _ => false,
@@ -68,11 +70,12 @@ pub fn handle_destination_control_word(
         match word {
             "f" => {
                 // Font index
-                state.resources.set_current_font_index(parameter.unwrap_or(0));
+                state
+                    .resources
+                    .set_current_font_index(parameter.unwrap_or(0));
             }
             // Font property controls - we skip these but don't warn
-            "fnil" | "froman" | "fswiss" | "fmodern" | "fscript" | "fdecor" | "ftech"
-            | "fbidi" => {
+            "fnil" | "froman" | "fswiss" | "fmodern" | "fscript" | "fdecor" | "ftech" | "fbidi" => {
                 // Font family - ignore
             }
             "fcharset" => {

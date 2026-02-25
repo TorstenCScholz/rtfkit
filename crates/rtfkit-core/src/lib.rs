@@ -970,7 +970,12 @@ impl ImageBlock {
     }
 
     /// Creates an image block with dimensions.
-    pub fn with_dimensions(format: ImageFormat, data: Vec<u8>, width_twips: i32, height_twips: i32) -> Self {
+    pub fn with_dimensions(
+        format: ImageFormat,
+        data: Vec<u8>,
+        width_twips: i32,
+        height_twips: i32,
+    ) -> Self {
         Self {
             format,
             data,

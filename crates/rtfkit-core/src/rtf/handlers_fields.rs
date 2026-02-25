@@ -196,7 +196,9 @@ fn finalize_field(state: &mut RuntimeState) {
 
 pub(crate) fn is_supported_hyperlink_url(url: &str) -> bool {
     let lowered = url.trim().to_ascii_lowercase();
-    lowered.starts_with("http://") || lowered.starts_with("https://") || lowered.starts_with("mailto:")
+    lowered.starts_with("http://")
+        || lowered.starts_with("https://")
+        || lowered.starts_with("mailto:")
 }
 
 pub(crate) fn extract_hyperlink_url(instruction: &str) -> Option<String> {

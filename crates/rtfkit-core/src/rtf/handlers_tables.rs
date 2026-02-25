@@ -201,7 +201,10 @@ pub fn handle_row_event(state: &mut RuntimeState) -> Result<(), ConversionError>
 fn handle_trowd(state: &mut RuntimeState) {
     // Finalize any dangling row/cell with warning.
     if state.tables.current_row.is_some() {
-        super::finalize::auto_close_table_cell_if_needed(state, "Unclosed table cell at row boundary");
+        super::finalize::auto_close_table_cell_if_needed(
+            state,
+            "Unclosed table cell at row boundary",
+        );
         state.report_builder.unclosed_table_row();
         state
             .report_builder

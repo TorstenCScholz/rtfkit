@@ -64,9 +64,9 @@ pub fn finalize_paragraph(state: &mut RuntimeState) {
 
         // Track stats
         state.report_builder.increment_paragraph_count();
-        state
-            .report_builder
-            .add_runs(super::runs::inline_run_count(&state.current_paragraph.inlines));
+        state.report_builder.add_runs(super::runs::inline_run_count(
+            &state.current_paragraph.inlines,
+        ));
     }
 
     state.reset_paragraph_state();
@@ -113,9 +113,9 @@ pub fn finalize_paragraph_for_table(state: &mut RuntimeState) {
 
         // Track stats
         state.report_builder.increment_paragraph_count();
-        state
-            .report_builder
-            .add_runs(super::runs::inline_run_count(&state.current_paragraph.inlines));
+        state.report_builder.add_runs(super::runs::inline_run_count(
+            &state.current_paragraph.inlines,
+        ));
     }
 
     state.reset_paragraph_state();

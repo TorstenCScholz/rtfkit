@@ -161,7 +161,11 @@ pub fn handle_control_word(state: &mut RuntimeState, word: &str, parameter: Opti
 ///
 /// These control words are only effective when `state.image.parsing_pict` is true.
 /// Returns `true` if the control word was handled.
-pub fn handle_image_control_word(state: &mut RuntimeState, word: &str, parameter: Option<i32>) -> bool {
+pub fn handle_image_control_word(
+    state: &mut RuntimeState,
+    word: &str,
+    parameter: Option<i32>,
+) -> bool {
     // Only process image control words when parsing a pict group
     if !state.image.parsing_pict {
         return false;

@@ -1,30 +1,35 @@
 //! Image block Typst mapping.
 //!
 //! This module provides functions for converting `ImageBlock` elements
-//! to Typst markup with embedded data URIs.
+//! to Typst markup with virtual asset paths.
 
+use image::ImageFormat as RasterFormat;
 use rtfkit_core::{ImageBlock, ImageFormat};
+
+use super::{MappingWarning, TypstAssetAllocator};
 
 /// Result of mapping an image block to Typst source.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImageOutput {
     /// The generated Typst source code.
     pub typst_source: String,
+    /// Warnings generated while mapping this image.
+    pub warnings: Vec<MappingWarning>,
 }
 
 /// Map an image block to Typst markup.
 ///
-/// Emits a Typst `image` function with a data URI containing the base64-encoded image.
+/// Emits a Typst `image` call referencing a deterministic in-memory asset path.
 ///
 /// # Typst Output Format
 ///
 /// ```typst
-/// #image("data:image/png;base64,<base64_data>", width: 1.0in, height: 0.5in)
+/// #image("assets/image-000001.png", width: 1.0in, height: 0.5in)
 /// ```
 ///
 /// For images without dimensions:
 /// ```typst
-/// #image("data:image/png;base64,<base64_data>")
+/// #image("assets/image-000001.png")
 /// ```
 ///
 /// # Dimension Conversion
@@ -37,17 +42,36 @@ pub struct ImageOutput {
 /// The output is deterministic: same input always produces same output.
 /// Attribute ordering is fixed: width before height when both are present.
 pub fn map_image_block(image: &ImageBlock) -> ImageOutput {
-    // Convert image data to base64
-    let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &image.data);
+    let mut assets = TypstAssetAllocator::new();
+    map_image_block_with_assets(image, &mut assets)
+}
 
-    // Determine MIME type based on format
-    let mime_type = match image.format {
-        ImageFormat::Png => "image/png",
-        ImageFormat::Jpeg => "image/jpeg",
+pub(crate) fn map_image_block_with_assets(
+    image: &ImageBlock,
+    assets: &mut TypstAssetAllocator,
+) -> ImageOutput {
+    // Validate bytes for declared format to keep renderer errors deterministic.
+    let (extension, warning_kind, raster_format) = match image.format {
+        ImageFormat::Png => (
+            "png",
+            MappingWarning::MalformedPngImagePayload,
+            RasterFormat::Png,
+        ),
+        ImageFormat::Jpeg => (
+            "jpg",
+            MappingWarning::MalformedJpegImagePayload,
+            RasterFormat::Jpeg,
+        ),
     };
 
-    // Build data URI
-    let data_uri = format!("data:{};base64,{}", mime_type, base64_data);
+    if image::load_from_memory_with_format(&image.data, raster_format).is_err() {
+        return ImageOutput {
+            typst_source: String::new(),
+            warnings: vec![warning_kind],
+        };
+    }
+
+    let image_path = assets.allocate_image_path_and_store(extension, &image.data);
 
     // Build optional dimension parameters
     let mut params = Vec::new();
@@ -64,12 +88,15 @@ pub fn map_image_block(image: &ImageBlock) -> ImageOutput {
 
     // Build the image function call
     let typst_source = if params.is_empty() {
-        format!("#image(\"{}\")", data_uri)
+        format!("#image(\"{}\")", image_path)
     } else {
-        format!("#image(\"{}\", {})", data_uri, params.join(", "))
+        format!("#image(\"{}\", {})", image_path, params.join(", "))
     };
 
-    ImageOutput { typst_source }
+    ImageOutput {
+        typst_source,
+        warnings: Vec::new(),
+    }
 }
 
 /// Convert twips to Typst length string.
@@ -85,6 +112,24 @@ fn twips_to_typst_length(twips: i32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use image::{codecs::jpeg::JpegEncoder, codecs::png::PngEncoder, ColorType, ImageEncoder};
+
+    fn valid_png_data() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let rgba = [255_u8, 0, 0, 255];
+        PngEncoder::new(&mut bytes)
+            .write_image(&rgba, 1, 1, ColorType::Rgba8.into())
+            .unwrap();
+        bytes
+    }
+
+    fn valid_jpeg_data() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let rgb = [255_u8, 0, 0];
+        let mut encoder = JpegEncoder::new_with_quality(&mut bytes, 85);
+        encoder.encode(&rgb, 1, 1, ColorType::Rgb8.into()).unwrap();
+        bytes
+    }
 
     #[test]
     fn test_twips_to_typst_length() {
@@ -106,82 +151,95 @@ mod tests {
 
     #[test]
     fn test_map_image_block_png_without_dimensions() {
-        let image = ImageBlock::new(ImageFormat::Png, vec![0x89, 0x50, 0x4E, 0x47]);
-        let output = map_image_block(&image);
+        let image = ImageBlock::new(ImageFormat::Png, valid_png_data());
+        let mut assets = TypstAssetAllocator::new();
+        let output = map_image_block_with_assets(&image, &mut assets);
 
-        assert!(output.typst_source.starts_with("#image(\"data:image/png;base64,"));
+        assert!(output
+            .typst_source
+            .starts_with("#image(\"assets/image-000001.png\""));
         assert!(output.typst_source.ends_with(")"));
         assert!(!output.typst_source.contains("width:"));
         assert!(!output.typst_source.contains("height:"));
+        assert!(output.warnings.is_empty());
+        assert_eq!(assets.bundle.files.len(), 1);
     }
 
     #[test]
     fn test_map_image_block_jpeg_with_dimensions() {
         let image = ImageBlock::with_dimensions(
             ImageFormat::Jpeg,
-            vec![0xFF, 0xD8, 0xFF, 0xE0],
+            valid_jpeg_data(),
             1440, // 1 inch
             720,  // 0.5 inch
         );
-        let output = map_image_block(&image);
+        let mut assets = TypstAssetAllocator::new();
+        let output = map_image_block_with_assets(&image, &mut assets);
 
-        assert!(output.typst_source.contains("data:image/jpeg;base64,"));
+        assert!(output.typst_source.contains("assets/image-000001.jpg"));
         assert!(output.typst_source.contains("width: 1.00in"));
         assert!(output.typst_source.contains("height: 0.50in"));
+        assert!(output.warnings.is_empty());
     }
 
     #[test]
     fn test_map_image_block_attribute_ordering() {
-        let image = ImageBlock::with_dimensions(
-            ImageFormat::Png,
-            vec![0x00],
-            1440,
-            720,
-        );
-        let output = map_image_block(&image);
+        let image = ImageBlock::with_dimensions(ImageFormat::Png, valid_png_data(), 1440, 720);
+        let mut assets = TypstAssetAllocator::new();
+        let output = map_image_block_with_assets(&image, &mut assets);
 
         // Verify width comes before height
-        let width_pos = output.typst_source.find("width:").expect("width should exist");
-        let height_pos = output.typst_source.find("height:").expect("height should exist");
+        let width_pos = output
+            .typst_source
+            .find("width:")
+            .expect("width should exist");
+        let height_pos = output
+            .typst_source
+            .find("height:")
+            .expect("height should exist");
         assert!(width_pos < height_pos, "width should come before height");
     }
 
     #[test]
     fn test_map_image_block_deterministic() {
-        let image = ImageBlock::with_dimensions(
-            ImageFormat::Png,
-            vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
-            720,
-            720,
-        );
+        let image = ImageBlock::with_dimensions(ImageFormat::Png, valid_png_data(), 720, 720);
 
         // Generate Typst source multiple times
-        let output1 = map_image_block(&image);
-        let output2 = map_image_block(&image);
-        let output3 = map_image_block(&image);
+        let mut assets1 = TypstAssetAllocator::new();
+        let mut assets2 = TypstAssetAllocator::new();
+        let mut assets3 = TypstAssetAllocator::new();
+        let output1 = map_image_block_with_assets(&image, &mut assets1);
+        let output2 = map_image_block_with_assets(&image, &mut assets2);
+        let output3 = map_image_block_with_assets(&image, &mut assets3);
 
         // Should be identical
         assert_eq!(output1.typst_source, output2.typst_source);
         assert_eq!(output2.typst_source, output3.typst_source);
+        assert_eq!(assets1.bundle.files, assets2.bundle.files);
+        assert_eq!(assets2.bundle.files, assets3.bundle.files);
     }
 
     #[test]
-    fn test_map_image_block_base64_encoding() {
-        // Test with known data
-        let image = ImageBlock::new(ImageFormat::Png, b"test".to_vec());
-        let output = map_image_block(&image);
+    fn test_map_image_block_emits_deterministic_asset_paths() {
+        let image = ImageBlock::new(ImageFormat::Png, valid_png_data());
+        let mut assets = TypstAssetAllocator::new();
 
-        // "test" in base64 is "dGVzdA=="
-        assert!(output.typst_source.contains("dGVzdA=="), "Base64 encoding should be correct");
+        let output1 = map_image_block_with_assets(&image, &mut assets);
+        let output2 = map_image_block_with_assets(&image, &mut assets);
+
+        assert!(output1.typst_source.contains("assets/image-000001.png"));
+        assert!(output2.typst_source.contains("assets/image-000002.png"));
+        assert_eq!(assets.bundle.files.len(), 2);
     }
 
     #[test]
     fn test_map_image_block_only_width() {
-        let mut image = ImageBlock::new(ImageFormat::Png, vec![0x00]);
+        let mut image = ImageBlock::new(ImageFormat::Png, valid_png_data());
         image.width_twips = Some(1440);
         // height_twips remains None
 
-        let output = map_image_block(&image);
+        let mut assets = TypstAssetAllocator::new();
+        let output = map_image_block_with_assets(&image, &mut assets);
 
         assert!(output.typst_source.contains("width: 1.00in"));
         assert!(!output.typst_source.contains("height:"));
@@ -189,11 +247,12 @@ mod tests {
 
     #[test]
     fn test_map_image_block_only_height() {
-        let mut image = ImageBlock::new(ImageFormat::Png, vec![0x00]);
+        let mut image = ImageBlock::new(ImageFormat::Png, valid_png_data());
         image.height_twips = Some(720);
         // width_twips remains None
 
-        let output = map_image_block(&image);
+        let mut assets = TypstAssetAllocator::new();
+        let output = map_image_block_with_assets(&image, &mut assets);
 
         assert!(!output.typst_source.contains("width:"));
         assert!(output.typst_source.contains("height: 0.50in"));
@@ -201,17 +260,47 @@ mod tests {
 
     #[test]
     fn test_map_image_block_format_png() {
-        let image = ImageBlock::new(ImageFormat::Png, vec![0x00]);
-        let output = map_image_block(&image);
+        let image = ImageBlock::new(ImageFormat::Png, valid_png_data());
+        let mut assets = TypstAssetAllocator::new();
+        let output = map_image_block_with_assets(&image, &mut assets);
 
-        assert!(output.typst_source.contains("image/png"));
+        assert!(output.typst_source.contains(".png"));
     }
 
     #[test]
     fn test_map_image_block_format_jpeg() {
-        let image = ImageBlock::new(ImageFormat::Jpeg, vec![0x00]);
-        let output = map_image_block(&image);
+        let image = ImageBlock::new(ImageFormat::Jpeg, valid_jpeg_data());
+        let mut assets = TypstAssetAllocator::new();
+        let output = map_image_block_with_assets(&image, &mut assets);
 
-        assert!(output.typst_source.contains("image/jpeg"));
+        assert!(output.typst_source.contains(".jpg"));
+    }
+
+    #[test]
+    fn test_map_image_block_invalid_png_payload_is_dropped() {
+        let image = ImageBlock::new(ImageFormat::Png, vec![0x89, 0x50, 0x4E, 0x47]);
+        let mut assets = TypstAssetAllocator::new();
+        let output = map_image_block_with_assets(&image, &mut assets);
+
+        assert!(output.typst_source.is_empty());
+        assert_eq!(
+            output.warnings,
+            vec![MappingWarning::MalformedPngImagePayload]
+        );
+        assert!(assets.bundle.files.is_empty());
+    }
+
+    #[test]
+    fn test_map_image_block_invalid_jpeg_payload_is_dropped() {
+        let image = ImageBlock::new(ImageFormat::Jpeg, vec![0xFF, 0xD8, 0xFF, 0xE0]);
+        let mut assets = TypstAssetAllocator::new();
+        let output = map_image_block_with_assets(&image, &mut assets);
+
+        assert!(output.typst_source.is_empty());
+        assert_eq!(
+            output.warnings,
+            vec![MappingWarning::MalformedJpegImagePayload]
+        );
+        assert!(assets.bundle.files.is_empty());
     }
 }

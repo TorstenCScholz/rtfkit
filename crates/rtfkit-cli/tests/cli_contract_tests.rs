@@ -3925,10 +3925,7 @@ mod image_cli_tests {
             html.contains("data:image/png;base64,"),
             "HTML should contain PNG data URI"
         );
-        assert!(
-            html.contains("<img"),
-            "HTML should contain img element"
-        );
+        assert!(html.contains("<img"), "HTML should contain img element");
     }
 
     /// Test that JPEG image converts successfully to DOCX.
@@ -3988,10 +3985,7 @@ mod image_cli_tests {
             html.contains("data:image/jpeg;base64,"),
             "HTML should contain JPEG data URI"
         );
-        assert!(
-            html.contains("<img"),
-            "HTML should contain img element"
-        );
+        assert!(html.contains("<img"), "HTML should contain img element");
     }
 
     /// Test that document with multiple images converts successfully to DOCX.
@@ -4073,21 +4067,14 @@ mod image_cli_tests {
             .get("format")
             .and_then(|f| f.as_str())
             .expect("format should be a string");
-        assert_eq!(
-            format.to_lowercase(),
-            "png",
-            "Image format should be PNG"
-        );
+        assert_eq!(format.to_lowercase(), "png", "Image format should be PNG");
 
         // Verify data is present (data is a byte array in JSON)
         let data = image_block
             .get("data")
             .and_then(|d| d.as_array())
             .expect("data should be an array");
-        assert!(
-            !data.is_empty(),
-            "Image data should not be empty"
-        );
+        assert!(!data.is_empty(), "Image data should not be empty");
 
         // Verify the data starts with PNG signature (137, 80, 78, 71, 13, 10, 26, 10)
         let first_bytes: Vec<i64> = data.iter().take(8).filter_map(|v| v.as_i64()).collect();
@@ -4099,7 +4086,6 @@ mod image_cli_tests {
     }
 
     /// Test that image converts successfully to PDF.
-    /// Note: PDF image support is currently limited - images may not render in PDF output.
     #[test]
     fn cli_image_to_pdf() {
         let fixture = project_root().join("fixtures/image_png_simple.rtf");
@@ -4117,30 +4103,14 @@ mod image_cli_tests {
             output.to_str().unwrap(),
         ]);
 
-        // Note: PDF image support is currently limited.
-        // The test passes if conversion succeeds, but images may not be embedded.
-        // This test documents the current behavior.
-        let result = cmd.assert();
+        cmd.assert().success().code(0);
 
-        // Either succeeds (if PDF backend supports images) or fails gracefully
-        let output_result = result.get_output();
-        if output_result.status.success() {
-            // If it succeeds, verify PDF file was created
-            assert!(output.exists(), "PDF file should be created");
-            let bytes = fs::read(&output).unwrap();
-            assert!(
-                bytes.starts_with(b"%PDF"),
-                "Output should be a valid PDF file"
-            );
-        } else {
-            // If it fails, it should be exit code 3 (writer/IO failure) due to unsupported feature
-            let code = output_result.status.code().unwrap();
-            assert!(
-                code == 3,
-                "PDF with images should fail with exit code 3 (writer failure), got {}",
-                code
-            );
-        }
+        assert!(output.exists(), "PDF file should be created");
+        let bytes = fs::read(&output).unwrap();
+        assert!(
+            bytes.starts_with(b"%PDF"),
+            "Output should be a valid PDF file"
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -4219,6 +4189,30 @@ mod image_cli_tests {
         ]);
 
         // Should fail with exit code 4 (strict mode violation due to dropped content)
+        cmd.assert()
+            .failure()
+            .code(4)
+            .stderr(contains("Strict mode violated"));
+    }
+
+    /// Test that malformed image payload fails strict mode for PDF output.
+    #[test]
+    fn strict_mode_malformed_image_hex_pdf_fails() {
+        let fixture = project_root().join("fixtures/image_malformed_hex.rtf");
+        let dir = tempdir().unwrap();
+        let output = dir.path().join("output.pdf");
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--strict",
+            "--to",
+            "pdf",
+            "-o",
+            output.to_str().unwrap(),
+        ]);
+
         cmd.assert()
             .failure()
             .code(4)
@@ -4434,7 +4428,10 @@ mod image_cli_tests {
             stats.insert("duration_ms".to_string(), serde_json::json!(0));
         }
 
-        assert_eq!(parsed1, parsed2, "JPEG image output should be deterministic");
+        assert_eq!(
+            parsed1, parsed2,
+            "JPEG image output should be deterministic"
+        );
     }
 
     /// Test that multiple images output is deterministic.
@@ -4495,11 +4492,9 @@ mod image_cli_tests {
     // shppict/nonshppict Preference Tests
     // -------------------------------------------------------------------------
 
-    /// Test that shppict and nonshppict are both processed.
-    /// Note: The current implementation processes both shppict and nonshppict images.
-    /// Future versions may prefer shppict over nonshppict as per RTF specification.
+    /// Test that shppict is preferred over nonshppict for the same shape-picture context.
     #[test]
-    fn shppict_and_nonshppict_both_processed() {
+    fn shppict_preferred_over_nonshppict() {
         let fixture = project_root().join("fixtures/image_shppict_nonshppict.rtf");
 
         let dir = tempdir().unwrap();
@@ -4531,43 +4526,25 @@ mod image_cli_tests {
             .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("imageblock"))
             .count();
 
-        // Current behavior: both shppict and nonshppict are processed (2 images)
-        // This test documents the current behavior
+        // Preferred behavior: only shppict is emitted.
         assert_eq!(
-            image_count, 2,
-            "Should have two images (both shppict and nonshppict are currently processed)"
+            image_count, 1,
+            "Should have one preferred image (shppict), not both branches"
         );
 
-        // Verify first image is PNG (from shppict)
-        let first_image = blocks
+        // Verify emitted image is PNG (from shppict)
+        let image = blocks
             .iter()
             .find(|b| b.get("type").and_then(|t| t.as_str()) == Some("imageblock"))
             .expect("Should have at least one image");
-        let first_format = first_image
+        let format = image
             .get("format")
             .and_then(|f| f.as_str())
             .expect("Should have format");
         assert_eq!(
-            first_format.to_lowercase(),
+            format.to_lowercase(),
             "png",
-            "First image (shppict) should be PNG"
+            "Preferred shppict image should be PNG"
         );
-
-        // Verify second image is JPEG (from nonshppict)
-        let images: Vec<_> = blocks
-            .iter()
-            .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("imageblock"))
-            .collect();
-        if images.len() > 1 {
-            let second_format = images[1]
-                .get("format")
-                .and_then(|f| f.as_str())
-                .expect("Should have format");
-            assert_eq!(
-                second_format.to_lowercase(),
-                "jpeg",
-                "Second image (nonshppict) should be JPEG"
-            );
-        }
     }
 }

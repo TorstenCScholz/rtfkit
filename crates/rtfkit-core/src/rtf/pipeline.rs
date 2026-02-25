@@ -8,7 +8,7 @@
 
 use crate::error::{ConversionError, ParseError};
 use crate::limits::ParserLimits;
-use crate::{Document, Report};
+use crate::{Block, Document, Report, TableCell};
 
 use super::events::{RtfEvent, token_to_event};
 use super::state::RuntimeState;
@@ -102,6 +102,8 @@ fn handle_group_end(state: &mut RuntimeState) {
         // Finalize the image
         finalize_pict_group(state);
     }
+
+    state.image.clear_closed_group_contexts(state.current_depth);
 }
 
 /// Finalize a pict group by creating an image block or recording dropped content.
@@ -117,25 +119,47 @@ fn finalize_pict_group(state: &mut RuntimeState) {
         super::finalize::ImageFinalizationResult::Success(block) => {
             // Update the tracker state
             state.image_bytes_used = tracker.total_bytes;
-            // Push the block to the document
-            state.document.blocks.push(block);
+            insert_block_in_current_context(state, block);
         }
         super::finalize::ImageFinalizationResult::Dropped(reason) => {
             // Add warning to report
             let size_hint = Some(state.image.hex_buffer.len());
             state.report_builder.dropped_content(reason, size_hint);
         }
-        super::finalize::ImageFinalizationResult::ByteLimitExceeded => {
+        super::finalize::ImageFinalizationResult::ByteLimitExceeded { attempted_total } => {
             // Hard failure - set the error
             state.set_hard_failure(ParseError::ImageBytesExceeded {
-                total: tracker.total_bytes,
+                total: attempted_total,
                 limit: state.limits.max_image_bytes_total,
             });
         }
     }
 
     // Reset image state
-    state.image.reset();
+    state.image.reset_pict_state();
+}
+
+fn insert_block_in_current_context(state: &mut RuntimeState, block: Block) {
+    // Flush pending paragraph content first to keep block order deterministic.
+    if state.has_pending_paragraph_content() {
+        super::finalize::finalize_paragraph(state);
+    }
+
+    if state.tables.in_row() {
+        if state.tables.current_cell.is_none() {
+            state.tables.current_cell = Some(TableCell::new());
+        }
+        if let Some(cell) = state.tables.current_cell.as_mut() {
+            cell.blocks.push(block);
+        }
+        return;
+    }
+
+    if state.tables.in_table() {
+        super::finalize::finalize_current_table(state);
+    }
+
+    state.document.blocks.push(block);
 }
 
 fn handle_control_word_event(
@@ -254,5 +278,4 @@ mod tests {
             Err(ConversionError::Parse(ParseError::UnbalancedGroups))
         ));
     }
-
 }

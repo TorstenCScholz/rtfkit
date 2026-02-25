@@ -8,7 +8,9 @@
 //! - Malformed hex data
 //! - shppict/nonshppict preference
 
-use crate::rtf::parse;
+use crate::error::{ConversionError, ParseError};
+use crate::limits::ParserLimits;
+use crate::rtf::{parse, parse_with_limits};
 use crate::{Block, ImageBlock, ImageFormat, Warning};
 
 // =============================================================================
@@ -25,10 +27,7 @@ fn test_png_image_parsing() {
     let (doc, _report) = result.unwrap();
 
     // Should have an image block
-    let has_image = doc
-        .blocks
-        .iter()
-        .any(|b| matches!(b, Block::ImageBlock(_)));
+    let has_image = doc.blocks.iter().any(|b| matches!(b, Block::ImageBlock(_)));
 
     assert!(has_image, "Expected an image block in the document");
 }
@@ -42,7 +41,11 @@ fn test_png_image_data() {
 
     let (doc, _report) = result.unwrap();
 
-    if let Some(Block::ImageBlock(img)) = doc.blocks.iter().find(|b| matches!(b, Block::ImageBlock(_))) {
+    if let Some(Block::ImageBlock(img)) = doc
+        .blocks
+        .iter()
+        .find(|b| matches!(b, Block::ImageBlock(_)))
+    {
         // Should be PNG format
         assert_eq!(img.format, ImageFormat::Png);
 
@@ -74,10 +77,7 @@ fn test_jpeg_image_parsing() {
     let (doc, _report) = result.unwrap();
 
     // Should have an image block
-    let has_image = doc
-        .blocks
-        .iter()
-        .any(|b| matches!(b, Block::ImageBlock(_)));
+    let has_image = doc.blocks.iter().any(|b| matches!(b, Block::ImageBlock(_)));
 
     assert!(has_image, "Expected an image block in the document");
 }
@@ -91,7 +91,11 @@ fn test_jpeg_image_data() {
 
     let (doc, _report) = result.unwrap();
 
-    if let Some(Block::ImageBlock(img)) = doc.blocks.iter().find(|b| matches!(b, Block::ImageBlock(_))) {
+    if let Some(Block::ImageBlock(img)) = doc
+        .blocks
+        .iter()
+        .find(|b| matches!(b, Block::ImageBlock(_)))
+    {
         // Should be JPEG format
         assert_eq!(img.format, ImageFormat::Jpeg);
 
@@ -120,7 +124,11 @@ fn test_image_with_dimensions() {
 
     let (doc, _report) = result.unwrap();
 
-    if let Some(Block::ImageBlock(img)) = doc.blocks.iter().find(|b| matches!(b, Block::ImageBlock(_))) {
+    if let Some(Block::ImageBlock(img)) = doc
+        .blocks
+        .iter()
+        .find(|b| matches!(b, Block::ImageBlock(_)))
+    {
         // picwgoal2880 = 2 inches (2880 twips)
         // pichgoal1440 = 1 inch (1440 twips)
         assert_eq!(img.width_twips, Some(2880));
@@ -140,7 +148,11 @@ fn test_image_default_dimensions() {
 
     let (doc, _report) = result.unwrap();
 
-    if let Some(Block::ImageBlock(img)) = doc.blocks.iter().find(|b| matches!(b, Block::ImageBlock(_))) {
+    if let Some(Block::ImageBlock(img)) = doc
+        .blocks
+        .iter()
+        .find(|b| matches!(b, Block::ImageBlock(_)))
+    {
         // Should have dimensions from the fixture
         assert_eq!(img.width_twips, Some(1440));
         assert_eq!(img.height_twips, Some(1440));
@@ -220,10 +232,7 @@ fn test_unsupported_image_format() {
     let (doc, report) = result.unwrap();
 
     // Should NOT have an image block (wmetafile is unsupported)
-    let has_image = doc
-        .blocks
-        .iter()
-        .any(|b| matches!(b, Block::ImageBlock(_)));
+    let has_image = doc.blocks.iter().any(|b| matches!(b, Block::ImageBlock(_)));
 
     assert!(!has_image, "Expected no image block for unsupported format");
 
@@ -232,7 +241,10 @@ fn test_unsupported_image_format() {
         matches!(w, Warning::DroppedContent { reason, .. } if reason.contains("unsupported") || reason.contains("image"))
     });
 
-    assert!(has_dropped_warning, "Expected DroppedContent warning for unsupported image format");
+    assert!(
+        has_dropped_warning,
+        "Expected DroppedContent warning for unsupported image format"
+    );
 }
 
 // =============================================================================
@@ -252,28 +264,33 @@ fn test_malformed_hex_image() {
     // The malformed hex should result in either:
     // 1. No image block (if parsing failed completely), or
     // 2. A DroppedContent warning about the malformed data
-    let has_dropped_warning = report.warnings.iter().any(|w| {
-        matches!(w, Warning::DroppedContent { .. })
-    });
+    let has_dropped_warning = report
+        .warnings
+        .iter()
+        .any(|w| matches!(w, Warning::DroppedContent { .. }));
 
     // Either no image or a dropped content warning
-    let has_image = doc
-        .blocks
-        .iter()
-        .any(|b| matches!(b, Block::ImageBlock(_)));
+    let has_image = doc.blocks.iter().any(|b| matches!(b, Block::ImageBlock(_)));
 
     // If there's an image, it should have valid PNG header (partial parse)
     // If there's no image, we should have a dropped warning
     if has_image {
         // Partial parse succeeded - check that it has valid PNG header
-        if let Some(Block::ImageBlock(img)) = doc.blocks.iter().find(|b| matches!(b, Block::ImageBlock(_))) {
+        if let Some(Block::ImageBlock(img)) = doc
+            .blocks
+            .iter()
+            .find(|b| matches!(b, Block::ImageBlock(_)))
+        {
             assert_eq!(img.format, ImageFormat::Png);
             // Should have at least the PNG signature
             assert!(img.data.len() >= 8);
         }
     } else {
         // Should have a warning about dropped content
-        assert!(has_dropped_warning, "Expected DroppedContent warning for malformed hex");
+        assert!(
+            has_dropped_warning,
+            "Expected DroppedContent warning for malformed hex"
+        );
     }
 }
 
@@ -288,17 +305,26 @@ fn test_shppict_preferred_over_nonshppict() {
 
     assert!(result.is_ok());
 
-    let (doc, _report) = result.unwrap();
+    let (doc, report) = result.unwrap();
 
-    // Count images - the parser may handle shppict/nonshppict differently
-    // At minimum, we should have at least one image
+    // `\shppict` should win over sibling `\nonshppict`.
     let image_count = doc
         .blocks
         .iter()
         .filter(|b| matches!(b, Block::ImageBlock(_)))
         .count();
+    assert_eq!(
+        image_count, 1,
+        "Expected exactly one preferred shppict image"
+    );
 
-    assert!(image_count >= 1, "Expected at least 1 image from shppict/nonshppict group");
+    let has_preference_warning = report.warnings.iter().any(|w| {
+        matches!(w, Warning::DroppedContent { reason, .. } if reason == "Dropped nonshppict in favor of shppict")
+    });
+    assert!(
+        has_preference_warning,
+        "Expected DroppedContent warning for nonshppict fallback"
+    );
 }
 
 #[test]
@@ -311,7 +337,11 @@ fn test_shppict_image_is_png() {
     let (doc, _report) = result.unwrap();
 
     // The shppict contains a PNG image
-    if let Some(Block::ImageBlock(img)) = doc.blocks.iter().find(|b| matches!(b, Block::ImageBlock(_))) {
+    if let Some(Block::ImageBlock(img)) = doc
+        .blocks
+        .iter()
+        .find(|b| matches!(b, Block::ImageBlock(_)))
+    {
         // Should be PNG (from shppict), not JPEG (from nonshppict)
         assert_eq!(img.format, ImageFormat::Png);
     } else {
@@ -351,7 +381,10 @@ fn test_empty_image_data() {
     // If there's an image block, it should have empty or minimal data
     for img in image_blocks {
         // Empty or minimal data is acceptable
-        assert!(img.data.is_empty() || img.data.len() < 10, "Empty image should have no or minimal data");
+        assert!(
+            img.data.is_empty() || img.data.len() < 10,
+            "Empty image should have no or minimal data"
+        );
     }
 }
 
@@ -365,9 +398,10 @@ fn test_image_with_text_before_and_after() {
     let (doc, _report) = result.unwrap();
 
     // Should have at least one paragraph with text
-    let has_text = doc.blocks.iter().any(|b| {
-        matches!(b, Block::Paragraph(p) if !p.inlines.is_empty())
-    });
+    let has_text = doc
+        .blocks
+        .iter()
+        .any(|b| matches!(b, Block::Paragraph(p) if !p.inlines.is_empty()));
 
     assert!(has_text, "Expected text content in document");
 }
@@ -376,7 +410,8 @@ fn test_image_with_text_before_and_after() {
 fn test_image_format_detection() {
     // Test that format is correctly detected from control words
     let png_input = r#"{\rtf1\ansi {\pict\pngblip 89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000A49444154789C6360000000020001E221BC330000000049454E44AE426082}}"#;
-    let jpeg_input = r#"{\rtf1\ansi {\pict\jpegblip FFD8FFE000104A46494600010100000100010000FFD9}}"#;
+    let jpeg_input =
+        r#"{\rtf1\ansi {\pict\jpegblip FFD8FFE000104A46494600010100000100010000FFD9}}"#;
 
     let png_result = parse(png_input).unwrap();
     let jpeg_result = parse(jpeg_input).unwrap();
@@ -395,4 +430,52 @@ fn test_image_format_detection() {
     } else {
         panic!("Expected JPEG image");
     }
+}
+
+#[test]
+fn test_image_in_table_cell() {
+    let input = include_str!("../../../../../fixtures/image_in_table.rtf");
+    let result = parse(input);
+
+    assert!(result.is_ok());
+    let (doc, _report) = result.unwrap();
+
+    let mut has_table_image = false;
+    for block in &doc.blocks {
+        if let Block::TableBlock(table) = block {
+            for row in &table.rows {
+                for cell in &row.cells {
+                    if cell
+                        .blocks
+                        .iter()
+                        .any(|b| matches!(b, Block::ImageBlock(_)))
+                    {
+                        has_table_image = true;
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(
+        has_table_image,
+        "Expected image block to be preserved inside table cell"
+    );
+}
+
+#[test]
+fn test_image_limit_exceeded_fails_with_parse_error() {
+    let input = include_str!("../../../../../fixtures/image_limit_exceeded.rtf");
+    let limits = ParserLimits::default().with_max_image_bytes_total(32);
+
+    let result = parse_with_limits(input, limits);
+    assert!(
+        matches!(
+            result,
+            Err(ConversionError::Parse(
+                ParseError::ImageBytesExceeded { .. }
+            ))
+        ),
+        "Expected ImageBytesExceeded parse error"
+    );
 }

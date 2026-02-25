@@ -36,10 +36,11 @@ pub struct ImageParsingState {
     pub picscalex: i32,
     /// Vertical scale percentage (from \picscaley, default 100)
     pub picscaley: i32,
-    /// Whether we're in a \shppict group (preferred over \nonshppict)
-    pub in_shppict: bool,
-    /// Whether we've seen a \nonshppict group
-    pub seen_nonshppict: bool,
+    /// Parent group depths where a `\shppict` has been seen.
+    ///
+    /// Used to prefer `\shppict` over sibling `\nonshppict` groups for the same
+    /// parent shape context without leaking state across unrelated groups.
+    shppict_parent_depths: Vec<usize>,
 }
 
 impl Default for ImageParsingState {
@@ -55,8 +56,7 @@ impl Default for ImageParsingState {
             pichgoal: None,
             picscalex: 100,
             picscaley: 100,
-            in_shppict: false,
-            seen_nonshppict: false,
+            shppict_parent_depths: Vec::new(),
         }
     }
 }
@@ -72,10 +72,10 @@ impl ImageParsingState {
         *self = Self::default();
     }
 
-    /// Start parsing a new pict group at the given depth.
-    pub fn start_pict(&mut self, depth: usize) {
-        self.parsing_pict = true;
-        self.pict_group_depth = depth;
+    /// Reset only transient `\pict` parsing state while keeping shape preference context.
+    pub fn reset_pict_state(&mut self) {
+        self.parsing_pict = false;
+        self.pict_group_depth = 0;
         self.format = None;
         self.hex_buffer.clear();
         self.picw = None;
@@ -86,6 +86,13 @@ impl ImageParsingState {
         self.picscaley = 100;
     }
 
+    /// Start parsing a new pict group at the given depth.
+    pub fn start_pict(&mut self, depth: usize) {
+        self.reset_pict_state();
+        self.parsing_pict = true;
+        self.pict_group_depth = depth;
+    }
+
     /// Check if the pict group has ended (depth returned to start depth).
     pub fn is_pict_ended(&self, current_depth: usize) -> bool {
         self.parsing_pict && current_depth < self.pict_group_depth
@@ -94,6 +101,24 @@ impl ImageParsingState {
     /// Append hex characters to the buffer.
     pub fn append_hex(&mut self, hex: &str) {
         self.hex_buffer.push_str(hex);
+    }
+
+    /// Record that a `\shppict` destination exists for the given parent depth.
+    pub fn mark_shppict_parent(&mut self, parent_depth: usize) {
+        if !self.shppict_parent_depths.contains(&parent_depth) {
+            self.shppict_parent_depths.push(parent_depth);
+        }
+    }
+
+    /// Returns true when a sibling `\nonshppict` for `parent_depth` should be skipped.
+    pub fn should_skip_nonshppict(&self, parent_depth: usize) -> bool {
+        self.shppict_parent_depths.contains(&parent_depth)
+    }
+
+    /// Drop stale `\shppict` preference state when groups close.
+    pub fn clear_closed_group_contexts(&mut self, current_depth: usize) {
+        self.shppict_parent_depths
+            .retain(|depth| *depth <= current_depth);
     }
 }
 
@@ -205,10 +230,7 @@ impl std::error::Error for PictDecodeError {}
 /// ```
 pub fn decode_pict_hex(input: &str) -> Result<Vec<u8>, PictDecodeError> {
     // Filter out whitespace characters
-    let hex_chars: String = input
-        .chars()
-        .filter(|c| !c.is_ascii_whitespace())
-        .collect();
+    let hex_chars: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
 
     // Check for odd length
     if hex_chars.len() % 2 != 0 {
@@ -269,8 +291,16 @@ pub fn resolve_image_dimensions(state: &ImageParsingState) -> (Option<i32>, Opti
     let base_height = state.pichgoal.or(state.pich);
 
     // Priority 3: Apply scale (default is 100)
-    let scale_x = if state.picscalex > 0 { state.picscalex } else { 100 };
-    let scale_y = if state.picscaley > 0 { state.picscaley } else { 100 };
+    let scale_x = if state.picscalex > 0 {
+        state.picscalex
+    } else {
+        100
+    };
+    let scale_y = if state.picscaley > 0 {
+        state.picscaley
+    } else {
+        100
+    };
 
     // Calculate scaled dimensions
     let width = base_width.and_then(|w| {
@@ -319,8 +349,7 @@ mod tests {
         assert!(state.pichgoal.is_none());
         assert_eq!(state.picscalex, 100);
         assert_eq!(state.picscaley, 100);
-        assert!(!state.in_shppict);
-        assert!(!state.seen_nonshppict);
+        assert!(!state.should_skip_nonshppict(1));
     }
 
     #[test]
@@ -355,6 +384,7 @@ mod tests {
         state.hex_buffer.push_str("abcd");
         state.picw = Some(100);
         state.picscalex = 50;
+        state.mark_shppict_parent(2);
 
         state.reset();
 
@@ -364,6 +394,21 @@ mod tests {
         assert!(state.hex_buffer.is_empty());
         assert!(state.picw.is_none());
         assert_eq!(state.picscalex, 100);
+        assert!(!state.should_skip_nonshppict(2));
+    }
+
+    #[test]
+    fn test_image_parsing_state_reset_pict_state_keeps_shppict_context() {
+        let mut state = ImageParsingState::default();
+        state.mark_shppict_parent(3);
+        state.start_pict(5);
+        state.format = Some(ImageFormat::Png);
+
+        state.reset_pict_state();
+
+        assert!(!state.parsing_pict);
+        assert!(state.format.is_none());
+        assert!(state.should_skip_nonshppict(3));
     }
 
     #[test]
@@ -373,6 +418,27 @@ mod tests {
         state.append_hex("def");
 
         assert_eq!(state.hex_buffer, "abcdef");
+    }
+
+    #[test]
+    fn test_shppict_preference_tracking() {
+        let mut state = ImageParsingState::default();
+        state.mark_shppict_parent(2);
+
+        assert!(state.should_skip_nonshppict(2));
+        assert!(!state.should_skip_nonshppict(1));
+    }
+
+    #[test]
+    fn test_shppict_preference_clears_when_parent_group_closes() {
+        let mut state = ImageParsingState::default();
+        state.mark_shppict_parent(3);
+
+        state.clear_closed_group_contexts(3);
+        assert!(state.should_skip_nonshppict(3));
+
+        state.clear_closed_group_contexts(2);
+        assert!(!state.should_skip_nonshppict(3));
     }
 
     // ==========================================================================
@@ -402,9 +468,9 @@ mod tests {
         let mut tracker = ImageByteTracker::new(1000);
         tracker.add(800);
 
-        assert!(!tracker.would_exceed(100));  // 800 + 100 = 900 <= 1000
-        assert!(!tracker.would_exceed(200));  // 800 + 200 = 1000 <= 1000
-        assert!(tracker.would_exceed(201));   // 800 + 201 = 1001 > 1000
+        assert!(!tracker.would_exceed(100)); // 800 + 100 = 900 <= 1000
+        assert!(!tracker.would_exceed(200)); // 800 + 200 = 1000 <= 1000
+        assert!(tracker.would_exceed(201)); // 800 + 201 = 1001 > 1000
     }
 
     #[test]
@@ -563,8 +629,8 @@ mod tests {
         state.picscaley = 50;
 
         let (w, h) = resolve_image_dimensions(&state);
-        assert_eq!(w, Some(500));  // 1000 * 50 / 100
-        assert_eq!(h, Some(250));  // 500 * 50 / 100
+        assert_eq!(w, Some(500)); // 1000 * 50 / 100
+        assert_eq!(h, Some(250)); // 500 * 50 / 100
     }
 
     #[test]
@@ -577,8 +643,8 @@ mod tests {
         state.picscaley = 200;
 
         let (w, h) = resolve_image_dimensions(&state);
-        assert_eq!(w, Some(2000));  // 1000 * 200 / 100
-        assert_eq!(h, Some(1000));  // 500 * 200 / 100
+        assert_eq!(w, Some(2000)); // 1000 * 200 / 100
+        assert_eq!(h, Some(1000)); // 500 * 200 / 100
     }
 
     #[test]
@@ -603,8 +669,8 @@ mod tests {
         state.picscaley = -50;
 
         let (w, h) = resolve_image_dimensions(&state);
-        assert_eq!(w, Some(1000));  // Uses default scale 100
-        assert_eq!(h, Some(500));   // Uses default scale 100
+        assert_eq!(w, Some(1000)); // Uses default scale 100
+        assert_eq!(h, Some(500)); // Uses default scale 100
     }
 
     #[test]
@@ -617,8 +683,8 @@ mod tests {
         // pichgoal is None
 
         let (w, h) = resolve_image_dimensions(&state);
-        assert_eq!(w, Some(1440));  // Uses goal
-        assert_eq!(h, Some(400));   // Falls back to pich
+        assert_eq!(w, Some(1440)); // Uses goal
+        assert_eq!(h, Some(400)); // Falls back to pich
     }
 
     #[test]
@@ -641,7 +707,7 @@ mod tests {
         let mut state = ImageParsingState::default();
         state.picwgoal = Some(1);
         state.pichgoal = Some(1);
-        state.picscalex = 1;  // 1 * 1 / 100 = 0
+        state.picscalex = 1; // 1 * 1 / 100 = 0
         state.picscaley = 1;
 
         let (w, h) = resolve_image_dimensions(&state);

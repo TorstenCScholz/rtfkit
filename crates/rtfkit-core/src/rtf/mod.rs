@@ -51,7 +51,9 @@ mod state_style;
 mod state_tables;
 
 // Public re-exports from state modules
-pub use state_images::{decode_pict_hex, resolve_image_dimensions, ImageByteTracker, ImageParsingState, PictDecodeError};
+pub use state_images::{
+    ImageByteTracker, ImageParsingState, PictDecodeError, decode_pict_hex, resolve_image_dimensions,
+};
 
 // Internal modules - Phase 3 (handlers)
 mod handlers_control_words;

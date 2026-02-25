@@ -36,7 +36,7 @@ use rtfkit_core::{
 };
 use std::collections::{HashMap, HashSet};
 
-use super::{MappingWarning, map_block};
+use super::{map_block, MappingWarning, TypstAssetAllocator};
 
 /// Result of mapping a table to Typst source.
 #[derive(Debug, Clone, PartialEq)]
@@ -79,6 +79,14 @@ type SkipCells = HashSet<(usize, usize)>;
 ///
 /// This function is deterministic: the same input always produces the same output.
 pub fn map_table(table: &IrTableBlock) -> TableOutput {
+    let mut assets = TypstAssetAllocator::new();
+    map_table_with_assets(table, &mut assets)
+}
+
+pub(crate) fn map_table_with_assets(
+    table: &IrTableBlock,
+    assets: &mut TypstAssetAllocator,
+) -> TableOutput {
     let mut warnings = Vec::new();
 
     if table.rows.is_empty() {
@@ -92,7 +100,13 @@ pub fn map_table(table: &IrTableBlock) -> TableOutput {
     let (rowspan_map, skip_cells) = compute_vertical_merges(table);
 
     // Map rows to cell info
-    let rows = map_rows(&table.rows, &rowspan_map, &skip_cells, &mut warnings);
+    let rows = map_rows(
+        &table.rows,
+        &rowspan_map,
+        &skip_cells,
+        assets,
+        &mut warnings,
+    );
 
     if rows.is_empty() || rows.iter().all(|r| r.is_empty()) {
         return TableOutput {
@@ -174,11 +188,12 @@ fn map_rows(
     rows: &[IrTableRow],
     rowspan_map: &RowspanMap,
     skip_cells: &SkipCells,
+    assets: &mut TypstAssetAllocator,
     warnings: &mut Vec<MappingWarning>,
 ) -> Vec<Vec<CellInfo>> {
     rows.iter()
         .enumerate()
-        .map(|(row_idx, row)| map_row(row, row_idx, rowspan_map, skip_cells, warnings))
+        .map(|(row_idx, row)| map_row(row, row_idx, rowspan_map, skip_cells, assets, warnings))
         .collect()
 }
 
@@ -188,6 +203,7 @@ fn map_row(
     row_idx: usize,
     rowspan_map: &RowspanMap,
     skip_cells: &SkipCells,
+    assets: &mut TypstAssetAllocator,
     warnings: &mut Vec<MappingWarning>,
 ) -> Vec<CellInfo> {
     let mut cells = Vec::new();
@@ -208,14 +224,14 @@ fn map_row(
                     .unwrap_or(1)
                     .max(1);
 
-                let cell_info = map_cell(cell, *span as u32, rowspan, warnings);
+                let cell_info = map_cell(cell, *span as u32, rowspan, assets, warnings);
                 cells.push(cell_info);
                 expected_h_continuations = (*span as usize).saturating_sub(1);
             }
             Some(CellMerge::HorizontalStart { .. }) => {
                 // span=0/1 is not a real merge
                 expected_h_continuations = 0;
-                cells.push(map_cell(cell, 1, 1, warnings));
+                cells.push(map_cell(cell, 1, 1, assets, warnings));
             }
             Some(CellMerge::HorizontalContinue) if expected_h_continuations > 0 => {
                 // Valid continuation - skip this cell
@@ -224,17 +240,17 @@ fn map_row(
             Some(CellMerge::HorizontalContinue) => {
                 // Orphan continuation - preserve content
                 warnings.push(MappingWarning::OrphanHorizontalContinue);
-                cells.push(map_cell(cell, 1, 1, warnings));
+                cells.push(map_cell(cell, 1, 1, assets, warnings));
             }
             Some(CellMerge::VerticalStart) | Some(CellMerge::VerticalContinue) => {
                 // Vertical merge - emit with computed rowspan
                 let rowspan = rowspan_map.get(&(row_idx, col_idx)).copied().unwrap_or(1);
-                cells.push(map_cell(cell, 1, rowspan, warnings));
+                cells.push(map_cell(cell, 1, rowspan, assets, warnings));
             }
             _ => {
                 // No merge
                 expected_h_continuations = 0;
-                cells.push(map_cell(cell, 1, 1, warnings));
+                cells.push(map_cell(cell, 1, 1, assets, warnings));
             }
         }
     }
@@ -247,12 +263,13 @@ fn map_cell(
     cell: &IrTableCell,
     colspan: u32,
     rowspan: u32,
+    assets: &mut TypstAssetAllocator,
     warnings: &mut Vec<MappingWarning>,
 ) -> CellInfo {
     // Map cell content
     let mut content_parts = Vec::new();
     for block in &cell.blocks {
-        let block_output = map_block(block);
+        let block_output = map_block(block, assets);
         if !block_output.typst_source.is_empty() {
             content_parts.push(block_output.typst_source);
             warnings.extend(block_output.warnings);
@@ -599,12 +616,10 @@ mod tests {
         assert!(output.typst_source.contains("[Charlie]"));
 
         // Should warn about orphan
-        assert!(
-            output
-                .warnings
-                .iter()
-                .any(|w| matches!(w, crate::map::MappingWarning::OrphanHorizontalContinue))
-        );
+        assert!(output
+            .warnings
+            .iter()
+            .any(|w| matches!(w, crate::map::MappingWarning::OrphanHorizontalContinue)));
     }
 
     #[test]

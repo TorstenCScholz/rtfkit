@@ -14,23 +14,28 @@
 //! - `paragraph`: Paragraph and run mapping
 //! - `list`: List mapping with level preservation
 //! - `table`: Table mapping with merge support
-//! - `image`: Image mapping with embedded data URIs
+//! - `image`: Image mapping with in-memory assets and virtual paths
 
 mod image;
 mod list;
 mod paragraph;
 mod table;
 
+use std::collections::BTreeMap;
+
 use rtfkit_core::{Block as IrBlock, Document};
-use rtfkit_style_tokens::{StyleProfile, StyleProfileName, builtins, serialize::to_typst_preamble};
+use rtfkit_style_tokens::{builtins, serialize::to_typst_preamble, StyleProfile, StyleProfileName};
 
 use crate::error::WarningKind;
 use crate::options::{Margins, RenderOptions};
 
-pub use image::{ImageOutput, map_image_block};
-pub use list::{ListOutput, map_list};
-pub use paragraph::{ParagraphOutput, map_paragraph};
-pub use table::{TableOutput, map_table};
+use image::map_image_block_with_assets;
+pub use image::{map_image_block, ImageOutput};
+use list::map_list_with_assets;
+pub use list::{map_list, ListOutput};
+pub use paragraph::{map_paragraph, ParagraphOutput};
+use table::map_table_with_assets;
+pub use table::{map_table, TableOutput};
 
 /// Structured mapping warnings.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +54,10 @@ pub enum MappingWarning {
         /// The pattern that was degraded
         pattern: String,
     },
+    /// Image payload bytes are malformed for the declared PNG format.
+    MalformedPngImagePayload,
+    /// Image payload bytes are malformed for the declared JPEG format.
+    MalformedJpegImagePayload,
 }
 
 impl MappingWarning {
@@ -62,6 +71,8 @@ impl MappingWarning {
             Self::PatternDegraded { context, .. } => {
                 format!("pattern_degraded_{}", context.replace(' ', "_"))
             }
+            Self::MalformedPngImagePayload => "Dropped malformed PNG image payload".to_string(),
+            Self::MalformedJpegImagePayload => "Dropped malformed JPEG image payload".to_string(),
         }
     }
 
@@ -70,11 +81,60 @@ impl MappingWarning {
         match self {
             // Mixed list kinds lose ordered-vs-bullet semantics.
             Self::ListMixedKindFallbackToBullet => WarningKind::DroppedContent,
+            Self::MalformedPngImagePayload | Self::MalformedJpegImagePayload => {
+                WarningKind::DroppedContent
+            }
             // Pattern degradation is partial support (not dropped content).
             Self::PatternDegraded { .. } => WarningKind::PartialSupport,
             // Remaining current mapper degradations are partial support.
             _ => WarningKind::PartialSupport,
         }
+    }
+}
+
+/// Deterministic in-memory asset bundle used by Typst rendering.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TypstAssetBundle {
+    /// Virtual path -> raw file bytes.
+    pub files: BTreeMap<String, Vec<u8>>,
+}
+
+impl TypstAssetBundle {
+    /// Returns bytes for the given virtual path if present.
+    pub fn get(&self, path: &str) -> Option<&[u8]> {
+        self.files.get(path).map(Vec::as_slice)
+    }
+}
+
+/// Internal deterministic image asset allocator.
+#[derive(Debug, Default)]
+pub(crate) struct TypstAssetAllocator {
+    next_image_num: u32,
+    bundle: TypstAssetBundle,
+}
+
+impl TypstAssetAllocator {
+    fn new() -> Self {
+        Self {
+            next_image_num: 1,
+            bundle: TypstAssetBundle::default(),
+        }
+    }
+
+    pub(crate) fn allocate_image_path_and_store(
+        &mut self,
+        extension: &str,
+        bytes: &[u8],
+    ) -> String {
+        let index = self.next_image_num;
+        self.next_image_num += 1;
+        let path = format!("assets/image-{index:06}.{extension}");
+        self.bundle.files.insert(path.clone(), bytes.to_vec());
+        path
+    }
+
+    fn into_bundle(self) -> TypstAssetBundle {
+        self.bundle
     }
 }
 
@@ -85,6 +145,8 @@ pub struct DocumentOutput {
     pub typst_source: String,
     /// Warnings generated during mapping.
     pub warnings: Vec<MappingWarning>,
+    /// Image/file assets referenced by typst_source.
+    pub assets: TypstAssetBundle,
 }
 
 /// Result of mapping a block to Typst source.
@@ -125,10 +187,11 @@ pub fn resolve_style_profile(name: &StyleProfileName) -> StyleProfile {
 pub fn map_document(doc: &Document, options: &RenderOptions) -> DocumentOutput {
     let mut warnings = Vec::new();
     let mut block_sources = Vec::new();
+    let mut assets = TypstAssetAllocator::new();
 
     // Map each block
     for block in &doc.blocks {
-        let block_output = map_block(block);
+        let block_output = map_block(block, &mut assets);
         if !block_output.typst_source.is_empty() {
             block_sources.push(block_output.typst_source);
         }
@@ -141,13 +204,14 @@ pub fn map_document(doc: &Document, options: &RenderOptions) -> DocumentOutput {
     DocumentOutput {
         typst_source,
         warnings,
+        assets: assets.into_bundle(),
     }
 }
 
 /// Map a single IR block to Typst source.
 ///
 /// Returns empty source for blocks that cannot be mapped (e.g., empty content).
-pub fn map_block(block: &IrBlock) -> BlockOutput {
+pub(crate) fn map_block(block: &IrBlock, assets: &mut TypstAssetAllocator) -> BlockOutput {
     match block {
         IrBlock::Paragraph(para) => {
             let output = map_paragraph(para);
@@ -157,24 +221,24 @@ pub fn map_block(block: &IrBlock) -> BlockOutput {
             }
         }
         IrBlock::ListBlock(list) => {
-            let output = map_list(list);
+            let output = map_list_with_assets(list, assets);
             BlockOutput {
                 typst_source: output.typst_source,
                 warnings: output.warnings,
             }
         }
         IrBlock::TableBlock(table) => {
-            let output = map_table(table);
+            let output = map_table_with_assets(table, assets);
             BlockOutput {
                 typst_source: output.typst_source,
                 warnings: output.warnings,
             }
         }
         IrBlock::ImageBlock(image) => {
-            let output = map_image_block(image);
+            let output = map_image_block_with_assets(image, assets);
             BlockOutput {
                 typst_source: output.typst_source,
-                warnings: Vec::new(),
+                warnings: output.warnings,
             }
         }
     }
@@ -248,6 +312,25 @@ mod tests {
     use super::*;
     use rtfkit_core::{Block, ListKind as IrListKind, Paragraph, Run, TableBlock as IrTableBlock};
 
+    fn valid_png_data() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let rgba = [255_u8, 0, 0, 255];
+        let encoder = ::image::codecs::png::PngEncoder::new(&mut bytes);
+        ::image::ImageEncoder::write_image(encoder, &rgba, 1, 1, ::image::ColorType::Rgba8.into())
+            .unwrap();
+        bytes
+    }
+
+    fn valid_jpeg_data() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let rgb = [255_u8, 0, 0];
+        let mut encoder = ::image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 85);
+        encoder
+            .encode(&rgb, 1, 1, ::image::ColorType::Rgb8.into())
+            .unwrap();
+        bytes
+    }
+
     #[test]
     fn test_map_empty_document() {
         let doc = Document::new();
@@ -259,6 +342,7 @@ mod tests {
         // Should have page setup
         assert!(output.typst_source.contains("#set page("));
         assert!(output.warnings.is_empty());
+        assert!(output.assets.files.is_empty());
     }
 
     #[test]
@@ -271,11 +355,9 @@ mod tests {
         let output = map_document(&doc, &options);
 
         // Should have style preamble
-        assert!(
-            output
-                .typst_source
-                .contains("// rtfkit style profile: report")
-        );
+        assert!(output
+            .typst_source
+            .contains("// rtfkit style profile: report"));
         assert!(output.typst_source.contains("#set page("));
         assert!(output.typst_source.contains("Hello, World!"));
     }
@@ -367,7 +449,7 @@ mod tests {
 
         let image = ImageBlock::with_dimensions(
             ImageFormat::Png,
-            vec![0x89, 0x50, 0x4E, 0x47],
+            valid_png_data(),
             1440, // 1 inch
             720,  // 0.5 inch
         );
@@ -378,16 +460,18 @@ mod tests {
         let output = map_document(&doc, &options);
 
         assert!(output.typst_source.contains("#image("));
-        assert!(output.typst_source.contains("data:image/png;base64,"));
+        assert!(output.typst_source.contains("assets/image-000001.png"));
         assert!(output.typst_source.contains("width: 1.00in"));
         assert!(output.typst_source.contains("height: 0.50in"));
+        assert_eq!(output.assets.files.len(), 1);
+        assert!(output.assets.files.contains_key("assets/image-000001.png"));
     }
 
     #[test]
     fn test_map_document_with_image_without_dimensions() {
         use rtfkit_core::{ImageBlock, ImageFormat};
 
-        let image = ImageBlock::new(ImageFormat::Jpeg, vec![0xFF, 0xD8, 0xFF, 0xE0]);
+        let image = ImageBlock::new(ImageFormat::Jpeg, valid_jpeg_data());
 
         let doc = Document::from_blocks(vec![Block::ImageBlock(image)]);
 
@@ -395,15 +479,34 @@ mod tests {
         let output = map_document(&doc, &options);
 
         assert!(output.typst_source.contains("#image("));
-        assert!(output.typst_source.contains("data:image/jpeg;base64,"));
+        assert!(output.typst_source.contains("assets/image-000001.jpg"));
         // The image function should not have width/height parameters
         // (but the page setup will have width/height for page dimensions)
         // Check that the image line doesn't contain width/height params
-        let image_line = output.typst_source.lines()
+        let image_line = output
+            .typst_source
+            .lines()
             .find(|line| line.contains("#image("))
             .expect("Should have an image line");
         assert!(!image_line.contains("width:"));
         assert!(!image_line.contains("height:"));
+        assert_eq!(output.assets.files.len(), 1);
+    }
+
+    #[test]
+    fn test_map_document_with_malformed_image_emits_dropped_warning() {
+        use rtfkit_core::{ImageBlock, ImageFormat};
+
+        let image = ImageBlock::new(ImageFormat::Png, vec![0x89, 0x50, 0x4E, 0x47]);
+        let doc = Document::from_blocks(vec![Block::ImageBlock(image)]);
+        let options = RenderOptions::default();
+        let output = map_document(&doc, &options);
+
+        assert!(!output.typst_source.contains("#image("));
+        assert!(output.assets.files.is_empty());
+        assert!(output
+            .warnings
+            .contains(&MappingWarning::MalformedPngImagePayload));
     }
 
     #[test]
@@ -530,11 +633,9 @@ mod tests {
         let output = map_document(&doc, &options);
 
         // Should contain style preamble elements
-        assert!(
-            output
-                .typst_source
-                .contains("// rtfkit style profile: report")
-        );
+        assert!(output
+            .typst_source
+            .contains("// rtfkit style profile: report"));
         assert!(output.typst_source.contains("#set text("));
         assert!(output.typst_source.contains("#set par("));
         assert!(output.typst_source.contains("#set table("));
@@ -553,11 +654,9 @@ mod tests {
             ..Default::default()
         };
         let output_report = map_document(&doc, &options_report);
-        assert!(
-            output_report
-                .typst_source
-                .contains("// rtfkit style profile: report")
-        );
+        assert!(output_report
+            .typst_source
+            .contains("// rtfkit style profile: report"));
 
         // Test Classic profile
         let options_classic = RenderOptions {
@@ -565,11 +664,9 @@ mod tests {
             ..Default::default()
         };
         let output_classic = map_document(&doc, &options_classic);
-        assert!(
-            output_classic
-                .typst_source
-                .contains("// rtfkit style profile: classic")
-        );
+        assert!(output_classic
+            .typst_source
+            .contains("// rtfkit style profile: classic"));
 
         // Test Compact profile
         let options_compact = RenderOptions {
@@ -577,11 +674,9 @@ mod tests {
             ..Default::default()
         };
         let output_compact = map_document(&doc, &options_compact);
-        assert!(
-            output_compact
-                .typst_source
-                .contains("// rtfkit style profile: compact")
-        );
+        assert!(output_compact
+            .typst_source
+            .contains("// rtfkit style profile: compact"));
     }
 
     #[test]

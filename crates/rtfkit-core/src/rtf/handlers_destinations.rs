@@ -70,11 +70,11 @@ pub fn destination_behavior(word: &str) -> Option<DestinationBehavior> {
         "shppict" => Some(DestinationBehavior::Shppict),
         "nonshppict" => Some(DestinationBehavior::Nonshppict),
         // Destinations that represent currently unsupported visible content.
-        "obj" | "objclass" | "objdata" | "picprop"
-        | "datafield" | "header" | "headerl" | "headerr" | "footer" | "footerl" | "footerr"
-        | "footnote" | "annotation" | "pn" | "pntext" | "pntxtb" | "pntxta" | "pnseclvl" => Some(
-            DestinationBehavior::Dropped("Dropped unsupported RTF destination content"),
-        ),
+        "obj" | "objclass" | "objdata" | "picprop" | "datafield" | "header" | "headerl"
+        | "headerr" | "footer" | "footerl" | "footerr" | "footnote" | "annotation" | "pn"
+        | "pntext" | "pntxtb" | "pntxta" | "pnseclvl" => Some(DestinationBehavior::Dropped(
+            "Dropped unsupported RTF destination content",
+        )),
         _ => None,
     }
 }
@@ -143,23 +143,20 @@ pub fn maybe_start_destination(state: &mut RuntimeState, word: &str) -> bool {
                 return false; // Don't skip - continue processing
             }
             DestinationBehavior::Shppict => {
-                // Shape picture - mark that we're in a shppict group
-                // This is preferred over nonshppict when both exist
-                state.image.in_shppict = true;
+                // Prefer `\shppict` over sibling `\nonshppict` for the same parent group.
+                let parent_depth = state.current_depth.saturating_sub(1);
+                state.image.mark_shppict_parent(parent_depth);
                 state.destinations.destination_marker = false;
                 state.mark_current_group_non_destination();
                 return false; // Don't skip - continue processing
             }
             DestinationBehavior::Nonshppict => {
-                // Non-shape picture - mark that we've seen this
-                // Will be skipped if shppict content exists
-                state.image.seen_nonshppict = true;
-                // If we already have shppict content, skip this group
-                if state.image.in_shppict {
-                    state.report_builder.dropped_content(
-                        "Dropped nonshppict in favor of shppict",
-                        None,
-                    );
+                // Skip fallback nonshppict only when a sibling shppict exists.
+                let parent_depth = state.current_depth.saturating_sub(1);
+                if state.image.should_skip_nonshppict(parent_depth) {
+                    state
+                        .report_builder
+                        .dropped_content("Dropped nonshppict in favor of shppict", None);
                     state.destinations.enter_destination();
                 } else {
                     // Otherwise, process normally (may contain pict)

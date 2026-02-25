@@ -54,7 +54,9 @@ pub use options::{DeterminismOptions, Margins, PageSize, RenderOptions};
 pub use rtfkit_style_tokens::StyleProfileName;
 
 // Re-export mapping functions
-pub use map::{BlockOutput, DocumentOutput, map_document, map_list, map_paragraph, map_table};
+pub use map::{
+    map_document, map_list, map_paragraph, map_table, BlockOutput, DocumentOutput, TypstAssetBundle,
+};
 
 // Re-export engine functions
 pub use engine::compile_to_pdf;
@@ -144,7 +146,7 @@ pub fn document_to_pdf_with_warnings(
 
     // Step 2: Compile Typst source to PDF
     let (pdf_bytes, compile_warnings) =
-        engine::compile_to_pdf(&mapped.typst_source, fixed_timestamp)?;
+        engine::compile_to_pdf(&mapped.typst_source, &mapped.assets, fixed_timestamp)?;
 
     // Merge warnings from compilation
     warnings.extend(compile_warnings);

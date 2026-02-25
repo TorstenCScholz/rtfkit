@@ -32,8 +32,8 @@ pub fn handle_paragraph_list_control_word(
             true
         }
         // Legacy paragraph numbering controls are intentionally unsupported.
-        "pnlvl" | "pnlvlblt" | "pnlvlbody" | "pnlvlcont" | "pnstart" | "pnindent"
-        | "pntxta" | "pntxtb" => {
+        "pnlvl" | "pnlvlblt" | "pnlvlbody" | "pnlvlcont" | "pnstart" | "pnindent" | "pntxta"
+        | "pntxtb" => {
             state.report_builder.unsupported_list_control(word);
             state
                 .report_builder
@@ -45,7 +45,11 @@ pub fn handle_paragraph_list_control_word(
 }
 
 /// Handle control words within list table/override table destinations.
-pub fn handle_list_table_control_word(state: &mut RuntimeState, word: &str, parameter: Option<i32>) {
+pub fn handle_list_table_control_word(
+    state: &mut RuntimeState,
+    word: &str,
+    parameter: Option<i32>,
+) {
     // Only process if we're in list table parsing mode
     if !state.lists.parsing_list_table && !state.lists.parsing_list_override_table {
         return;
@@ -96,7 +100,8 @@ pub fn handle_list_table_control_word(state: &mut RuntimeState, word: &str, para
         "listoverride" => {
             // Start of a new list override
             // We'll set the values when we encounter \\listidN and \\lsN
-            state.lists.current_list_override = Some(super::state_lists::ParsedListOverride::new(0, 0));
+            state.lists.current_list_override =
+                Some(super::state_lists::ParsedListOverride::new(0, 0));
         }
         "ls" => {
             // In override table, this sets the ls_id

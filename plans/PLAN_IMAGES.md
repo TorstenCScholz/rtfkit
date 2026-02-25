@@ -176,8 +176,10 @@ Determinism rules:
 ### 5.3 PDF/Typst (`crates/rtfkit-render-typst`)
 
 1. Add image block mapping in typst mapper.
-2. Use deterministic embedded bytes path supported by current renderer.
-3. Apply optional size mapping when twips dimensions available.
+2. Allocate deterministic virtual asset paths (`assets/image-000001.png`, etc.) and reference them from Typst `#image(...)`.
+3. Validate PNG/JPEG payloads in mapping; malformed payloads are dropped with stable dropped-content reasons.
+4. Resolve virtual asset paths in the Typst world from an in-memory bundle passed into the renderer.
+5. Apply optional size mapping when twips dimensions available.
 
 Decision: keep implementation aligned with existing in-process renderer constraints; no external binary dependency.
 
