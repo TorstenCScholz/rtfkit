@@ -613,13 +613,14 @@ fn convert_run(run: &Run) -> DocxRun {
 /// 96 DPI pixel to EMU conversion used by OOXML drawing sizes.
 const PX_TO_EMU: u32 = 9525;
 const DEFAULT_IMAGE_EMU: u32 = 914_400; // 1 inch
+type PreparedImage = (Vec<u8>, Option<(u32, u32)>);
 
 /// Returns image bytes that are safe for docx-rs packaging and optional intrinsic dimensions.
 ///
 /// docx-rs stores image parts under `.png` paths, so JPEG is normalized to PNG.
 /// For PNG, bytes are preserved as-is; if decoding fails we still proceed and fall
 /// back to explicit RTF dimensions or a default display size.
-fn prepare_image_for_docx(image: &ImageBlock) -> Result<(Vec<u8>, Option<(u32, u32)>), DocxError> {
+fn prepare_image_for_docx(image: &ImageBlock) -> Result<PreparedImage, DocxError> {
     match image.format {
         rtfkit_core::ImageFormat::Png => {
             let intrinsic = image::load_from_memory_with_format(&image.data, RasterFormat::Png)
@@ -843,11 +844,10 @@ fn convert_table_cell(
     }
 
     // Apply cell shading if present
-    if let Some(ref shading) = cell.shading {
-        if let Some(docx_shading) = convert_shading(shading) {
+    if let Some(ref shading) = cell.shading
+        && let Some(docx_shading) = convert_shading(shading) {
             docx_cell = docx_cell.shading(docx_shading);
         }
-    }
 
     // Convert cell content
     for block in &cell.blocks {

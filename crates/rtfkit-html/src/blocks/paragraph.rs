@@ -130,14 +130,13 @@ pub fn build_paragraph_style(shading: Option<&Shading>) -> String {
     let mut parts: Vec<String> = Vec::new();
 
     // 1. Background color from shading (pattern degradation: emit fill_color only)
-    if let Some(shading) = shading {
-        if let Some(ref fill_color) = shading.fill_color {
+    if let Some(shading) = shading
+        && let Some(ref fill_color) = shading.fill_color {
             parts.push(format!(
                 "background-color: #{:02x}{:02x}{:02x}",
                 fill_color.r, fill_color.g, fill_color.b
             ));
         }
-    }
 
     if parts.is_empty() {
         String::new()

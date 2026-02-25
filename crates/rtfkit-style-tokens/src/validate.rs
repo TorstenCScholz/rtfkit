@@ -368,8 +368,10 @@ mod tests {
 
     #[test]
     fn invalid_font_size_zero() {
-        let mut typography = TypographyTokens::default();
-        typography.size_body = 0.0;
+        let typography = TypographyTokens {
+            size_body: 0.0,
+            ..TypographyTokens::default()
+        };
         let profile = StyleProfile {
             name: StyleProfileName::default(),
             colors: ColorTokens::default(),
@@ -387,8 +389,10 @@ mod tests {
 
     #[test]
     fn invalid_font_size_negative() {
-        let mut typography = TypographyTokens::default();
-        typography.size_h1 = -5.0;
+        let typography = TypographyTokens {
+            size_h1: -5.0,
+            ..TypographyTokens::default()
+        };
         let profile = StyleProfile {
             name: StyleProfileName::default(),
             colors: ColorTokens::default(),
@@ -406,8 +410,10 @@ mod tests {
 
     #[test]
     fn invalid_line_height() {
-        let mut typography = TypographyTokens::default();
-        typography.line_height_body = 0.8;
+        let typography = TypographyTokens {
+            line_height_body: 0.8,
+            ..TypographyTokens::default()
+        };
         let profile = StyleProfile {
             name: StyleProfileName::default(),
             colors: ColorTokens::default(),
@@ -425,8 +431,10 @@ mod tests {
 
     #[test]
     fn invalid_font_weight_low() {
-        let mut typography = TypographyTokens::default();
-        typography.weight_regular = 50;
+        let typography = TypographyTokens {
+            weight_regular: 50,
+            ..TypographyTokens::default()
+        };
         let profile = StyleProfile {
             name: StyleProfileName::default(),
             colors: ColorTokens::default(),
@@ -444,8 +452,10 @@ mod tests {
 
     #[test]
     fn invalid_font_weight_high() {
-        let mut typography = TypographyTokens::default();
-        typography.weight_bold = 1000;
+        let typography = TypographyTokens {
+            weight_bold: 1000,
+            ..TypographyTokens::default()
+        };
         let profile = StyleProfile {
             name: StyleProfileName::default(),
             colors: ColorTokens::default(),
@@ -463,8 +473,10 @@ mod tests {
 
     #[test]
     fn invalid_spacing_negative() {
-        let mut spacing = SpacingTokens::default();
-        spacing.space_md = -1.0;
+        let spacing = SpacingTokens {
+            space_md: -1.0,
+            ..SpacingTokens::default()
+        };
         let profile = StyleProfile {
             name: StyleProfileName::default(),
             colors: ColorTokens::default(),
@@ -482,8 +494,10 @@ mod tests {
 
     #[test]
     fn invalid_page_margin_negative() {
-        let mut layout = LayoutTokens::default();
-        layout.page_margin_left_mm = -10.0;
+        let layout = LayoutTokens {
+            page_margin_left_mm: -10.0,
+            ..LayoutTokens::default()
+        };
         let profile = StyleProfile {
             name: StyleProfileName::default(),
             colors: ColorTokens::default(),
@@ -558,8 +572,10 @@ mod tests {
 
     #[test]
     fn line_height_exactly_one_is_valid() {
-        let mut typography = TypographyTokens::default();
-        typography.line_height_body = 1.0;
+        let typography = TypographyTokens {
+            line_height_body: 1.0,
+            ..TypographyTokens::default()
+        };
         let profile = StyleProfile {
             name: StyleProfileName::default(),
             colors: ColorTokens::default(),
@@ -573,8 +589,10 @@ mod tests {
 
     #[test]
     fn spacing_zero_is_valid() {
-        let mut spacing = SpacingTokens::default();
-        spacing.space_xs = 0.0;
+        let spacing = SpacingTokens {
+            space_xs: 0.0,
+            ..SpacingTokens::default()
+        };
         let profile = StyleProfile {
             name: StyleProfileName::default(),
             colors: ColorTokens::default(),

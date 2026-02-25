@@ -47,7 +47,7 @@ fn test_paragraph_shading_reset_pard() {
 
     // Check that \pard resets paragraph shading
     // The fixture should have multiple paragraphs with different shading states
-    assert!(doc.blocks.len() >= 1);
+    assert!(!doc.blocks.is_empty());
 }
 
 // =============================================================================

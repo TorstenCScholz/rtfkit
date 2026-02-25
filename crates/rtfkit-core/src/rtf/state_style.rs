@@ -121,8 +121,8 @@ mod tests {
         state.font_index = Some(5);
 
         let snapshot = state.snapshot();
-        assert_eq!(snapshot.bold, true);
-        assert_eq!(snapshot.italic, true);
+        assert!(snapshot.bold);
+        assert!(snapshot.italic);
         assert_eq!(snapshot.font_index, Some(5));
     }
 

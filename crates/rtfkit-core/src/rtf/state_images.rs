@@ -233,7 +233,7 @@ pub fn decode_pict_hex(input: &str) -> Result<Vec<u8>, PictDecodeError> {
     let hex_chars: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
 
     // Check for odd length
-    if hex_chars.len() % 2 != 0 {
+    if !hex_chars.len().is_multiple_of(2) {
         return Err(PictDecodeError::OddLength);
     }
 
@@ -586,11 +586,13 @@ mod tests {
     #[test]
     fn test_resolve_image_dimensions_goal_precedence() {
         // picwgoal/pichgoal should take precedence over picw/pich
-        let mut state = ImageParsingState::default();
-        state.picw = Some(1000);
-        state.pich = Some(500);
-        state.picwgoal = Some(1440);
-        state.pichgoal = Some(720);
+        let state = ImageParsingState {
+            picw: Some(1000),
+            pich: Some(500),
+            picwgoal: Some(1440),
+            pichgoal: Some(720),
+            ..ImageParsingState::default()
+        };
 
         let (w, h) = resolve_image_dimensions(&state);
         assert_eq!(w, Some(1440));
@@ -600,9 +602,11 @@ mod tests {
     #[test]
     fn test_resolve_image_dimensions_fallback_to_picw() {
         // When no goal, fall back to picw/pich
-        let mut state = ImageParsingState::default();
-        state.picw = Some(1000);
-        state.pich = Some(500);
+        let state = ImageParsingState {
+            picw: Some(1000),
+            pich: Some(500),
+            ..ImageParsingState::default()
+        };
 
         let (w, h) = resolve_image_dimensions(&state);
         assert_eq!(w, Some(1000));
@@ -622,11 +626,13 @@ mod tests {
     #[test]
     fn test_resolve_image_dimensions_scaling() {
         // Apply 50% scale
-        let mut state = ImageParsingState::default();
-        state.picwgoal = Some(1000);
-        state.pichgoal = Some(500);
-        state.picscalex = 50;
-        state.picscaley = 50;
+        let state = ImageParsingState {
+            picwgoal: Some(1000),
+            pichgoal: Some(500),
+            picscalex: 50,
+            picscaley: 50,
+            ..ImageParsingState::default()
+        };
 
         let (w, h) = resolve_image_dimensions(&state);
         assert_eq!(w, Some(500)); // 1000 * 50 / 100
@@ -636,11 +642,13 @@ mod tests {
     #[test]
     fn test_resolve_image_dimensions_scaling_200_percent() {
         // Apply 200% scale
-        let mut state = ImageParsingState::default();
-        state.picwgoal = Some(1000);
-        state.pichgoal = Some(500);
-        state.picscalex = 200;
-        state.picscaley = 200;
+        let state = ImageParsingState {
+            picwgoal: Some(1000),
+            pichgoal: Some(500),
+            picscalex: 200,
+            picscaley: 200,
+            ..ImageParsingState::default()
+        };
 
         let (w, h) = resolve_image_dimensions(&state);
         assert_eq!(w, Some(2000)); // 1000 * 200 / 100
@@ -650,9 +658,11 @@ mod tests {
     #[test]
     fn test_resolve_image_dimensions_non_positive_base() {
         // Non-positive base dimensions become None
-        let mut state = ImageParsingState::default();
-        state.picwgoal = Some(0);
-        state.pichgoal = Some(-100);
+        let state = ImageParsingState {
+            picwgoal: Some(0),
+            pichgoal: Some(-100),
+            ..ImageParsingState::default()
+        };
 
         let (w, h) = resolve_image_dimensions(&state);
         assert_eq!(w, None);
@@ -662,11 +672,13 @@ mod tests {
     #[test]
     fn test_resolve_image_dimensions_non_positive_scale() {
         // Non-positive scale should use default 100
-        let mut state = ImageParsingState::default();
-        state.picwgoal = Some(1000);
-        state.pichgoal = Some(500);
-        state.picscalex = 0;
-        state.picscaley = -50;
+        let state = ImageParsingState {
+            picwgoal: Some(1000),
+            pichgoal: Some(500),
+            picscalex: 0,
+            picscaley: -50,
+            ..ImageParsingState::default()
+        };
 
         let (w, h) = resolve_image_dimensions(&state);
         assert_eq!(w, Some(1000)); // Uses default scale 100
@@ -676,11 +688,13 @@ mod tests {
     #[test]
     fn test_resolve_image_dimensions_partial_goal() {
         // Only one goal dimension set
-        let mut state = ImageParsingState::default();
-        state.picw = Some(800);
-        state.pich = Some(400);
-        state.picwgoal = Some(1440);
-        // pichgoal is None
+        let state = ImageParsingState {
+            picw: Some(800),
+            pich: Some(400),
+            picwgoal: Some(1440),
+            // pichgoal is None
+            ..ImageParsingState::default()
+        };
 
         let (w, h) = resolve_image_dimensions(&state);
         assert_eq!(w, Some(1440)); // Uses goal
@@ -690,11 +704,13 @@ mod tests {
     #[test]
     fn test_resolve_image_dimensions_scaling_truncation() {
         // Test that scaling doesn't cause overflow with large values
-        let mut state = ImageParsingState::default();
-        state.picwgoal = Some(100000);
-        state.pichgoal = Some(100000);
-        state.picscalex = 100;
-        state.picscaley = 100;
+        let state = ImageParsingState {
+            picwgoal: Some(100000),
+            pichgoal: Some(100000),
+            picscalex: 100,
+            picscaley: 100,
+            ..ImageParsingState::default()
+        };
 
         let (w, h) = resolve_image_dimensions(&state);
         assert_eq!(w, Some(100000));
@@ -704,11 +720,13 @@ mod tests {
     #[test]
     fn test_resolve_image_dimensions_scale_result_zero() {
         // If scaling results in 0, should return None
-        let mut state = ImageParsingState::default();
-        state.picwgoal = Some(1);
-        state.pichgoal = Some(1);
-        state.picscalex = 1; // 1 * 1 / 100 = 0
-        state.picscaley = 1;
+        let state = ImageParsingState {
+            picwgoal: Some(1),
+            pichgoal: Some(1),
+            picscalex: 1, // 1 * 1 / 100 = 0
+            picscaley: 1,
+            ..ImageParsingState::default()
+        };
 
         let (w, h) = resolve_image_dimensions(&state);
         assert_eq!(w, None);

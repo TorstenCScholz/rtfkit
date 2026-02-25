@@ -110,14 +110,13 @@ fn apply_paragraph_shading(
     }
 
     // Check if pattern is present and not Solid/Clear - emit warning
-    if let Some(ref pattern) = shading.pattern {
-        if !matches!(pattern, ShadingPattern::Solid | ShadingPattern::Clear) {
+    if let Some(ref pattern) = shading.pattern
+        && !matches!(pattern, ShadingPattern::Solid | ShadingPattern::Clear) {
             warnings.push(MappingWarning::PatternDegraded {
                 context: "paragraph shading".to_string(),
                 pattern: format!("{:?}", pattern),
             });
         }
-    }
 
     // Emit flat fill color only
     if let Some(ref fill_color) = shading.fill_color {
@@ -314,11 +313,10 @@ fn map_runs(runs: &[Run], _warnings: &mut Vec<MappingWarning>) -> String {
     }
 
     // Don't forget the last run
-    if !current_text.is_empty() {
-        if let Some(style) = current_style {
+    if !current_text.is_empty()
+        && let Some(style) = current_style {
             result.push_str(&format_run(&current_text, &style));
         }
-    }
 
     result
 }

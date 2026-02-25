@@ -198,7 +198,6 @@ fn test_list_level_one() {
     // for a unit test - the important thing is it doesn't panic
     if result.is_err() {
         // Log or skip - list table parsing may not be fully implemented
-        return;
     }
 }
 
