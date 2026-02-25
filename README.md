@@ -23,6 +23,8 @@ See [RTF Feature Overview](docs/rtf-feature-overview.md) for supported vs. not-y
 
 ## Install
 
+### Rust CLI (Original)
+
 From source:
 
 ```sh
@@ -31,7 +33,40 @@ cargo install --path crates/rtfkit-cli
 
 Or download a pre-built binary from [Releases](https://github.com/TorstenCScholz/rtfkit/releases).
 
+### Python Bindings
+
+#### From PyPI (Planned, not published yet)
+
+```bash
+# Will work after first PyPI release
+pip install rtfkit
+```
+
+#### From Source
+
+```bash
+# Clone the repository
+git clone https://github.com/TorstenCScholz/rtfkit.git
+cd rtfkit/bindings/python
+
+# Install with pip
+pip install .
+```
+
+#### Development Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/TorstenCScholz/rtfkit.git
+cd rtfkit/bindings/python
+
+# Install in editable mode
+pip install -e .
+```
+
 ## Usage
+
+### Rust CLI (Original)
 
 ```sh
 # Convert RTF to DOCX (default output format)
@@ -55,6 +90,33 @@ rtfkit convert fixtures/text_simple_paragraph.rtf --emit-ir out.json
 # Strict mode: fail when dropped content is reported
 rtfkit convert fixtures/mixed_complex.rtf --strict --format json
 ```
+
+### Python Bindings
+
+```python
+import rtfkit
+
+# Parse RTF content
+rtf_content = r"{\rtf1\ansi Hello \b World!}"
+result = rtfkit.parse(rtf_content)
+
+# Convert to different formats
+html = rtfkit.to_html(result.document)
+docx_bytes = rtfkit.to_docx_bytes(result.document)
+pdf_bytes = rtfkit.to_pdf(result.document)
+
+# Save to files
+with open("output.html", "w") as f:
+    f.write(html)
+
+with open("output.docx", "wb") as f:
+    f.write(docx_bytes)
+
+with open("output.pdf", "wb") as f:
+    f.write(pdf_bytes)
+```
+
+See the [Python binding README](bindings/python/README.md) for comprehensive documentation.
 
 ### HTML Output Options
 
@@ -247,6 +309,28 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --all
 ```
 
+### Python Bindings Development
+
+```bash
+# Install maturin
+pip install maturin
+
+# Build the package
+cd bindings/python
+maturin build
+
+# Install the built package
+pip install target/wheels/*.whl
+
+# Run tests
+cd bindings/python
+pytest
+
+# Type checking
+cd bindings/python
+mypy python/rtfkit/
+```
+
 ## Testing
 
 rtfkit has comprehensive test coverage:
@@ -284,6 +368,7 @@ For up-to-date support details, see [RTF Feature Overview](docs/rtf-feature-over
 - [Limits Policy](docs/limits-policy.md)
 - [Contributing Guide](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
+- [Python Binding Documentation](bindings/python/README.md)
 
 ### Migration Notes
 
