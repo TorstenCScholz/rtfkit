@@ -24,7 +24,12 @@
 //! - `handlers_tables`: Table controls and row/cell event handling
 //! - `handlers_fields`: Field control/text/group handling
 //! - `handlers_resources`: Font/color controls and resource destinations
-//! - `finalize`: Document finalization
+//! - `finalize/runs`: Shared run construction/flush helpers
+//! - `finalize/shading`: Shading conversion and builder helpers
+//! - `finalize/lists`: List reference resolution and list-block insertion
+//! - `finalize/paragraphs`: Paragraph finalization for document/table-cell contexts
+//! - `finalize/tables`: Cell/row/table finalization and merge normalization
+//! - `finalize/document`: End-of-document finalization
 //! - `pipeline`: Parsing orchestration
 //! - `api`: Public entrypoints
 

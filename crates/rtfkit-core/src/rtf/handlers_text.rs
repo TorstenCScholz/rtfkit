@@ -3,7 +3,6 @@
 //! This module contains text handling and run creation logic for RTF parsing.
 
 use super::state::RuntimeState;
-use crate::{Inline, Run};
 
 // =============================================================================
 // Text Handling
@@ -57,11 +56,7 @@ fn handle_text_internal(state: &mut RuntimeState, text: String) {
     // Check if style has changed
     if state.character_style_changed() {
         // Flush current text as a run if any
-        if !state.current_text.is_empty() {
-            let run = create_run(state);
-            state.current_paragraph.inlines.push(Inline::Run(run));
-            state.current_text.clear();
-        }
+        flush_current_text_as_run(state);
         state.current_run_style = state.style.snapshot();
     }
 
@@ -69,45 +64,11 @@ fn handle_text_internal(state: &mut RuntimeState, text: String) {
     state.current_text.push_str(&text);
 }
 
-// =============================================================================
-// Run Creation
-// =============================================================================
-
-/// Create a run from the current text and run style.
-pub fn create_run(state: &RuntimeState) -> Run {
-    // Resolve font_family from font_index -> font_table
-    let font_family = state.resolve_font_family();
-
-    // Resolve font_size from half-points to points
-    let font_size = state.resolve_font_size();
-
-    // Resolve color from color_index -> color_table
-    let color = state.resolve_color();
-
-    // Resolve background_color with precedence: highlight > background
-    let background_color = state.resolve_background_color();
-
-    Run {
-        text: state.current_text.clone(),
-        bold: state.current_run_style.bold,
-        italic: state.current_run_style.italic,
-        underline: state.current_run_style.underline,
-        font_family,
-        font_size,
-        color,
-        background_color,
-    }
-}
-
 /// Flush current text as a run.
 ///
 /// Creates a run from the current text and adds it to the current paragraph.
 pub fn flush_current_text_as_run(state: &mut RuntimeState) {
-    if !state.current_text.is_empty() {
-        let run = create_run(state);
-        state.current_paragraph.inlines.push(Inline::Run(run));
-        state.current_text.clear();
-    }
+    super::finalize::flush_current_text_as_run(state);
 }
 
 // =============================================================================
@@ -148,11 +109,7 @@ fn handle_field_result_text_internal(state: &mut RuntimeState, text: String) {
 
 /// Flush current text as a field run.
 pub fn flush_current_text_as_field_run(state: &mut RuntimeState) {
-    if !state.current_text.is_empty() {
-        let run = create_run(state);
-        state.fields.field_result_inlines.push(Inline::Run(run));
-        state.current_text.clear();
-    }
+    super::finalize::flush_current_text_as_field_run(state);
 }
 
 // =============================================================================
@@ -196,7 +153,7 @@ mod tests {
         state.current_run_style.bold = true;
         state.current_run_style.italic = true;
 
-        let run = create_run(&state);
+        let run = super::super::finalize::runs::create_run(&state);
         assert_eq!(run.text, "Test");
         assert!(run.bold);
         assert!(run.italic);
