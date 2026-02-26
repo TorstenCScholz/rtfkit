@@ -814,7 +814,7 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn table_cell_with_patterned_shading_degrades_to_flat_fill() {
+    fn table_cell_with_percent_patterned_shading_uses_blended_fill() {
         use rtfkit_core::{Color, Shading, ShadingPattern};
 
         // Create a patterned shading (25% pattern with black on white)
@@ -832,9 +832,8 @@ mod tests {
         table_to_html(&table, &mut buf);
         let html = buf.as_str();
 
-        // Pattern should be ignored - only fill_color emitted as background-color
-        assert!(html.contains(r#"style="background-color: #ffffff;""#));
-        assert!(!html.contains(&format!("#{}", "000000"))); // Pattern color not emitted
+        // Percent pattern should be approximated as blended fill.
+        assert!(html.contains(r#"style="background-color: #bfbfbf;""#));
         assert!(html.contains("Patterned"));
     }
 
@@ -907,10 +906,9 @@ mod tests {
         table_to_html(&table, &mut buf);
         let html = buf.as_str();
 
-        // Should have class, width, and background-color (pattern ignored)
+        // Should have class, width, and blended background-color.
         assert!(html.contains(r#"class="rtf-valign-middle""#));
         assert!(html.contains(r#"width: 36.0pt"#));
-        assert!(html.contains(r#"background-color: #008000"#));
-        assert!(!html.contains(&format!("#{}", "ffffff"))); // Pattern color not emitted
+        assert!(html.contains(r#"background-color: #80c080"#));
     }
 }

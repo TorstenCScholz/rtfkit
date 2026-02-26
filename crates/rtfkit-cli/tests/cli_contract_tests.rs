@@ -1727,6 +1727,30 @@ mod regression_tests {
     }
 
     #[test]
+    fn regression_table_hyperlink_first_inline_alignment() {
+        // Regression: cell paragraph alignment should persist when first inline is hyperlink.
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/table_alignment_hyperlink_first_inline.rtf");
+
+        let dir = tempdir().unwrap();
+        let ir_output = dir.path().join("table-hyperlink-align.json");
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--emit-ir",
+            ir_output.to_str().unwrap(),
+        ]);
+        cmd.assert().success();
+
+        let ir = fs::read_to_string(ir_output).unwrap();
+        assert!(ir.contains("\"alignment\": \"center\""));
+        assert!(ir.contains("\"alignment\": \"right\""));
+    }
+
+    #[test]
     fn regression_multiple_paragraphs() {
         // Regression: Multiple paragraphs should be handled correctly
         let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -3502,6 +3526,24 @@ mod block_shading_tests {
         cmd.assert().success().code(0);
     }
 
+    /// Test that percent shading steps fixture passes strict mode.
+    #[test]
+    fn shading_percent_steps_fixture_passes_strict_mode() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/shading_percent_steps.rtf");
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--strict",
+            "--format",
+            "json",
+        ]);
+        cmd.assert().success().code(0);
+    }
+
     /// Test that theme color shading fixture passes strict mode.
     #[test]
     fn shading_theme_color_reference_fixture_passes_strict_mode() {
@@ -3837,6 +3879,49 @@ mod block_shading_tests {
             bytes.starts_with(b"%PDF"),
             "Output should be a valid PDF file"
         );
+    }
+
+    /// Test that percent shading patterns stay distinct in IR and HTML outputs.
+    #[test]
+    fn shading_percent_steps_distinct_in_ir_and_html() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/shading_percent_steps.rtf");
+
+        let dir = tempdir().unwrap();
+        let ir_output = dir.path().join("steps.ir.json");
+        let html_output = dir.path().join("steps.html");
+
+        let mut ir_cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        ir_cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--emit-ir",
+            ir_output.to_str().unwrap(),
+        ]);
+        ir_cmd.assert().success();
+
+        let mut html_cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        html_cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--to",
+            "html",
+            "-o",
+            html_output.to_str().unwrap(),
+            "--force",
+        ]);
+        html_cmd.assert().success();
+
+        let ir = fs::read_to_string(ir_output).unwrap();
+        assert!(ir.contains("\"pattern\": \"percent25\""));
+        assert!(ir.contains("\"pattern\": \"percent50\""));
+        assert!(ir.contains("\"pattern\": \"percent75\""));
+
+        let html = fs::read_to_string(html_output).unwrap();
+        assert!(html.contains("background-color: #bfbfbf"));
+        assert!(html.contains("background-color: #808080"));
+        assert!(html.contains("background-color: #404040"));
     }
 }
 

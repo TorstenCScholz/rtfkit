@@ -3,7 +3,10 @@
 //! This module handles converting IR paragraphs to HTML with proper
 //! semantic tags and run merging.
 
-use rtfkit_core::{Color, Hyperlink, Inline, Paragraph, Run, Shading};
+use rtfkit_core::{
+    Color, Hyperlink, Inline, Paragraph, Run, Shading, ShadingRenderPolicy,
+    resolve_shading_fill_color,
+};
 
 use crate::escape::{escape_attribute, sanitize_font_family};
 use crate::serialize::HtmlBuffer;
@@ -108,9 +111,9 @@ pub fn color_to_hex(color: &Color) -> String {
 ///
 /// # Pattern Degradation (Slice B)
 ///
-/// CSS does not natively support pattern fills without images. For patterned shading,
-/// we emit only the `fill_color` as `background-color` and ignore the pattern.
-/// This is deterministic degradation - no warnings are emitted.
+/// CSS does not natively support pattern fills without images. For percentage
+/// patterns, we emit a deterministic blended approximation. Non-percent patterns
+/// still degrade to fill color only.
 ///
 /// # Security
 ///
@@ -130,8 +133,8 @@ pub fn build_paragraph_style(shading: Option<&Shading>) -> String {
     let mut parts: Vec<String> = Vec::new();
 
     // 1. Background color from shading (pattern degradation: emit fill_color only)
-    if let Some(shading) = shading
-        && let Some(ref fill_color) = shading.fill_color
+    if let Some(fill_color) =
+        resolve_shading_fill_color(shading, ShadingRenderPolicy::ApproximatePercentPatterns)
     {
         parts.push(format!(
             "background-color: #{:02x}{:02x}{:02x}",
@@ -1221,10 +1224,19 @@ mod tests {
 
     #[test]
     fn build_paragraph_style_helper() {
+        use rtfkit_core::ShadingPattern;
+
         // Test the helper function directly
         let shading = Shading::solid(Color::new(0, 255, 0));
         let style = build_paragraph_style(Some(&shading));
         assert_eq!(style, "background-color: #00ff00;");
+
+        let mut percent_shading = Shading::new();
+        percent_shading.fill_color = Some(Color::new(255, 255, 255));
+        percent_shading.pattern_color = Some(Color::new(0, 0, 0));
+        percent_shading.pattern = Some(ShadingPattern::Percent50);
+        let style = build_paragraph_style(Some(&percent_shading));
+        assert_eq!(style, "background-color: #808080;");
 
         // Empty shading
         let empty_shading = Shading::new();
@@ -1241,7 +1253,7 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn paragraph_with_patterned_shading_degrades_to_flat_fill() {
+    fn paragraph_with_percent_pattern_shading_uses_blended_fill() {
         use rtfkit_core::ShadingPattern;
 
         // Create a patterned shading (25% pattern with black on white)
@@ -1258,14 +1270,12 @@ mod tests {
         let mut buf = HtmlBuffer::new();
         paragraph_to_html(&para, &mut buf);
 
-        // Pattern should be ignored - only fill_color emitted as background-color
-        // Pattern color (black) should NOT appear in output
+        // Percent pattern should be approximated as blended fill.
         let result = buf.as_str();
-        assert!(result.contains("background-color: #ffffff"));
-        assert!(!result.contains(&format!("#{}", "000000"))); // Pattern color not emitted
+        assert!(result.contains("background-color: #bfbfbf"));
         assert_eq!(
             result,
-            r#"<p class="rtf-p" style="background-color: #ffffff;">patterned text</p>"#
+            r#"<p class="rtf-p" style="background-color: #bfbfbf;">patterned text</p>"#
         );
     }
 

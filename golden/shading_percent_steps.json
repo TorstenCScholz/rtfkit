@@ -1,0 +1,82 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Paragraph 25%.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 255,
+          "g": 255,
+          "b": 255
+        },
+        "pattern_color": {
+          "r": 0,
+          "g": 0,
+          "b": 0
+        },
+        "pattern": "percent25"
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Paragraph 50%.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 255,
+          "g": 255,
+          "b": 255
+        },
+        "pattern_color": {
+          "r": 0,
+          "g": 0,
+          "b": 0
+        },
+        "pattern": "percent50"
+      }
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Paragraph 75%.",
+          "bold": false,
+          "italic": false,
+          "underline": false
+        }
+      ],
+      "shading": {
+        "fill_color": {
+          "r": 255,
+          "g": 255,
+          "b": 255
+        },
+        "pattern_color": {
+          "r": 0,
+          "g": 0,
+          "b": 0
+        },
+        "pattern": "percent75"
+      }
+    }
+  ]
+}

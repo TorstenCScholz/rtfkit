@@ -193,6 +193,16 @@ impl RuntimeState {
         self.tables.reset_paragraph_state();
     }
 
+    /// Capture paragraph alignment when the first visible inline content starts.
+    ///
+    /// This ensures alignment is preserved even when a paragraph starts with
+    /// non-run content (for example field results/hyperlinks).
+    pub fn capture_paragraph_alignment_if_start(&mut self) {
+        if self.current_paragraph.inlines.is_empty() && self.current_text.is_empty() {
+            self.paragraph_alignment = self.style.alignment;
+        }
+    }
+
     // =============================================================================
     // Style Methods
     // =============================================================================
@@ -338,5 +348,19 @@ mod tests {
 
         state.current_text.clear();
         assert!(!state.has_pending_paragraph_content());
+    }
+
+    #[test]
+    fn test_capture_paragraph_alignment_if_start() {
+        let mut state = RuntimeState::new(ParserLimits::default());
+        state.style.alignment = Alignment::Center;
+        state.capture_paragraph_alignment_if_start();
+        assert_eq!(state.paragraph_alignment, Alignment::Center);
+
+        // Once paragraph content exists, capture should not overwrite alignment.
+        state.current_text = "x".to_string();
+        state.style.alignment = Alignment::Right;
+        state.capture_paragraph_alignment_if_start();
+        assert_eq!(state.paragraph_alignment, Alignment::Center);
     }
 }

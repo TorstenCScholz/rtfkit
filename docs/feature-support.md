@@ -36,7 +36,7 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | Text color (`\cfN`, `\colortbl`) | ✅ Supported | Mapped to DOCX `<w:color>`, HTML `color`, Typst `#text(fill: ...)` |
 | Background color (`\cbN`, `\highlightN`) | ✅ Supported | Mapped to DOCX `<w:shd>`, HTML `background-color`, Typst `#highlight(fill: ...)`; `\highlight` takes precedence over `\cb` |
 | Paragraph shading (`\cbpatN`) | ✅ Supported | Block-level background for paragraphs; mapped to DOCX `<w:shd>`, HTML `background-color`; `\pard` resets, `\plain` does not |
-| Paragraph shading pattern (`\shadingN`, `\cfpatN`) | ⚠️ Partial | Percentage patterns (0-10000) mapped to `ShadingPattern`; DOCX full support, HTML/Typst degraded to solid fill |
+| Paragraph shading pattern (`\shadingN`, `\cfpatN`) | ⚠️ Partial | Percentage patterns (0-10000) mapped to `ShadingPattern`; DOCX full support, HTML/Typst use deterministic blended approximation; non-percent patterns still degrade to flat fill |
 | Formatting reset (`\plain`) | ✅ Supported | Resets character formatting to defaults (including background/highlight) |
 | Strikethrough (`\strike`) | ❌ Not Supported | Warning emitted |
 | Small caps (`\scaps`) | ❌ Not Supported | Warning emitted |
@@ -69,7 +69,7 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | Row alignment (`\trql`, `\trqc`, `\trqr`) | ⚠️ Partial | Parsed but not fully emitted by docx-rs |
 | Row indent (`\trleft`) | ⚠️ Partial | Parsed but not fully emitted by docx-rs |
 | Cell shading (`\clcbpatN`) | ✅ Supported | Cell background color; precedence: cell > row > table |
-| Cell shading pattern (`\clshdngN`, `\clcfpatN`) | ⚠️ Partial | Percentage patterns; DOCX full support, HTML/Typst degraded to solid fill |
+| Cell shading pattern (`\clshdngN`, `\clcfpatN`) | ⚠️ Partial | Percentage patterns use deterministic blended approximation in HTML/Typst; DOCX full support; non-percent patterns still degrade to flat fill |
 | Row shading (`\trcbpatN`) | ✅ Supported | Default shading for cells without explicit shading |
 | Table shading | ✅ Supported | Fallback shading from first row's `\trcbpatN` |
 | Nested tables | ❌ Not Supported | Warning emitted |

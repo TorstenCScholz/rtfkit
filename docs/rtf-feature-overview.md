@@ -51,9 +51,10 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
 - **Row-level table properties** are parsed but only partially emitted:
   - parsed: `\trql`, `\trqc`, `\trqr`, `\trleft`
   - currently not fully mapped by `docx-rs` writer
-- **Shading patterns** are fully supported in DOCX but degraded in HTML/Typst:
-  - percentage patterns (e.g., 25%, 50%) are rendered as solid fill in HTML/Typst
-  - `PatternDegraded` warning emitted for Typst output
+- **Shading patterns** are fully supported in DOCX and partially degraded in HTML/Typst:
+  - percentage patterns (e.g., 25%, 50%, 75%) are approximated via deterministic blended fills in HTML/Typst
+  - non-percent hatch/stripe/cross patterns remain degraded to flat fill
+  - `PatternDegraded` warning is emitted for degraded non-percent patterns in Typst output
 - **Some malformed table/list inputs** are repaired with warnings (and `DroppedContent` when semantics are lost)
 - **WMF/EMF images** are dropped with `unsupported_image_format` warning
 - **Malformed image hex data** is dropped with `malformed_image_hex_payload` warning

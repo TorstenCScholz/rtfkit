@@ -7,6 +7,7 @@
 //! - Shading patterns
 
 use crate::Block;
+use crate::ShadingPattern;
 use crate::rtf::parse;
 
 // =============================================================================
@@ -250,6 +251,64 @@ fn test_shading_percentage_75() {
     let result = parse(input);
 
     assert!(result.is_ok());
+}
+
+#[test]
+fn test_shading_percent_steps_fixture_patterns_are_distinct() {
+    let input = include_str!("../../../../../fixtures/shading_percent_steps.rtf");
+    let result = parse(input);
+    assert!(result.is_ok());
+
+    let (doc, _report) = result.unwrap();
+    let patterns: Vec<ShadingPattern> = doc
+        .blocks
+        .iter()
+        .filter_map(|block| {
+            let Block::Paragraph(para) = block else {
+                return None;
+            };
+            para.shading.as_ref().and_then(|s| s.pattern)
+        })
+        .collect();
+
+    assert_eq!(
+        patterns,
+        vec![
+            ShadingPattern::Percent25,
+            ShadingPattern::Percent50,
+            ShadingPattern::Percent75
+        ]
+    );
+}
+
+#[test]
+fn test_table_cell_shading_percent_steps_fixture_patterns_are_distinct() {
+    let input = include_str!("../../../../../fixtures/table_cell_shading_percent_steps.rtf");
+    let result = parse(input);
+    assert!(result.is_ok());
+
+    let (doc, _report) = result.unwrap();
+    let Some(Block::TableBlock(table)) = doc.blocks.first() else {
+        panic!("Expected table block");
+    };
+    let Some(first_row) = table.rows.first() else {
+        panic!("Expected table row");
+    };
+
+    let patterns: Vec<ShadingPattern> = first_row
+        .cells
+        .iter()
+        .filter_map(|cell| cell.shading.as_ref().and_then(|s| s.pattern))
+        .collect();
+
+    assert_eq!(
+        patterns,
+        vec![
+            ShadingPattern::Percent25,
+            ShadingPattern::Percent50,
+            ShadingPattern::Percent75
+        ]
+    );
 }
 
 // =============================================================================

@@ -373,8 +373,7 @@ Common message values include:
 - `pattern_degraded_cell_shading`
 
 **Common Causes**:
-- Percentage patterns (e.g., 25%, 50%, 75%) in HTML or Typst output
-- Hatch/stripe patterns in any output format except DOCX
+- Non-percent hatch/stripe/cross patterns in HTML or Typst output
 
 **Impact**: Pattern is rendered as solid fill using the fill color. DOCX output preserves patterns fully.
 

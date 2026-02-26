@@ -282,10 +282,7 @@ fn handle_text_from_symbol(state: &mut RuntimeState, text: String) {
 
 /// Internal text handling (after skip logic).
 fn handle_text_internal(state: &mut RuntimeState, text: String) {
-    // If this is the first text in the paragraph, capture the alignment
-    if state.current_paragraph.inlines.is_empty() && state.current_text.is_empty() {
-        state.paragraph_alignment = state.style.alignment;
-    }
+    state.capture_paragraph_alignment_if_start();
 
     // Check if style has changed
     if state.character_style_changed() {

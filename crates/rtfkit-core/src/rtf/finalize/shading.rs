@@ -14,24 +14,39 @@ pub fn shading_percentage_to_pattern(percentage: i32) -> Option<ShadingPattern> 
     let clamped = percentage.clamp(0, 10000);
 
     match clamped {
-        0 => Some(ShadingPattern::Clear),
-        10000 => Some(ShadingPattern::Solid),
-        // Map percentage to closest Percent pattern
-        // RTF uses 0-10000, we map to discrete percentages
-        p if p <= 75 => Some(ShadingPattern::Percent5),
-        p if p <= 150 => Some(ShadingPattern::Percent10),
-        p if p <= 250 => Some(ShadingPattern::Percent20),
-        p if p <= 375 => Some(ShadingPattern::Percent25),
-        p if p <= 450 => Some(ShadingPattern::Percent30),
-        p if p <= 550 => Some(ShadingPattern::Percent40),
-        p if p <= 650 => Some(ShadingPattern::Percent50),
-        p if p <= 750 => Some(ShadingPattern::Percent60),
-        p if p <= 825 => Some(ShadingPattern::Percent70),
-        p if p <= 875 => Some(ShadingPattern::Percent75),
-        p if p <= 950 => Some(ShadingPattern::Percent80),
-        p if p < 10000 => Some(ShadingPattern::Percent90),
-        _ => Some(ShadingPattern::Solid),
+        0 => return Some(ShadingPattern::Clear),
+        10000 => return Some(ShadingPattern::Solid),
+        _ => {}
     }
+
+    // Map to the nearest supported percent pattern in RTF scale (0..10000).
+    let supported: &[(i32, ShadingPattern)] = &[
+        (500, ShadingPattern::Percent5),
+        (1000, ShadingPattern::Percent10),
+        (2000, ShadingPattern::Percent20),
+        (2500, ShadingPattern::Percent25),
+        (3000, ShadingPattern::Percent30),
+        (4000, ShadingPattern::Percent40),
+        (5000, ShadingPattern::Percent50),
+        (6000, ShadingPattern::Percent60),
+        (7000, ShadingPattern::Percent70),
+        (7500, ShadingPattern::Percent75),
+        (8000, ShadingPattern::Percent80),
+        (9000, ShadingPattern::Percent90),
+    ];
+
+    let mut nearest = supported[0];
+    let mut nearest_delta = (clamped - nearest.0).abs();
+    for candidate in supported.iter().skip(1).copied() {
+        let delta = (clamped - candidate.0).abs();
+        // Tie-break to lower density for deterministic and conservative mapping.
+        if delta < nearest_delta || (delta == nearest_delta && candidate.0 < nearest.0) {
+            nearest = candidate;
+            nearest_delta = delta;
+        }
+    }
+
+    Some(nearest.1)
 }
 
 /// Build a Shading object from fill color index, pattern color index, and shading percentage.
@@ -91,16 +106,32 @@ mod tests {
         );
         // The thresholds are designed for specific boundary values
         assert_eq!(
-            shading_percentage_to_pattern(75),
-            Some(ShadingPattern::Percent5)
-        );
-        assert_eq!(
-            shading_percentage_to_pattern(650),
-            Some(ShadingPattern::Percent50)
+            shading_percentage_to_pattern(2500),
+            Some(ShadingPattern::Percent25)
         );
         assert_eq!(
             shading_percentage_to_pattern(5000),
-            Some(ShadingPattern::Percent90)
+            Some(ShadingPattern::Percent50)
+        );
+        assert_eq!(
+            shading_percentage_to_pattern(7500),
+            Some(ShadingPattern::Percent75)
+        );
+        assert_eq!(
+            shading_percentage_to_pattern(3750),
+            Some(ShadingPattern::Percent40)
+        );
+        assert_eq!(
+            shading_percentage_to_pattern(4500),
+            Some(ShadingPattern::Percent40)
+        );
+        assert_eq!(
+            shading_percentage_to_pattern(750),
+            Some(ShadingPattern::Percent5)
+        );
+        assert_eq!(
+            shading_percentage_to_pattern(8500),
+            Some(ShadingPattern::Percent80)
         );
         assert_eq!(
             shading_percentage_to_pattern(-100),

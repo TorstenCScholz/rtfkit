@@ -131,6 +131,7 @@ fn finalize_field(state: &mut RuntimeState) {
                 .collect();
 
             if !runs.is_empty() {
+                state.capture_paragraph_alignment_if_start();
                 let hyperlink = Hyperlink { url, runs };
                 state
                     .current_paragraph
@@ -142,6 +143,9 @@ fn finalize_field(state: &mut RuntimeState) {
                     .dropped_content("Field with no result text", None);
             }
         } else {
+            if had_result_content {
+                state.capture_paragraph_alignment_if_start();
+            }
             for inline in state.fields.field_result_inlines.drain(..) {
                 state.current_paragraph.inlines.push(inline);
             }
@@ -150,6 +154,9 @@ fn finalize_field(state: &mut RuntimeState) {
                 .dropped_content("Unsupported hyperlink URL scheme", None);
         }
     } else {
+        if had_result_content {
+            state.capture_paragraph_alignment_if_start();
+        }
         for inline in state.fields.field_result_inlines.drain(..) {
             state.current_paragraph.inlines.push(inline);
         }

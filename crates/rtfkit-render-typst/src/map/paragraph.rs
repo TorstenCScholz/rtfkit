@@ -31,7 +31,10 @@
 //! - `$` - Typst math mode marker
 //! - `~` - Typst non-breaking space
 
-use rtfkit_core::{Alignment, Color, Hyperlink, Inline, Paragraph, Run, Shading, ShadingPattern};
+use rtfkit_core::{
+    Alignment, Color, Hyperlink, Inline, Paragraph, Run, Shading, ShadingPattern,
+    ShadingRenderPolicy, percent_pattern_density, resolve_shading_fill_color,
+};
 
 use super::MappingWarning;
 
@@ -112,6 +115,7 @@ fn apply_paragraph_shading(
     // Check if pattern is present and not Solid/Clear - emit warning
     if let Some(ref pattern) = shading.pattern
         && !matches!(pattern, ShadingPattern::Solid | ShadingPattern::Clear)
+        && percent_pattern_density(*pattern).is_none()
     {
         warnings.push(MappingWarning::PatternDegraded {
             context: "paragraph shading".to_string(),
@@ -119,8 +123,11 @@ fn apply_paragraph_shading(
         });
     }
 
-    // Emit flat fill color only
-    if let Some(ref fill_color) = shading.fill_color {
+    // Emit approximated fill color for percent patterns, flat fill otherwise.
+    if let Some(fill_color) = resolve_shading_fill_color(
+        Some(shading),
+        ShadingRenderPolicy::ApproximatePercentPatterns,
+    ) {
         format!(
             "#highlight(fill: rgb({}, {}, {}))[{}]",
             fill_color.r, fill_color.g, fill_color.b, content
@@ -1139,7 +1146,7 @@ mod tests {
     // =============================================================================
 
     #[test]
-    fn test_paragraph_with_patterned_shading_degrades_to_flat_fill() {
+    fn test_paragraph_with_percent_pattern_shading_uses_blended_fill() {
         let mut shading = Shading::new();
         shading.fill_color = Some(Color::new(255, 255, 255)); // White background
         shading.pattern_color = Some(Color::new(0, 0, 0)); // Black foreground
@@ -1150,20 +1157,15 @@ mod tests {
 
         let output = map_paragraph(&paragraph);
 
-        // Pattern should be degraded - only fill_color emitted
+        // Percent pattern should be approximated as blended fill.
         assert!(
             output
                 .typst_source
-                .contains("#highlight(fill: rgb(255, 255, 255))")
+                .contains("#highlight(fill: rgb(191, 191, 191))")
         );
-        assert!(!output.typst_source.contains("0, 0, 0")); // Pattern color not emitted
 
-        // Should have a warning about pattern degradation
-        assert_eq!(output.warnings.len(), 1);
-        assert!(matches!(
-            &output.warnings[0],
-            MappingWarning::PatternDegraded { context, .. } if context == "paragraph shading"
-        ));
+        // Percent approximation should not emit degradation warnings.
+        assert!(output.warnings.is_empty());
     }
 
     #[test]

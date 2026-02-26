@@ -31,8 +31,9 @@
 //! falling back to `auto` for unspecified columns.
 
 use rtfkit_core::{
-    CellMerge, Color, ShadingPattern, TableBlock as IrTableBlock, TableCell as IrTableCell,
-    TableRow as IrTableRow,
+    CellMerge, Color, ShadingPattern, ShadingRenderPolicy, TableBlock as IrTableBlock,
+    TableCell as IrTableCell, TableRow as IrTableRow, percent_pattern_density,
+    resolve_shading_fill_color,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -287,13 +288,14 @@ fn map_cell(
         // Check if pattern is something other than Solid or Clear
         if let Some(ref pattern) = s.pattern
             && !matches!(pattern, ShadingPattern::Solid | ShadingPattern::Clear)
+            && percent_pattern_density(*pattern).is_none()
         {
             warnings.push(MappingWarning::PatternDegraded {
                 context: "cell shading".to_string(),
                 pattern: format!("{:?}", pattern),
             });
         }
-        s.fill_color.clone()
+        resolve_shading_fill_color(Some(s), ShadingRenderPolicy::ApproximatePercentPatterns)
     });
 
     // Format content for table cell
@@ -798,7 +800,7 @@ mod tests {
     // =============================================================================
 
     #[test]
-    fn test_map_table_cell_with_patterned_shading_degrades() {
+    fn test_map_table_cell_with_percent_pattern_shading_uses_blended_fill() {
         let mut shading = Shading::new();
         shading.fill_color = Some(Color::new(255, 255, 255)); // White background
         shading.pattern_color = Some(Color::new(0, 0, 0)); // Black foreground
@@ -812,16 +814,11 @@ mod tests {
 
         let output = map_table(&table);
 
-        // Pattern should be degraded - only fill_color emitted
-        assert!(output.typst_source.contains("fill: rgb(255, 255, 255)"));
-        assert!(!output.typst_source.contains("0, 0, 0")); // Pattern color not emitted
+        // Percent pattern should be approximated as blended fill.
+        assert!(output.typst_source.contains("fill: rgb(191, 191, 191)"));
 
-        // Should have a warning about pattern degradation
-        assert_eq!(output.warnings.len(), 1);
-        assert!(matches!(
-            &output.warnings[0],
-            MappingWarning::PatternDegraded { context, .. } if context == "cell shading"
-        ));
+        // Percent approximation should not emit degradation warnings.
+        assert!(output.warnings.is_empty());
     }
 
     #[test]
@@ -936,11 +933,11 @@ mod tests {
 
         let output = map_table(&table);
 
-        // Both fill colors should be emitted
-        assert!(output.typst_source.contains("fill: rgb(255, 0, 0)"));
-        assert!(output.typst_source.contains("fill: rgb(0, 255, 0)"));
+        // Both cells should be approximated using auto (black) pattern color.
+        assert!(output.typst_source.contains("fill: rgb(230, 0, 0)"));
+        assert!(output.typst_source.contains("fill: rgb(0, 204, 0)"));
 
-        // Should have two warnings (one per cell with pattern)
-        assert_eq!(output.warnings.len(), 2);
+        // Percent patterns are approximated, not degraded.
+        assert!(output.warnings.is_empty());
     }
 }

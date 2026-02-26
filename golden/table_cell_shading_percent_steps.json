@@ -1,0 +1,106 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "25",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2000,
+              "shading": {
+                "fill_color": {
+                  "r": 255,
+                  "g": 255,
+                  "b": 255
+                },
+                "pattern_color": {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                "pattern": "percent25"
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "50",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2000,
+              "shading": {
+                "fill_color": {
+                  "r": 255,
+                  "g": 255,
+                  "b": 255
+                },
+                "pattern_color": {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                "pattern": "percent50"
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "75",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2000,
+              "shading": {
+                "fill_color": {
+                  "r": 255,
+                  "g": 255,
+                  "b": 255
+                },
+                "pattern_color": {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                "pattern": "percent75"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

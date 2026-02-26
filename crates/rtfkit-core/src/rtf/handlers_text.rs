@@ -54,10 +54,7 @@ fn handle_text_internal(state: &mut RuntimeState, text: String) {
         // Note: Table finalization will be handled by the event processor
     }
 
-    // If this is the first text in the paragraph, capture the alignment
-    if state.current_paragraph.inlines.is_empty() && state.current_text.is_empty() {
-        state.paragraph_alignment = state.style.alignment;
-    }
+    state.capture_paragraph_alignment_if_start();
 
     // Check if style has changed
     if state.character_style_changed() {
@@ -102,6 +99,8 @@ pub fn handle_field_result_text(state: &mut RuntimeState, text: String) {
 
 /// Internal handler for field result text.
 fn handle_field_result_text_internal(state: &mut RuntimeState, text: String) {
+    state.capture_paragraph_alignment_if_start();
+
     // Check if style has changed
     if state.character_style_changed() {
         // Flush current text as a run if any
@@ -216,5 +215,15 @@ mod tests {
         handle_text(&mut state, "Test".to_string());
 
         assert_eq!(state.paragraph_alignment, crate::Alignment::Center);
+    }
+
+    #[test]
+    fn test_field_result_text_captures_paragraph_alignment() {
+        let mut state = RuntimeState::new(ParserLimits::default());
+
+        state.style.alignment = crate::Alignment::Right;
+        handle_field_result_text(&mut state, "Field text".to_string());
+
+        assert_eq!(state.paragraph_alignment, crate::Alignment::Right);
     }
 }

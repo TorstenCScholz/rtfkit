@@ -1451,6 +1451,50 @@ fn test_table_merge_controls_degraded_docx() {
     );
 }
 
+#[test]
+fn test_shading_percent_steps_docx_emits_pct25_pct50_pct75() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("shading_percent_steps.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    assert!(
+        xml.contains(r#"w:val="pct25""#),
+        "Should contain pct25 shading"
+    );
+    assert!(
+        xml.contains(r#"w:val="pct50""#),
+        "Should contain pct50 shading"
+    );
+    assert!(
+        xml.contains(r#"w:val="pct75""#),
+        "Should contain pct75 shading"
+    );
+}
+
+#[test]
+fn test_table_alignment_hyperlink_first_inline_docx() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("table_alignment_hyperlink_first_inline.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    assert!(
+        has_alignment(&xml, "center"),
+        "Should contain centered paragraph alignment in table cell"
+    );
+    assert!(
+        has_alignment(&xml, "right"),
+        "Should contain right paragraph alignment in table cell"
+    );
+    assert!(
+        contains_text(&xml, "Link centered"),
+        "Should contain hyperlink result text for centered cell"
+    );
+    assert!(
+        contains_text(&xml, "Link right"),
+        "Should contain hyperlink result text for right cell"
+    );
+}
+
 // =============================================================================
 // Phase 5: Table Merge and Alignment Tests
 // =============================================================================

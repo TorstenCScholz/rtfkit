@@ -38,6 +38,16 @@ pub mod report;
 pub use report::{Report, Stats, Warning, WarningSeverity};
 
 // =============================================================================
+// Shared Rendering Helpers
+// =============================================================================
+
+pub mod shading_render;
+
+pub use shading_render::{
+    ShadingRenderPolicy, percent_pattern_density, resolve_shading_fill_color,
+};
+
+// =============================================================================
 // IR Types for RTF Conversion
 // =============================================================================
 

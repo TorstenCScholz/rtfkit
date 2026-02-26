@@ -7,7 +7,7 @@
 //! - Hard limits
 
 use crate::rtf::parse;
-use crate::{Block, CellMerge};
+use crate::{Alignment, Block, CellMerge, Inline};
 
 // =============================================================================
 // Basic Table Tests
@@ -406,6 +406,42 @@ fn test_row_alignment() {
         let row = &table.rows[0];
         assert!(row.row_props.is_some());
     }
+}
+
+#[test]
+fn test_hyperlink_first_inline_in_cell_captures_alignment() {
+    let input = include_str!("../../../../../fixtures/table_alignment_hyperlink_first_inline.rtf");
+    let result = parse(input);
+    assert!(result.is_ok());
+
+    let (doc, _report) = result.unwrap();
+    let Some(Block::TableBlock(table)) = doc.blocks.first() else {
+        panic!("Expected table block");
+    };
+    let Some(row) = table.rows.first() else {
+        panic!("Expected row");
+    };
+    assert_eq!(row.cells.len(), 2);
+
+    let cell0_para = match row.cells[0].blocks.first() {
+        Some(Block::Paragraph(para)) => para,
+        _ => panic!("Expected paragraph in first cell"),
+    };
+    assert_eq!(cell0_para.alignment, Alignment::Center);
+    assert!(matches!(
+        cell0_para.inlines.first(),
+        Some(Inline::Hyperlink(_))
+    ));
+
+    let cell1_para = match row.cells[1].blocks.first() {
+        Some(Block::Paragraph(para)) => para,
+        _ => panic!("Expected paragraph in second cell"),
+    };
+    assert_eq!(cell1_para.alignment, Alignment::Right);
+    assert!(matches!(
+        cell1_para.inlines.first(),
+        Some(Inline::Hyperlink(_))
+    ));
 }
 
 // =============================================================================
