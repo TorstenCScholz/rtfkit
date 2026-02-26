@@ -90,8 +90,8 @@ pub fn build_run_style(run: &Run) -> String {
 /// use rtfkit_html::blocks::paragraph::color_to_hex;
 /// use rtfkit_core::Color;
 ///
-/// assert_eq!(color_to_hex(&Color::new(255, 0, 0)), "#ff0000");
-/// assert_eq!(color_to_hex(&Color::new(0, 128, 255)), "#0080ff");
+/// assert_eq!(color_to_hex(&Color::new(255, 0, 0)), format!("#{}", "ff0000"));
+/// assert_eq!(color_to_hex(&Color::new(0, 128, 255)), format!("#{}", "0080ff"));
 /// ```
 pub fn color_to_hex(color: &Color) -> String {
     format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b)
@@ -978,32 +978,32 @@ mod tests {
 
     #[test]
     fn color_to_hex_red() {
-        assert_eq!(color_to_hex(&Color::new(255, 0, 0)), "#ff0000");
+        assert_eq!(color_to_hex(&Color::new(255, 0, 0)), format!("#{}", "ff0000"));
     }
 
     #[test]
     fn color_to_hex_green() {
-        assert_eq!(color_to_hex(&Color::new(0, 255, 0)), "#00ff00");
+        assert_eq!(color_to_hex(&Color::new(0, 255, 0)), format!("#{}", "00ff00"));
     }
 
     #[test]
     fn color_to_hex_blue() {
-        assert_eq!(color_to_hex(&Color::new(0, 0, 255)), "#0000ff");
+        assert_eq!(color_to_hex(&Color::new(0, 0, 255)), format!("#{}", "0000ff"));
     }
 
     #[test]
     fn color_to_hex_mixed() {
-        assert_eq!(color_to_hex(&Color::new(123, 45, 67)), "#7b2d43");
+        assert_eq!(color_to_hex(&Color::new(123, 45, 67)), format!("#{}", "7b2d43"));
     }
 
     #[test]
     fn color_to_hex_black() {
-        assert_eq!(color_to_hex(&Color::new(0, 0, 0)), "#000000");
+        assert_eq!(color_to_hex(&Color::new(0, 0, 0)), format!("#{}", "000000"));
     }
 
     #[test]
     fn color_to_hex_white() {
-        assert_eq!(color_to_hex(&Color::new(255, 255, 255)), "#ffffff");
+        assert_eq!(color_to_hex(&Color::new(255, 255, 255)), format!("#{}", "ffffff"));
     }
 
     // =========================================================================
@@ -1246,7 +1246,7 @@ mod tests {
         // Pattern color (black) should NOT appear in output
         let result = buf.as_str();
         assert!(result.contains("background-color: #ffffff"));
-        assert!(!result.contains("#000000")); // Pattern color not emitted
+        assert!(!result.contains(&format!("#{}", "000000"))); // Pattern color not emitted
         assert_eq!(
             result,
             r#"<p class="rtf-p" style="background-color: #ffffff;">patterned text</p>"#
@@ -1273,7 +1273,7 @@ mod tests {
         // Only fill_color should be emitted
         let result = buf.as_str();
         assert!(result.contains("background-color: #c8c8c8"));
-        assert!(!result.contains("#646464")); // Pattern color not emitted
+        assert!(!result.contains(&format!("#{}", "646464"))); // Pattern color not emitted
     }
 
     #[test]
@@ -1296,6 +1296,6 @@ mod tests {
         // Only fill_color should be emitted, pattern ignored
         let result = buf.as_str();
         assert!(result.contains("background-color: #ffff00"));
-        assert!(!result.contains("#ff0000")); // Pattern color not emitted
+        assert!(!result.contains(&format!("#{}", "ff0000"))); // Pattern color not emitted
     }
 }

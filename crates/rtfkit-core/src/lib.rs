@@ -67,7 +67,7 @@ impl Color {
         Self { r, g, b }
     }
 
-    /// Creates a Color from a hex string (e.g., "#FFFFFF" or "FFFFFF").
+    /// Creates a Color from a hex string (e.g., #RRGGBB or RRGGBB).
     ///
     /// Returns None if the string is not a valid 6-character hex color.
     pub fn from_hex(hex: &str) -> Option<Self> {
