@@ -28,7 +28,14 @@ fn assert_snapshot(name: &str, actual: &str) {
         return;
     }
     let expected = load_snapshot(name);
-    assert_eq!(actual, expected);
+    assert_eq!(
+        normalize_line_endings(actual),
+        normalize_line_endings(&expected)
+    );
+}
+
+fn normalize_line_endings(s: &str) -> String {
+    s.replace("\r\n", "\n")
 }
 
 #[test]
