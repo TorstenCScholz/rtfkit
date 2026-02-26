@@ -131,12 +131,13 @@ pub fn build_paragraph_style(shading: Option<&Shading>) -> String {
 
     // 1. Background color from shading (pattern degradation: emit fill_color only)
     if let Some(shading) = shading
-        && let Some(ref fill_color) = shading.fill_color {
-            parts.push(format!(
-                "background-color: #{:02x}{:02x}{:02x}",
-                fill_color.r, fill_color.g, fill_color.b
-            ));
-        }
+        && let Some(ref fill_color) = shading.fill_color
+    {
+        parts.push(format!(
+            "background-color: #{:02x}{:02x}{:02x}",
+            fill_color.r, fill_color.g, fill_color.b
+        ));
+    }
 
     if parts.is_empty() {
         String::new()
@@ -978,22 +979,34 @@ mod tests {
 
     #[test]
     fn color_to_hex_red() {
-        assert_eq!(color_to_hex(&Color::new(255, 0, 0)), format!("#{}", "ff0000"));
+        assert_eq!(
+            color_to_hex(&Color::new(255, 0, 0)),
+            format!("#{}", "ff0000")
+        );
     }
 
     #[test]
     fn color_to_hex_green() {
-        assert_eq!(color_to_hex(&Color::new(0, 255, 0)), format!("#{}", "00ff00"));
+        assert_eq!(
+            color_to_hex(&Color::new(0, 255, 0)),
+            format!("#{}", "00ff00")
+        );
     }
 
     #[test]
     fn color_to_hex_blue() {
-        assert_eq!(color_to_hex(&Color::new(0, 0, 255)), format!("#{}", "0000ff"));
+        assert_eq!(
+            color_to_hex(&Color::new(0, 0, 255)),
+            format!("#{}", "0000ff")
+        );
     }
 
     #[test]
     fn color_to_hex_mixed() {
-        assert_eq!(color_to_hex(&Color::new(123, 45, 67)), format!("#{}", "7b2d43"));
+        assert_eq!(
+            color_to_hex(&Color::new(123, 45, 67)),
+            format!("#{}", "7b2d43")
+        );
     }
 
     #[test]
@@ -1003,7 +1016,10 @@ mod tests {
 
     #[test]
     fn color_to_hex_white() {
-        assert_eq!(color_to_hex(&Color::new(255, 255, 255)), format!("#{}", "ffffff"));
+        assert_eq!(
+            color_to_hex(&Color::new(255, 255, 255)),
+            format!("#{}", "ffffff")
+        );
     }
 
     // =========================================================================

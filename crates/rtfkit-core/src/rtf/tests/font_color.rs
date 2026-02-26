@@ -358,11 +358,12 @@ fn test_font_and_color_together() {
     let (doc, _report) = result.unwrap();
 
     if let Some(Block::Paragraph(para)) = doc.blocks.first()
-        && let Some(Inline::Run(run)) = para.inlines.first() {
-            assert!(run.font_family.is_some());
-            assert!(run.font_size.is_some());
-            assert!(run.color.is_some());
-        }
+        && let Some(Inline::Run(run)) = para.inlines.first()
+    {
+        assert!(run.font_family.is_some());
+        assert!(run.font_size.is_some());
+        assert!(run.color.is_some());
+    }
 }
 
 // =============================================================================

@@ -112,7 +112,7 @@ fn twips_to_typst_length(twips: i32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use image::{codecs::jpeg::JpegEncoder, codecs::png::PngEncoder, ColorType, ImageEncoder};
+    use image::{ColorType, ImageEncoder, codecs::jpeg::JpegEncoder, codecs::png::PngEncoder};
 
     fn valid_png_data() -> Vec<u8> {
         let mut bytes = Vec::new();
@@ -155,9 +155,11 @@ mod tests {
         let mut assets = TypstAssetAllocator::new();
         let output = map_image_block_with_assets(&image, &mut assets);
 
-        assert!(output
-            .typst_source
-            .starts_with("#image(\"assets/image-000001.png\""));
+        assert!(
+            output
+                .typst_source
+                .starts_with("#image(\"assets/image-000001.png\"")
+        );
         assert!(output.typst_source.ends_with(")"));
         assert!(!output.typst_source.contains("width:"));
         assert!(!output.typst_source.contains("height:"));

@@ -24,18 +24,18 @@ mod table;
 use std::collections::BTreeMap;
 
 use rtfkit_core::{Block as IrBlock, Document};
-use rtfkit_style_tokens::{builtins, serialize::to_typst_preamble, StyleProfile, StyleProfileName};
+use rtfkit_style_tokens::{StyleProfile, StyleProfileName, builtins, serialize::to_typst_preamble};
 
 use crate::error::WarningKind;
 use crate::options::{Margins, RenderOptions};
 
 use image::map_image_block_with_assets;
-pub use image::{map_image_block, ImageOutput};
+pub use image::{ImageOutput, map_image_block};
 use list::map_list_with_assets;
-pub use list::{map_list, ListOutput};
-pub use paragraph::{map_paragraph, ParagraphOutput};
+pub use list::{ListOutput, map_list};
+pub use paragraph::{ParagraphOutput, map_paragraph};
 use table::map_table_with_assets;
-pub use table::{map_table, TableOutput};
+pub use table::{TableOutput, map_table};
 
 /// Structured mapping warnings.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -355,9 +355,11 @@ mod tests {
         let output = map_document(&doc, &options);
 
         // Should have style preamble
-        assert!(output
-            .typst_source
-            .contains("// rtfkit style profile: report"));
+        assert!(
+            output
+                .typst_source
+                .contains("// rtfkit style profile: report")
+        );
         assert!(output.typst_source.contains("#set page("));
         assert!(output.typst_source.contains("Hello, World!"));
     }
@@ -504,9 +506,11 @@ mod tests {
 
         assert!(!output.typst_source.contains("#image("));
         assert!(output.assets.files.is_empty());
-        assert!(output
-            .warnings
-            .contains(&MappingWarning::MalformedPngImagePayload));
+        assert!(
+            output
+                .warnings
+                .contains(&MappingWarning::MalformedPngImagePayload)
+        );
     }
 
     #[test]
@@ -633,9 +637,11 @@ mod tests {
         let output = map_document(&doc, &options);
 
         // Should contain style preamble elements
-        assert!(output
-            .typst_source
-            .contains("// rtfkit style profile: report"));
+        assert!(
+            output
+                .typst_source
+                .contains("// rtfkit style profile: report")
+        );
         assert!(output.typst_source.contains("#set text("));
         assert!(output.typst_source.contains("#set par("));
         assert!(output.typst_source.contains("#set table("));
@@ -654,9 +660,11 @@ mod tests {
             ..Default::default()
         };
         let output_report = map_document(&doc, &options_report);
-        assert!(output_report
-            .typst_source
-            .contains("// rtfkit style profile: report"));
+        assert!(
+            output_report
+                .typst_source
+                .contains("// rtfkit style profile: report")
+        );
 
         // Test Classic profile
         let options_classic = RenderOptions {
@@ -664,9 +672,11 @@ mod tests {
             ..Default::default()
         };
         let output_classic = map_document(&doc, &options_classic);
-        assert!(output_classic
-            .typst_source
-            .contains("// rtfkit style profile: classic"));
+        assert!(
+            output_classic
+                .typst_source
+                .contains("// rtfkit style profile: classic")
+        );
 
         // Test Compact profile
         let options_compact = RenderOptions {
@@ -674,9 +684,11 @@ mod tests {
             ..Default::default()
         };
         let output_compact = map_document(&doc, &options_compact);
-        assert!(output_compact
-            .typst_source
-            .contains("// rtfkit style profile: compact"));
+        assert!(
+            output_compact
+                .typst_source
+                .contains("// rtfkit style profile: compact")
+        );
     }
 
     #[test]

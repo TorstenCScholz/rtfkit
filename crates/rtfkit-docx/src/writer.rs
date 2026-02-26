@@ -845,9 +845,10 @@ fn convert_table_cell(
 
     // Apply cell shading if present
     if let Some(ref shading) = cell.shading
-        && let Some(docx_shading) = convert_shading(shading) {
-            docx_cell = docx_cell.shading(docx_shading);
-        }
+        && let Some(docx_shading) = convert_shading(shading)
+    {
+        docx_cell = docx_cell.shading(docx_shading);
+    }
 
     // Convert cell content
     for block in &cell.blocks {

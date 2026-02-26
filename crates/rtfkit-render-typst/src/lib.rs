@@ -55,7 +55,7 @@ pub use rtfkit_style_tokens::StyleProfileName;
 
 // Re-export mapping functions
 pub use map::{
-    map_document, map_list, map_paragraph, map_table, BlockOutput, DocumentOutput, TypstAssetBundle,
+    BlockOutput, DocumentOutput, TypstAssetBundle, map_document, map_list, map_paragraph, map_table,
 };
 
 // Re-export engine functions

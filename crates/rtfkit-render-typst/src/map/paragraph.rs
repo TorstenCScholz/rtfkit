@@ -111,12 +111,13 @@ fn apply_paragraph_shading(
 
     // Check if pattern is present and not Solid/Clear - emit warning
     if let Some(ref pattern) = shading.pattern
-        && !matches!(pattern, ShadingPattern::Solid | ShadingPattern::Clear) {
-            warnings.push(MappingWarning::PatternDegraded {
-                context: "paragraph shading".to_string(),
-                pattern: format!("{:?}", pattern),
-            });
-        }
+        && !matches!(pattern, ShadingPattern::Solid | ShadingPattern::Clear)
+    {
+        warnings.push(MappingWarning::PatternDegraded {
+            context: "paragraph shading".to_string(),
+            pattern: format!("{:?}", pattern),
+        });
+    }
 
     // Emit flat fill color only
     if let Some(ref fill_color) = shading.fill_color {
@@ -314,9 +315,10 @@ fn map_runs(runs: &[Run], _warnings: &mut Vec<MappingWarning>) -> String {
 
     // Don't forget the last run
     if !current_text.is_empty()
-        && let Some(style) = current_style {
-            result.push_str(&format_run(&current_text, &style));
-        }
+        && let Some(style) = current_style
+    {
+        result.push_str(&format_run(&current_text, &style));
+    }
 
     result
 }
@@ -1114,9 +1116,11 @@ mod tests {
 
         assert_eq!(output1.typst_source, output2.typst_source);
         assert_eq!(output2.typst_source, output3.typst_source);
-        assert!(output1
-            .typst_source
-            .contains("#highlight(fill: rgb(128, 64, 32))"));
+        assert!(
+            output1
+                .typst_source
+                .contains("#highlight(fill: rgb(128, 64, 32))")
+        );
     }
 
     #[test]
@@ -1147,9 +1151,11 @@ mod tests {
         let output = map_paragraph(&paragraph);
 
         // Pattern should be degraded - only fill_color emitted
-        assert!(output
-            .typst_source
-            .contains("#highlight(fill: rgb(255, 255, 255))"));
+        assert!(
+            output
+                .typst_source
+                .contains("#highlight(fill: rgb(255, 255, 255))")
+        );
         assert!(!output.typst_source.contains("0, 0, 0")); // Pattern color not emitted
 
         // Should have a warning about pattern degradation
@@ -1173,9 +1179,11 @@ mod tests {
         let output = map_paragraph(&paragraph);
 
         // Only fill_color should be emitted
-        assert!(output
-            .typst_source
-            .contains("#highlight(fill: rgb(200, 200, 200))"));
+        assert!(
+            output
+                .typst_source
+                .contains("#highlight(fill: rgb(200, 200, 200))")
+        );
 
         // Should have a warning
         assert_eq!(output.warnings.len(), 1);
@@ -1197,9 +1205,11 @@ mod tests {
         let output = map_paragraph(&paragraph);
 
         // Should emit fill color
-        assert!(output
-            .typst_source
-            .contains("#highlight(fill: rgb(255, 255, 0))"));
+        assert!(
+            output
+                .typst_source
+                .contains("#highlight(fill: rgb(255, 255, 0))")
+        );
 
         // Should NOT have a warning - Solid is supported
         assert!(output.warnings.is_empty());
@@ -1218,9 +1228,11 @@ mod tests {
         let output = map_paragraph(&paragraph);
 
         // Should emit fill color
-        assert!(output
-            .typst_source
-            .contains("#highlight(fill: rgb(200, 200, 255))"));
+        assert!(
+            output
+                .typst_source
+                .contains("#highlight(fill: rgb(200, 200, 255))")
+        );
 
         // Should NOT have a warning - Clear is supported
         assert!(output.warnings.is_empty());
@@ -1240,9 +1252,11 @@ mod tests {
         let output = map_paragraph(&paragraph);
 
         // Only fill_color should be emitted, pattern ignored
-        assert!(output
-            .typst_source
-            .contains("#highlight(fill: rgb(255, 255, 0))"));
+        assert!(
+            output
+                .typst_source
+                .contains("#highlight(fill: rgb(255, 255, 0))")
+        );
         assert!(!output.typst_source.contains("255, 0, 0")); // Pattern color not emitted
 
         // Should have a warning

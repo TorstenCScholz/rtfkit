@@ -218,15 +218,17 @@ impl RuntimeState {
     pub fn resolve_font_family(&self) -> Option<String> {
         // Try current font index first
         if let Some(font_idx) = self.current_run_style.font_index
-            && let Some(family) = self.resources.get_font_family(font_idx) {
-                return Some(family.to_string());
-            }
+            && let Some(family) = self.resources.get_font_family(font_idx)
+        {
+            return Some(family.to_string());
+        }
 
         // Fall back to default font index
         if let Some(default_idx) = self.resources.default_font_index
-            && let Some(family) = self.resources.get_font_family(default_idx) {
-                return Some(family.to_string());
-            }
+            && let Some(family) = self.resources.get_font_family(default_idx)
+        {
+            return Some(family.to_string());
+        }
 
         None
     }
@@ -248,15 +250,17 @@ impl RuntimeState {
     pub fn resolve_background_color(&self) -> Option<crate::Color> {
         // Try highlight_color_index first (takes precedence)
         if let Some(highlight_idx) = self.current_run_style.highlight_color_index
-            && let Some(color) = self.resources.resolve_color(highlight_idx) {
-                return Some(color);
-            }
+            && let Some(color) = self.resources.resolve_color(highlight_idx)
+        {
+            return Some(color);
+        }
 
         // Fall back to background_color_index
         if let Some(bg_idx) = self.current_run_style.background_color_index
-            && let Some(color) = self.resources.resolve_color(bg_idx) {
-                return Some(color);
-            }
+            && let Some(color) = self.resources.resolve_color(bg_idx)
+        {
+            return Some(color);
+        }
 
         None
     }

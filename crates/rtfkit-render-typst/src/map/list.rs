@@ -25,7 +25,7 @@
 
 use rtfkit_core::{ListBlock as IrListBlock, ListItem as IrListItem, ListKind as IrListKind};
 
-use super::{map_block, MappingWarning, TypstAssetAllocator};
+use super::{MappingWarning, TypstAssetAllocator, map_block};
 
 /// Result of mapping a list to Typst source.
 #[derive(Debug, Clone, PartialEq)]
@@ -269,10 +269,12 @@ mod tests {
 
         // Should use bullet marker
         assert!(output.typst_source.starts_with('-'));
-        assert!(output
-            .warnings
-            .iter()
-            .any(|w| matches!(w, crate::map::MappingWarning::ListMixedKindFallbackToBullet)));
+        assert!(
+            output
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::map::MappingWarning::ListMixedKindFallbackToBullet))
+        );
     }
 
     #[test]

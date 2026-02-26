@@ -36,7 +36,7 @@ use rtfkit_core::{
 };
 use std::collections::{HashMap, HashSet};
 
-use super::{map_block, MappingWarning, TypstAssetAllocator};
+use super::{MappingWarning, TypstAssetAllocator, map_block};
 
 /// Result of mapping a table to Typst source.
 #[derive(Debug, Clone, PartialEq)]
@@ -286,12 +286,13 @@ fn map_cell(
     let fill_color = cell.shading.as_ref().and_then(|s| {
         // Check if pattern is something other than Solid or Clear
         if let Some(ref pattern) = s.pattern
-            && !matches!(pattern, ShadingPattern::Solid | ShadingPattern::Clear) {
-                warnings.push(MappingWarning::PatternDegraded {
-                    context: "cell shading".to_string(),
-                    pattern: format!("{:?}", pattern),
-                });
-            }
+            && !matches!(pattern, ShadingPattern::Solid | ShadingPattern::Clear)
+        {
+            warnings.push(MappingWarning::PatternDegraded {
+                context: "cell shading".to_string(),
+                pattern: format!("{:?}", pattern),
+            });
+        }
         s.fill_color.clone()
     });
 
@@ -615,10 +616,12 @@ mod tests {
         assert!(output.typst_source.contains("[Charlie]"));
 
         // Should warn about orphan
-        assert!(output
-            .warnings
-            .iter()
-            .any(|w| matches!(w, crate::map::MappingWarning::OrphanHorizontalContinue)));
+        assert!(
+            output
+                .warnings
+                .iter()
+                .any(|w| matches!(w, crate::map::MappingWarning::OrphanHorizontalContinue))
+        );
     }
 
     #[test]

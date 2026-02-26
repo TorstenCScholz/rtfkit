@@ -10,8 +10,8 @@ use rtfkit_core::{
     TableBlock, TableCell, TableRow,
 };
 use rtfkit_render_typst::{
-    compile_to_pdf, document_to_pdf_with_warnings, DeterminismOptions, RenderOptions,
-    TypstAssetBundle,
+    DeterminismOptions, RenderOptions, TypstAssetBundle, compile_to_pdf,
+    document_to_pdf_with_warnings,
 };
 
 fn run_isolated_test(subtest_name: &str, gate_var: &str) {
@@ -459,7 +459,7 @@ fn test_embedded_fonts_only() {
 
 /// Minimal PNG image data (1x1 transparent pixel)
 fn minimal_png_data() -> Vec<u8> {
-    use image::{codecs::png::PngEncoder, ColorType, ImageEncoder};
+    use image::{ColorType, ImageEncoder, codecs::png::PngEncoder};
 
     let mut bytes = Vec::new();
     let rgba = [255_u8, 0, 0, 255];
@@ -471,7 +471,7 @@ fn minimal_png_data() -> Vec<u8> {
 
 /// Minimal JPEG image data (1x1 gray pixel)
 fn minimal_jpeg_data() -> Vec<u8> {
-    use image::{codecs::jpeg::JpegEncoder, ColorType};
+    use image::{ColorType, codecs::jpeg::JpegEncoder};
 
     let mut bytes = Vec::new();
     let rgb = [0_u8, 255, 0];
