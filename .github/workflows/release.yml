@@ -99,25 +99,23 @@ jobs:
         with:
           key: ${{ matrix.target }}-release
 
-      - name: Install cross-compilation tools (Linux ARM64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
       - name: Install cross-compilation tool
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: cargo install cross --locked
 
       - name: Build release binary (Linux ARM64)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
-        env:
-          CROSS_CONFIG: Cross.toml
         run: cross build --release --target ${{ matrix.target }} -p rtfkit
 
       - name: Build release binary
         if: matrix.target != 'aarch64-unknown-linux-gnu'
         run: cargo build --release --target ${{ matrix.target }} -p rtfkit
+
+      - name: Install ARM64 strip tool
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils-aarch64-linux-gnu
 
       - name: Strip binary (Unix)
         if: runner.os != 'Windows'

@@ -12,7 +12,7 @@ rtfkit-style-tokens = { path = "../rtfkit-style-tokens" }
 thiserror = "2.0"
 typst = "0.14"
 typst-pdf = "0.14"
-typst-kit = { version = "0.14", features = ["embed-fonts"] }
+typst-kit = { version = "0.14", default-features = false, features = ["embed-fonts"] }
 ecow = "0.2"
 chrono = "0.4"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
