@@ -118,6 +118,10 @@ impl TypstEngine {
         let result: SourceResult<PagedDocument> = typst::compile(self).output;
         result
     }
+
+    fn normalize_asset_path(path: &str) -> String {
+        path.replace('\\', "/")
+    }
 }
 
 impl TypstWorld for TypstEngine {
@@ -145,8 +149,9 @@ impl TypstWorld for TypstEngine {
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
         let path = id.vpath().as_rootless_path().to_string_lossy();
+        let normalized_path = Self::normalize_asset_path(path.as_ref());
 
-        if let Some(bytes) = self.assets.get(path.as_ref()) {
+        if let Some(bytes) = self.assets.get(normalized_path.as_str()) {
             return Ok(Bytes::new(bytes.to_vec()));
         }
 
@@ -337,6 +342,19 @@ mod tests {
 
         let engine = TypstEngine::new("Hello", &assets, None);
         let file_id = FileId::new_fake(VirtualPath::new("assets/image-000001.png"));
+        let bytes = engine.file(file_id).expect("asset should resolve");
+        assert_eq!(bytes.as_slice(), &[1, 2, 3]);
+    }
+
+    #[test]
+    fn test_engine_reads_bundled_asset_file_with_windows_separator() {
+        let mut assets = TypstAssetBundle::default();
+        assets
+            .files
+            .insert("assets/image-000001.png".to_string(), vec![1, 2, 3]);
+
+        let engine = TypstEngine::new("Hello", &assets, None);
+        let file_id = FileId::new_fake(VirtualPath::new("assets\\image-000001.png"));
         let bytes = engine.file(file_id).expect("asset should resolve");
         assert_eq!(bytes.as_slice(), &[1, 2, 3]);
     }
