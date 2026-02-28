@@ -17,7 +17,7 @@
 
 use super::paragraph::{build_paragraph_style, paragraph_to_html};
 use crate::serialize::HtmlBuffer;
-use rtfkit_core::{Block, CellMerge, CellVerticalAlign, TableBlock, TableCell, TableRow};
+use rtfkit_core::{Block, Border, BorderStyle, CellMerge, CellVerticalAlign, TableBlock, TableCell, TableRow};
 use std::collections::HashSet;
 
 /// Converts twips to points.
@@ -236,6 +236,30 @@ fn row_to_html(
     buf.push_close_tag("tr");
 }
 
+/// Converts a single `Border` side to a CSS `border-{side}` declaration.
+fn border_side_to_css(side: &str, border: &Border) -> String {
+    if border.style == BorderStyle::None {
+        return format!("border-{side}: none");
+    }
+    let width_pt = border
+        .width_half_pts
+        .map(|hp| hp as f32 / 2.0)
+        .unwrap_or(0.5);
+    let style_str = match border.style {
+        BorderStyle::None => unreachable!(),
+        BorderStyle::Single => "solid",
+        BorderStyle::Double => "double",
+        BorderStyle::Dotted => "dotted",
+        BorderStyle::Dashed => "dashed",
+    };
+    let color = border
+        .color
+        .as_ref()
+        .map(|c| format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b))
+        .unwrap_or_else(|| "currentColor".to_string());
+    format!("border-{side}: {width_pt:.1}pt {style_str} {color}")
+}
+
 /// Converts a table cell to HTML.
 ///
 /// Handles:
@@ -244,6 +268,7 @@ fn row_to_html(
 /// - `style="width: Npt"` for explicit widths
 /// - `class="rtf-valign-*"` for vertical alignment
 /// - `style="background-color: #rrggbb"` for cell shading
+/// - `style="border-{side}: ..."` for cell borders
 fn cell_to_html(
     cell: &TableCell,
     rowspan: usize,
@@ -290,6 +315,21 @@ fn cell_to_html(
         // Remove trailing semicolon from build_paragraph_style output
         // and add to style parts
         style_parts.push(shading_style.trim_end_matches(';').to_string());
+    }
+
+    // Handle cell borders
+    if let Some(ref borders) = cell.borders {
+        let sides: [(&str, Option<&Border>); 4] = [
+            ("top", borders.top.as_ref()),
+            ("left", borders.left.as_ref()),
+            ("bottom", borders.bottom.as_ref()),
+            ("right", borders.right.as_ref()),
+        ];
+        for (side, maybe_border) in sides {
+            if let Some(b) = maybe_border {
+                style_parts.push(border_side_to_css(side, b));
+            }
+        }
     }
 
     // Combine style parts into a single style attribute
@@ -910,5 +950,162 @@ mod tests {
         assert!(html.contains(r#"class="rtf-valign-middle""#));
         assert!(html.contains(r#"width: 36.0pt"#));
         assert!(html.contains(r#"background-color: #80c080"#));
+    }
+
+    // =========================================================================
+    // Cell border CSS tests
+    // =========================================================================
+
+    #[test]
+    fn cell_with_single_top_border_emits_css() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle};
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Border")]));
+        cell.borders = Some(BorderSet {
+            top: Some(Border {
+                style: BorderStyle::Single,
+                width_half_pts: Some(4),
+                color: None,
+            }),
+            ..Default::default()
+        });
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        assert!(html.contains("border-top: 2.0pt solid currentColor"));
+        assert!(!html.contains("border-left"));
+        assert!(!html.contains("border-bottom"));
+        assert!(!html.contains("border-right"));
+    }
+
+    #[test]
+    fn cell_border_none_style_emits_border_none() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle};
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("None")]));
+        cell.borders = Some(BorderSet {
+            top: Some(Border {
+                style: BorderStyle::None,
+                width_half_pts: None,
+                color: None,
+            }),
+            ..Default::default()
+        });
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        assert!(html.contains("border-top: none"));
+    }
+
+    #[test]
+    fn cell_border_with_color_and_width() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle, Color};
+
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Color")]));
+        cell.borders = Some(BorderSet {
+            right: Some(Border {
+                style: BorderStyle::Dashed,
+                width_half_pts: Some(6),
+                color: Some(Color::new(255, 0, 0)),
+            }),
+            ..Default::default()
+        });
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        assert!(html.contains("border-right: 3.0pt dashed #ff0000"));
+    }
+
+    #[test]
+    fn cell_border_style_variants_css() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle};
+
+        let make_cell_with_top = |style: BorderStyle| {
+            let mut c = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("x")]));
+            c.borders = Some(BorderSet {
+                top: Some(Border {
+                    style,
+                    width_half_pts: Some(4),
+                    color: None,
+                }),
+                ..Default::default()
+            });
+            c
+        };
+
+        // double
+        let mut buf = HtmlBuffer::new();
+        table_to_html(
+            &TableBlock::from_rows(vec![TableRow::from_cells(vec![make_cell_with_top(
+                BorderStyle::Double,
+            )])]),
+            &mut buf,
+        );
+        assert!(buf.as_str().contains("double"));
+
+        // dotted
+        let mut buf = HtmlBuffer::new();
+        table_to_html(
+            &TableBlock::from_rows(vec![TableRow::from_cells(vec![make_cell_with_top(
+                BorderStyle::Dotted,
+            )])]),
+            &mut buf,
+        );
+        assert!(buf.as_str().contains("dotted"));
+    }
+
+    #[test]
+    fn cell_border_after_shading_stable_order() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle, Color, Shading};
+
+        let mut cell =
+            TableCell::from_paragraph_with_width(Paragraph::from_runs(vec![Run::new("x")]), 720);
+        cell.shading = Some(Shading::solid(Color::new(0, 255, 0)));
+        cell.borders = Some(BorderSet {
+            bottom: Some(Border {
+                style: BorderStyle::Single,
+                width_half_pts: Some(2),
+                color: None,
+            }),
+            ..Default::default()
+        });
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        // Width, shading, border — in that order
+        let width_pos = html.find("width:").unwrap();
+        let bg_pos = html.find("background-color:").unwrap();
+        let border_pos = html.find("border-bottom:").unwrap();
+        assert!(width_pos < bg_pos, "width should come before background-color");
+        assert!(bg_pos < border_pos, "background-color should come before border");
+    }
+
+    #[test]
+    fn no_borders_no_border_css() {
+        let cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Normal")]));
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        // Default table CSS may contain "border" from .rtf-table rule in <style>,
+        // but the <td> element itself should not have an inline border style.
+        // The table element tag should not contain "border-top:", "border-left:", etc.
+        assert!(!html.contains("border-top:"));
+        assert!(!html.contains("border-left:"));
+        assert!(!html.contains("border-bottom:"));
+        assert!(!html.contains("border-right:"));
     }
 }

@@ -1,0 +1,89 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Red border",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880,
+              "borders": {
+                "top": {
+                  "style": "single",
+                  "width_half_pts": 10,
+                  "color": {
+                    "r": 255,
+                    "g": 0,
+                    "b": 0
+                  }
+                },
+                "bottom": {
+                  "style": "single",
+                  "width_half_pts": 10,
+                  "color": {
+                    "r": 255,
+                    "g": 0,
+                    "b": 0
+                  }
+                }
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Blue border",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880,
+              "borders": {
+                "top": {
+                  "style": "single",
+                  "width_half_pts": 6,
+                  "color": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 255
+                  }
+                },
+                "bottom": {
+                  "style": "single",
+                  "width_half_pts": 6,
+                  "color": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 255
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

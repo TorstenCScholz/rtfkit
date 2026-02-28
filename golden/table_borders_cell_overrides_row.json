@@ -1,0 +1,71 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Explicit",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880,
+              "borders": {
+                "top": {
+                  "style": "double",
+                  "width_half_pts": 8
+                },
+                "bottom": {
+                  "style": "double",
+                  "width_half_pts": 8
+                }
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Default",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            }
+          ],
+          "row_props": {
+            "borders": {
+              "top": {
+                "style": "single",
+                "width_half_pts": 4
+              },
+              "bottom": {
+                "style": "single",
+                "width_half_pts": 4
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

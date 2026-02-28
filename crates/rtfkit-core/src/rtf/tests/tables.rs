@@ -7,7 +7,7 @@
 //! - Hard limits
 
 use crate::rtf::parse;
-use crate::{Alignment, Block, CellMerge, Inline};
+use crate::{Alignment, Block, BorderStyle, CellMerge, Inline};
 
 // =============================================================================
 // Basic Table Tests
@@ -500,5 +500,200 @@ fn test_table_row_restart() {
     if let Some(Block::TableBlock(table)) = doc.blocks.first() {
         // Each row should have its own width
         assert!(table.rows[0].cells[0].width_twips != table.rows[1].cells[0].width_twips);
+    }
+}
+
+// =============================================================================
+// Cell Border Tests
+// =============================================================================
+
+#[test]
+fn test_cell_border_top_single() {
+    let input = r#"{\rtf1\ansi
+\trowd\clbrdrt\brdrs\brdrw4\cellx1440
+\intbl Text\cell\row
+}"#;
+    let (doc, _report) = parse(input).unwrap();
+    if let Some(Block::TableBlock(table)) = doc.blocks.first() {
+        let cell = &table.rows[0].cells[0];
+        let borders = cell.borders.as_ref().expect("cell should have borders");
+        let top = borders.top.as_ref().expect("top border should be set");
+        assert_eq!(top.style, BorderStyle::Single);
+        assert_eq!(top.width_half_pts, Some(4));
+        assert!(borders.left.is_none());
+        assert!(borders.bottom.is_none());
+        assert!(borders.right.is_none());
+    } else {
+        panic!("expected table block");
+    }
+}
+
+#[test]
+fn test_cell_border_all_four_sides() {
+    let input = r#"{\rtf1\ansi
+\trowd\clbrdrt\brdrs\brdrw4\clbrdrl\brdrs\brdrw4\clbrdrb\brdrs\brdrw4\clbrdrr\brdrs\brdrw4\cellx2880
+\intbl Cell\cell\row
+}"#;
+    let (doc, _report) = parse(input).unwrap();
+    if let Some(Block::TableBlock(table)) = doc.blocks.first() {
+        let cell = &table.rows[0].cells[0];
+        let borders = cell.borders.as_ref().expect("cell should have borders");
+        assert!(borders.top.is_some());
+        assert!(borders.left.is_some());
+        assert!(borders.bottom.is_some());
+        assert!(borders.right.is_some());
+        for side in [&borders.top, &borders.left, &borders.bottom, &borders.right] {
+            let b = side.as_ref().unwrap();
+            assert_eq!(b.style, BorderStyle::Single);
+            assert_eq!(b.width_half_pts, Some(4));
+        }
+    } else {
+        panic!("expected table block");
+    }
+}
+
+#[test]
+fn test_cell_border_style_variants() {
+    let input = r#"{\rtf1\ansi
+\trowd
+\clbrdrt\brdrdot\brdrw4\cellx1440
+\clbrdrt\brdrdb\brdrw4\cellx2880
+\clbrdrt\brdrdash\brdrw4\cellx4320
+\intbl Dot\cell Dbl\cell Dash\cell\row
+}"#;
+    let (doc, _report) = parse(input).unwrap();
+    if let Some(Block::TableBlock(table)) = doc.blocks.first() {
+        let row = &table.rows[0];
+        assert_eq!(
+            row.cells[0].borders.as_ref().unwrap().top.as_ref().unwrap().style,
+            BorderStyle::Dotted
+        );
+        assert_eq!(
+            row.cells[1].borders.as_ref().unwrap().top.as_ref().unwrap().style,
+            BorderStyle::Double
+        );
+        assert_eq!(
+            row.cells[2].borders.as_ref().unwrap().top.as_ref().unwrap().style,
+            BorderStyle::Dashed
+        );
+    } else {
+        panic!("expected table block");
+    }
+}
+
+#[test]
+fn test_cell_border_none_style() {
+    let input = r#"{\rtf1\ansi
+\trowd\clbrdrt\brdrnone\cellx1440
+\intbl Text\cell\row
+}"#;
+    let (doc, _report) = parse(input).unwrap();
+    if let Some(Block::TableBlock(table)) = doc.blocks.first() {
+        let cell = &table.rows[0].cells[0];
+        let borders = cell.borders.as_ref().expect("cell should have borders");
+        assert_eq!(borders.top.as_ref().unwrap().style, BorderStyle::None);
+    } else {
+        panic!("expected table block");
+    }
+}
+
+#[test]
+fn test_cell_border_color_resolved() {
+    let input =
+        r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\trowd\clbrdrt\brdrs\brdrcf1\cellx1440\intbl T\cell\row}"#;
+    let (doc, _report) = parse(input).unwrap();
+    if let Some(Block::TableBlock(table)) = doc.blocks.first() {
+        let cell = &table.rows[0].cells[0];
+        let borders = cell.borders.as_ref().expect("cell should have borders");
+        let color = borders.top.as_ref().unwrap().color.as_ref().expect("color should resolve");
+        assert_eq!(color.r, 255);
+        assert_eq!(color.g, 0);
+        assert_eq!(color.b, 0);
+    } else {
+        panic!("expected table block");
+    }
+}
+
+#[test]
+fn test_multi_cell_each_gets_own_borders() {
+    let input = r#"{\rtf1\ansi
+\trowd
+\clbrdrt\brdrs\brdrw4\cellx1440
+\clbrdrl\brdrs\brdrw8\cellx2880
+\intbl A\cell B\cell\row
+}"#;
+    let (doc, _report) = parse(input).unwrap();
+    if let Some(Block::TableBlock(table)) = doc.blocks.first() {
+        let row = &table.rows[0];
+        // First cell: top border only
+        let c0_borders = row.cells[0].borders.as_ref().expect("cell 0 should have borders");
+        assert!(c0_borders.top.is_some());
+        assert!(c0_borders.left.is_none());
+        // Second cell: left border only
+        let c1_borders = row.cells[1].borders.as_ref().expect("cell 1 should have borders");
+        assert!(c1_borders.left.is_some());
+        assert_eq!(c1_borders.left.as_ref().unwrap().width_half_pts, Some(8));
+        assert!(c1_borders.top.is_none());
+    } else {
+        panic!("expected table block");
+    }
+}
+
+#[test]
+fn test_row_border_top_and_bottom() {
+    let input = r#"{\rtf1\ansi
+\trowd
+\trbrdrt\brdrs\brdrw4
+\trbrdrb\brdrs\brdrw4
+\cellx2880
+\intbl Text\cell\row
+}"#;
+    let (doc, _report) = parse(input).unwrap();
+    if let Some(Block::TableBlock(table)) = doc.blocks.first() {
+        let row = &table.rows[0];
+        let props = row.row_props.as_ref().expect("row should have props");
+        let borders = props.borders.as_ref().expect("row should have borders");
+        assert!(borders.top.is_some());
+        assert!(borders.bottom.is_some());
+        assert!(borders.left.is_none());
+        assert!(borders.right.is_none());
+    } else {
+        panic!("expected table block");
+    }
+}
+
+#[test]
+fn test_row_border_inside_hv() {
+    let input = r#"{\rtf1\ansi
+\trowd
+\trbrdrh\brdrs\brdrw4
+\trbrdrv\brdrs\brdrw4
+\cellx2880
+\intbl T\cell\row
+}"#;
+    let (doc, _report) = parse(input).unwrap();
+    if let Some(Block::TableBlock(table)) = doc.blocks.first() {
+        let row = &table.rows[0];
+        let props = row.row_props.as_ref().expect("row should have props");
+        let borders = props.borders.as_ref().expect("row should have borders");
+        assert!(borders.inside_h.is_some());
+        assert!(borders.inside_v.is_some());
+    } else {
+        panic!("expected table block");
+    }
+}
+
+#[test]
+fn test_no_borders_none_field() {
+    // A table with no border controls should have borders == None
+    let input = r#"{\rtf1\ansi
+\trowd\cellx1440
+\intbl Normal\cell\row
+}"#;
+    let (doc, _report) = parse(input).unwrap();
+    if let Some(Block::TableBlock(table)) = doc.blocks.first() {
+        assert!(table.rows[0].cells[0].borders.is_none());
+    } else {
+        panic!("expected table block");
     }
 }

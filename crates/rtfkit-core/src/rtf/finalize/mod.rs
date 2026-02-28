@@ -2,6 +2,7 @@
 //!
 //! This module re-exports finalization helpers split by cohesive domain.
 
+mod borders;
 mod document;
 mod images;
 mod lists;

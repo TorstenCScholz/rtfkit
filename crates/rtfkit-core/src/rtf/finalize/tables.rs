@@ -111,6 +111,15 @@ pub fn finalize_current_cell(state: &mut RuntimeState) {
             cell_with_props.shading = Some(shading);
         }
 
+        // Apply cell borders from per-cellx capture
+        if let Some(capture) = state.tables.pending_cell_border_captures.get(cell_index) {
+            if let Some(borders) =
+                super::borders::build_border_set_from_cell(capture, state)
+            {
+                cell_with_props.borders = Some(borders);
+            }
+        }
+
         if let Some(ref mut row) = state.tables.current_row {
             row.cells.push(cell_with_props);
         }
@@ -146,6 +155,14 @@ pub fn finalize_current_row(state: &mut RuntimeState) {
             state.tables.pending_row_shading,
         ) {
             state.tables.pending_row_props.shading = Some(shading);
+        }
+
+        // Apply row-level borders to RowProps
+        let row_border_capture = std::mem::take(&mut state.tables.pending_row_borders);
+        if let Some(borders) =
+            super::borders::build_border_set_from_row(&row_border_capture, state)
+        {
+            state.tables.pending_row_props.borders = Some(borders);
         }
 
         // Apply pending row properties
@@ -362,6 +379,7 @@ pub fn finalize_current_table(state: &mut RuntimeState) {
         ) {
             table.table_props = Some(TableProps {
                 shading: Some(shading),
+                borders: None,
             });
         }
         state.document.blocks.push(Block::TableBlock(table));

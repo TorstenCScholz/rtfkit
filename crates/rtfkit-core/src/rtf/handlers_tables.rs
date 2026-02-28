@@ -5,7 +5,8 @@
 
 use super::state::RuntimeState;
 use crate::error::ConversionError;
-use crate::{CellMerge, CellVerticalAlign, RowAlignment};
+use crate::{BorderStyle, CellMerge, CellVerticalAlign, RowAlignment};
+use crate::rtf::state_tables::BorderTarget;
 
 /// Handle table-related control words.
 ///
@@ -147,6 +148,103 @@ pub fn handle_table_control_word(
             true
         }
 
+        // ---------------------------------------------------------------
+        // Cell border side selectors (\clbrdr*)
+        // Each commits the previous pending border before setting a new target.
+        // ---------------------------------------------------------------
+        "clbrdrt" => {
+            state.tables.commit_pending_border();
+            state.tables.pending_border_target = Some(BorderTarget::CellTop);
+            true
+        }
+        "clbrdrl" => {
+            state.tables.commit_pending_border();
+            state.tables.pending_border_target = Some(BorderTarget::CellLeft);
+            true
+        }
+        "clbrdrb" => {
+            state.tables.commit_pending_border();
+            state.tables.pending_border_target = Some(BorderTarget::CellBottom);
+            true
+        }
+        "clbrdrr" => {
+            state.tables.commit_pending_border();
+            state.tables.pending_border_target = Some(BorderTarget::CellRight);
+            true
+        }
+
+        // ---------------------------------------------------------------
+        // Row border side selectors (\trbrdr*)
+        // ---------------------------------------------------------------
+        "trbrdrt" => {
+            state.tables.commit_pending_border();
+            state.tables.pending_border_target = Some(BorderTarget::RowTop);
+            true
+        }
+        "trbrdrl" => {
+            state.tables.commit_pending_border();
+            state.tables.pending_border_target = Some(BorderTarget::RowLeft);
+            true
+        }
+        "trbrdrb" => {
+            state.tables.commit_pending_border();
+            state.tables.pending_border_target = Some(BorderTarget::RowBottom);
+            true
+        }
+        "trbrdrr" => {
+            state.tables.commit_pending_border();
+            state.tables.pending_border_target = Some(BorderTarget::RowRight);
+            true
+        }
+        "trbrdrh" => {
+            state.tables.commit_pending_border();
+            state.tables.pending_border_target = Some(BorderTarget::RowInsideH);
+            true
+        }
+        "trbrdrv" => {
+            state.tables.commit_pending_border();
+            state.tables.pending_border_target = Some(BorderTarget::RowInsideV);
+            true
+        }
+
+        // ---------------------------------------------------------------
+        // Border style descriptors (\brdr*)
+        // ---------------------------------------------------------------
+        "brdrs" => {
+            state.tables.pending_border_style = Some(BorderStyle::Single);
+            true
+        }
+        "brdrdb" => {
+            state.tables.pending_border_style = Some(BorderStyle::Double);
+            true
+        }
+        "brdrdot" => {
+            state.tables.pending_border_style = Some(BorderStyle::Dotted);
+            true
+        }
+        "brdrdash" => {
+            state.tables.pending_border_style = Some(BorderStyle::Dashed);
+            true
+        }
+        "brdrnone" => {
+            state.tables.pending_border_style = Some(BorderStyle::None);
+            true
+        }
+
+        // ---------------------------------------------------------------
+        // Border width and color descriptors
+        // ---------------------------------------------------------------
+        "brdrw" => {
+            if let Some(v) = parameter {
+                state.tables.pending_border_width_hp = Some(v.max(0) as u32);
+            }
+            true
+        }
+        "brdrcf" => {
+            state.tables.pending_border_color_idx = parameter;
+            true
+        }
+
         _ => false,
     }
 }
@@ -185,6 +283,9 @@ pub fn handle_row_event(state: &mut RuntimeState) -> Result<(), ConversionError>
             .dropped_content("Table row control outside table context", None);
         return Ok(());
     }
+
+    // Commit any trailing row border descriptor before finalization
+    state.tables.commit_pending_border();
 
     super::finalize::auto_close_table_cell_if_needed(state, "Unclosed table cell at row end");
     super::finalize::finalize_current_row(state);

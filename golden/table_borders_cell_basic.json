@@ -1,0 +1,85 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Cell A",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880,
+              "borders": {
+                "top": {
+                  "style": "single",
+                  "width_half_pts": 4
+                },
+                "left": {
+                  "style": "single",
+                  "width_half_pts": 4
+                },
+                "bottom": {
+                  "style": "single",
+                  "width_half_pts": 4
+                },
+                "right": {
+                  "style": "single",
+                  "width_half_pts": 4
+                }
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Cell B",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880,
+              "borders": {
+                "top": {
+                  "style": "single",
+                  "width_half_pts": 4
+                },
+                "left": {
+                  "style": "single",
+                  "width_half_pts": 4
+                },
+                "bottom": {
+                  "style": "single",
+                  "width_half_pts": 4
+                },
+                "right": {
+                  "style": "single",
+                  "width_half_pts": 4
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

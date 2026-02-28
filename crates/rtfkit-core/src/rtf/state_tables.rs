@@ -3,7 +3,56 @@
 //! This module contains table, merge, and shading state for handling
 //! RTF table parsing.
 
-use crate::{CellMerge, CellVerticalAlign, RowProps, TableBlock, TableCell, TableRow};
+use crate::{BorderStyle, CellMerge, CellVerticalAlign, RowProps, TableBlock, TableCell, TableRow};
+
+// =============================================================================
+// Parser-only border state types (not part of IR)
+// =============================================================================
+
+/// Which border side is currently being defined.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BorderTarget {
+    CellTop,
+    CellLeft,
+    CellBottom,
+    CellRight,
+    RowTop,
+    RowLeft,
+    RowBottom,
+    RowRight,
+    RowInsideH,
+    RowInsideV,
+}
+
+/// Partially-resolved border properties (color is still a color-table index).
+#[derive(Debug, Clone)]
+pub struct PendingBorderAttrs {
+    pub style: BorderStyle,
+    /// Width in half-points (from `\brdrwN`).
+    pub width_half_pts: Option<u32>,
+    /// Color table index (from `\brdrcfN`); `None` → auto/black.
+    pub color_idx: Option<i32>,
+}
+
+/// Cell-side borders captured at one `\cellx` position.
+#[derive(Debug, Clone, Default)]
+pub struct CellBorderCapture {
+    pub top: Option<PendingBorderAttrs>,
+    pub left: Option<PendingBorderAttrs>,
+    pub bottom: Option<PendingBorderAttrs>,
+    pub right: Option<PendingBorderAttrs>,
+}
+
+/// Row-level border capture (6 sides).
+#[derive(Debug, Clone, Default)]
+pub struct RowBorderCapture {
+    pub top: Option<PendingBorderAttrs>,
+    pub left: Option<PendingBorderAttrs>,
+    pub bottom: Option<PendingBorderAttrs>,
+    pub right: Option<PendingBorderAttrs>,
+    pub inside_h: Option<PendingBorderAttrs>,
+    pub inside_v: Option<PendingBorderAttrs>,
+}
 
 /// Table parsing state.
 ///
@@ -73,6 +122,24 @@ pub struct TableState {
     pub pending_table_shading: Option<i32>,
 
     // =============================================================================
+    // Border accumulation (cleared at \cellx and \row boundaries)
+    // =============================================================================
+    /// Which border side the next descriptor applies to.
+    pub pending_border_target: Option<BorderTarget>,
+    /// Border style from `\brdrs`, `\brdrdb`, etc.
+    pub pending_border_style: Option<BorderStyle>,
+    /// Border width in half-points from `\brdrwN`.
+    pub pending_border_width_hp: Option<u32>,
+    /// Border color index from `\brdrcfN`.
+    pub pending_border_color_idx: Option<i32>,
+    /// Cell border sides being accumulated before the next `\cellx`.
+    pub current_cell_borders: CellBorderCapture,
+    /// Per-cellx captured cell borders (parallel to `pending_cellx`).
+    pub pending_cell_border_captures: Vec<CellBorderCapture>,
+    /// Row-level border sides accumulated before `\row`.
+    pub pending_row_borders: RowBorderCapture,
+
+    // =============================================================================
     // Flags
     // =============================================================================
     /// Whether the current paragraph saw \intbl.
@@ -86,6 +153,36 @@ impl TableState {
     /// Creates a new default table state.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Commit the currently accumulated border descriptor into the appropriate
+    /// side of `current_cell_borders` or `pending_row_borders`, then clear the
+    /// pending accumulator.
+    pub fn commit_pending_border(&mut self) {
+        let Some(target) = self.pending_border_target.take() else {
+            return;
+        };
+        let style = self
+            .pending_border_style
+            .take()
+            .unwrap_or(BorderStyle::Single);
+        let attrs = PendingBorderAttrs {
+            style,
+            width_half_pts: self.pending_border_width_hp.take(),
+            color_idx: self.pending_border_color_idx.take(),
+        };
+        match target {
+            BorderTarget::CellTop => self.current_cell_borders.top = Some(attrs),
+            BorderTarget::CellLeft => self.current_cell_borders.left = Some(attrs),
+            BorderTarget::CellBottom => self.current_cell_borders.bottom = Some(attrs),
+            BorderTarget::CellRight => self.current_cell_borders.right = Some(attrs),
+            BorderTarget::RowTop => self.pending_row_borders.top = Some(attrs),
+            BorderTarget::RowLeft => self.pending_row_borders.left = Some(attrs),
+            BorderTarget::RowBottom => self.pending_row_borders.bottom = Some(attrs),
+            BorderTarget::RowRight => self.pending_row_borders.right = Some(attrs),
+            BorderTarget::RowInsideH => self.pending_row_borders.inside_h = Some(attrs),
+            BorderTarget::RowInsideV => self.pending_row_borders.inside_v = Some(attrs),
+        }
     }
 
     /// Check if we're currently in a table context (have an active table).
@@ -121,6 +218,14 @@ impl TableState {
         self.pending_cell_cbpat = None;
         self.pending_cell_cfpat = None;
         self.pending_cell_shading = None;
+        // Border accumulation reset
+        self.pending_cell_border_captures.clear();
+        self.current_cell_borders = CellBorderCapture::default();
+        self.pending_row_borders = RowBorderCapture::default();
+        self.pending_border_target = None;
+        self.pending_border_style = None;
+        self.pending_border_width_hp = None;
+        self.pending_border_color_idx = None;
         self.seen_intbl_in_paragraph = false;
     }
 
@@ -160,6 +265,11 @@ impl TableState {
             .push(self.pending_cell_cfpat.take());
         self.pending_cell_shadings
             .push(self.pending_cell_shading.take());
+        // Commit any trailing border descriptor for this cell, then store
+        self.commit_pending_border();
+        self.pending_cell_border_captures
+            .push(self.current_cell_borders.clone());
+        self.current_cell_borders = CellBorderCapture::default();
     }
 
     /// Clear state after table finalization.
@@ -173,6 +283,9 @@ impl TableState {
         self.pending_cell_cbpats.clear();
         self.pending_cell_cfpats.clear();
         self.pending_cell_shadings.clear();
+        self.pending_cell_border_captures.clear();
+        self.current_cell_borders = CellBorderCapture::default();
+        self.pending_row_borders = RowBorderCapture::default();
         self.seen_intbl_in_paragraph = false;
         self.pending_table_cbpat = None;
         self.pending_table_cfpat = None;

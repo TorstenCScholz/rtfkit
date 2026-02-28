@@ -391,6 +391,62 @@ impl Shading {
     }
 }
 
+// =============================================================================
+// Border Types for Table Cells, Rows, and Tables
+// =============================================================================
+
+/// Border line style.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BorderStyle {
+    /// No border (explicitly suppressed).
+    None,
+    /// Single solid line.
+    Single,
+    /// Double line.
+    Double,
+    /// Dotted line.
+    Dotted,
+    /// Dashed line.
+    Dashed,
+}
+
+/// A single border side with style, width, and optional color.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Border {
+    /// The line style of this border.
+    pub style: BorderStyle,
+    /// Width in half-points (RTF `\brdrwN` native unit). `None` → writer default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width_half_pts: Option<u32>,
+    /// Border color. `None` → automatic/black.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<Color>,
+}
+
+/// Up to six named border sides for a cell, row, or table.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BorderSet {
+    /// Top border.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top: Option<Border>,
+    /// Left border.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub left: Option<Border>,
+    /// Bottom border.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bottom: Option<Border>,
+    /// Right border.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub right: Option<Border>,
+    /// Inside-horizontal rule (between rows, row-level only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inside_h: Option<Border>,
+    /// Inside-vertical rule (between columns, row-level only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inside_v: Option<Border>,
+}
+
 /// Text alignment options for paragraphs.
 ///
 /// Represents the horizontal alignment of text within a paragraph.
@@ -478,19 +534,21 @@ pub struct RowProps {
     /// Row-level shading (default for cells in this row)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shading: Option<Shading>,
+    /// Row-level border defaults (outer edges and inside rules).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub borders: Option<BorderSet>,
 }
 
 /// Table-level properties.
-///
-/// Placeholder for future table-level formatting (borders, spacing, etc.)
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct TableProps {
     /// Table-level shading (default for all cells in table)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shading: Option<Shading>,
-    // Future: borders, spacing, width preferences, etc.
-    // Keeping sparse for now per PHASE5.md guidelines
+    /// Table-level border defaults.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub borders: Option<BorderSet>,
 }
 
 /// A contiguous run of text with uniform formatting.
@@ -751,6 +809,7 @@ impl ListBlock {
 ///                     merge: None,
 ///                     v_align: None,
 ///                     shading: None,
+///                     borders: None,
 ///                 },
 ///             ],
 ///             row_props: None,
@@ -873,6 +932,9 @@ pub struct TableCell {
     /// Cell-level shading (background)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shading: Option<Shading>,
+    /// Per-side cell borders.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub borders: Option<BorderSet>,
 }
 
 impl TableCell {
@@ -889,6 +951,7 @@ impl TableCell {
             merge: None,
             v_align: None,
             shading: None,
+            borders: None,
         }
     }
 
@@ -900,6 +963,7 @@ impl TableCell {
             merge: None,
             v_align: None,
             shading: None,
+            borders: None,
         }
     }
 
@@ -911,6 +975,7 @@ impl TableCell {
             merge: None,
             v_align: None,
             shading: None,
+            borders: None,
         }
     }
 

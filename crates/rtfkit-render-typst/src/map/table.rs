@@ -31,9 +31,9 @@
 //! falling back to `auto` for unspecified columns.
 
 use rtfkit_core::{
-    CellMerge, Color, ShadingPattern, ShadingRenderPolicy, TableBlock as IrTableBlock,
-    TableCell as IrTableCell, TableRow as IrTableRow, percent_pattern_density,
-    resolve_shading_fill_color,
+    Border as IrBorder, BorderSet as IrBorderSet, BorderStyle as IrBorderStyle, CellMerge, Color,
+    ShadingPattern, ShadingRenderPolicy, TableBlock as IrTableBlock, TableCell as IrTableCell,
+    TableRow as IrTableRow, percent_pattern_density, resolve_shading_fill_color,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -61,6 +61,8 @@ struct CellInfo {
     width_twips: Option<i32>,
     /// Cell fill color (from shading).
     fill_color: Option<Color>,
+    /// Cell border set (from borders IR field).
+    borders: Option<IrBorderSet>,
 }
 
 type RowspanMap = HashMap<(usize, usize), u32>;
@@ -259,6 +261,25 @@ fn map_row(
     cells
 }
 
+/// Convert a single IR `Border` to a Typst stroke expression.
+///
+/// Double/Dotted/Dashed degrade to solid with the same color (cosmetic only).
+fn border_to_typst_stroke(border: &IrBorder) -> String {
+    if border.style == IrBorderStyle::None {
+        return "none".to_string();
+    }
+    let width_pt = border
+        .width_half_pts
+        .map(|hp| hp as f32 / 2.0)
+        .unwrap_or(0.5);
+    let color = border
+        .color
+        .as_ref()
+        .map(|c| format!("rgb({}, {}, {})", c.r, c.g, c.b))
+        .unwrap_or_else(|| "black".to_string());
+    format!("{width_pt:.1}pt + {color}")
+}
+
 /// Map a single IR cell to cell info.
 fn map_cell(
     cell: &IrTableCell,
@@ -313,6 +334,7 @@ fn map_cell(
         rowspan,
         width_twips: cell.width_twips,
         fill_color,
+        borders: cell.borders.clone(),
     }
 }
 
@@ -417,6 +439,25 @@ fn generate_table_source(
             // Add fill parameter for cell shading
             if let Some(ref color) = cell.fill_color {
                 params.push(format!("fill: rgb({}, {}, {})", color.r, color.g, color.b));
+            }
+
+            // Add stroke parameter for cell borders
+            if let Some(ref borders) = cell.borders {
+                let sides: [(&str, Option<&IrBorder>); 4] = [
+                    ("top", borders.top.as_ref()),
+                    ("left", borders.left.as_ref()),
+                    ("bottom", borders.bottom.as_ref()),
+                    ("right", borders.right.as_ref()),
+                ];
+                let stroke_parts: Vec<String> = sides
+                    .iter()
+                    .filter_map(|(side, b)| {
+                        b.map(|b| format!("{side}: {}", border_to_typst_stroke(b)))
+                    })
+                    .collect();
+                if !stroke_parts.is_empty() {
+                    params.push(format!("stroke: ({})", stroke_parts.join(", ")));
+                }
             }
 
             let cell_spec = if !params.is_empty() {
@@ -939,5 +980,111 @@ mod tests {
 
         // Percent patterns are approximated, not degraded.
         assert!(output.warnings.is_empty());
+    }
+
+    // =========================================================================
+    // Cell border Typst stroke tests
+    // =========================================================================
+
+    #[test]
+    fn test_cell_border_single_emits_stroke_param() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle};
+
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("x")]));
+        cell.borders = Some(BorderSet {
+            top: Some(Border {
+                style: BorderStyle::Single,
+                width_half_pts: Some(4),
+                color: None,
+            }),
+            ..Default::default()
+        });
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+        let output = map_table(&table);
+
+        assert!(output.typst_source.contains("stroke:"), "should emit stroke parameter");
+        assert!(output.typst_source.contains("top:"), "should have top side");
+        assert!(output.typst_source.contains("2.0pt + black"), "should format width and color");
+    }
+
+    #[test]
+    fn test_cell_border_none_style_emits_none() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle};
+
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("x")]));
+        cell.borders = Some(BorderSet {
+            left: Some(Border {
+                style: BorderStyle::None,
+                width_half_pts: None,
+                color: None,
+            }),
+            ..Default::default()
+        });
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+        let output = map_table(&table);
+
+        assert!(output.typst_source.contains("left: none"), "None style should emit 'none'");
+    }
+
+    #[test]
+    fn test_cell_border_with_color() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle, Color};
+
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("x")]));
+        cell.borders = Some(BorderSet {
+            bottom: Some(Border {
+                style: BorderStyle::Single,
+                width_half_pts: Some(6),
+                color: Some(Color::new(255, 0, 0)),
+            }),
+            ..Default::default()
+        });
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+        let output = map_table(&table);
+
+        assert!(output.typst_source.contains("bottom:"), "should have bottom side");
+        assert!(output.typst_source.contains("rgb(255, 0, 0)"), "color should be rgb()");
+        assert!(output.typst_source.contains("3.0pt"), "width should be 3.0pt (6/2)");
+    }
+
+    #[test]
+    fn test_no_borders_no_stroke_param() {
+        let cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("x")]));
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+        let output = map_table(&table);
+
+        assert!(!output.typst_source.contains("stroke:"), "no borders means no stroke param");
+    }
+
+    #[test]
+    fn test_cell_border_four_sides_all_present() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle};
+
+        let make_border = || Border {
+            style: BorderStyle::Single,
+            width_half_pts: Some(2),
+            color: None,
+        };
+
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("x")]));
+        cell.borders = Some(BorderSet {
+            top: Some(make_border()),
+            left: Some(make_border()),
+            bottom: Some(make_border()),
+            right: Some(make_border()),
+            ..Default::default()
+        });
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+        let output = map_table(&table);
+
+        let src = &output.typst_source;
+        assert!(src.contains("top:"));
+        assert!(src.contains("left:"));
+        assert!(src.contains("bottom:"));
+        assert!(src.contains("right:"));
     }
 }

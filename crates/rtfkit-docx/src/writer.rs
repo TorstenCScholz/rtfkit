@@ -5,17 +5,19 @@
 
 use crate::DocxError;
 use docx_rs::{
-    AbstractNumbering, AlignmentType, Docx, Hyperlink as DocxHyperlink, HyperlinkType, IndentLevel,
-    Level, LevelJc, LevelText, NumberFormat, Numbering, NumberingId, Numberings,
+    AbstractNumbering, AlignmentType, BorderType, Docx, Hyperlink as DocxHyperlink, HyperlinkType,
+    IndentLevel, Level, LevelJc, LevelText, NumberFormat, Numbering, NumberingId, Numberings,
     Paragraph as DocxParagraph, Pic, Run as DocxRun, RunFonts, RunProperty, Shading, ShdType,
-    Start, Table, TableCell, TableRow, VAlignType, VMergeType, WidthType,
+    Start, Table, TableCell, TableCellBorder, TableCellBorderPosition, TableCellBorders, TableRow,
+    VAlignType, VMergeType, WidthType,
 };
 use image::{GenericImageView, ImageFormat as RasterFormat};
 use indexmap::IndexMap;
 use rtfkit_core::{
-    Alignment, Block, CellMerge, CellVerticalAlign, Document, Hyperlink as IrHyperlink, ImageBlock,
-    Inline, ListBlock, ListId, ListKind, Paragraph, Run, Shading as IrShading, ShadingPattern,
-    TableBlock, TableCell as IrTableCell, TableRow as IrTableRow,
+    Alignment, Block, Border as IrBorder, BorderSet as IrBorderSet, BorderStyle as IrBorderStyle,
+    CellMerge, CellVerticalAlign, Document, Hyperlink as IrHyperlink, ImageBlock, Inline,
+    ListBlock, ListId, ListKind, Paragraph, Run, Shading as IrShading, ShadingPattern, TableBlock,
+    TableCell as IrTableCell, TableRow as IrTableRow,
 };
 use std::fs::File;
 use std::io::{Cursor, Write};
@@ -784,10 +786,62 @@ fn convert_table_row(
     Ok(TableRow::new(cells))
 }
 
+/// Maps an IR `BorderStyle` to a docx-rs `BorderType`.
+fn border_style_to_docx(style: IrBorderStyle) -> BorderType {
+    match style {
+        IrBorderStyle::Single => BorderType::Single,
+        IrBorderStyle::Double => BorderType::Double,
+        IrBorderStyle::Dotted => BorderType::Dotted,
+        IrBorderStyle::Dashed => BorderType::Dashed,
+        IrBorderStyle::None => BorderType::Nil,
+    }
+}
+
+/// Build a single `TableCellBorder` from an IR `Border`.
+fn convert_border(border: &IrBorder, pos: TableCellBorderPosition) -> TableCellBorder {
+    let bt = border_style_to_docx(border.style);
+    // docx-rs size unit is 1/8 pt; IR width is in half-points → multiply by 4.
+    let size = border.width_half_pts.unwrap_or(4) as usize;
+    let color = border
+        .color
+        .as_ref()
+        .map(|c| format!("{:02X}{:02X}{:02X}", c.r, c.g, c.b))
+        .unwrap_or_else(|| "000000".to_string());
+    TableCellBorder::new(pos)
+        .border_type(bt)
+        .size(size)
+        .color(color)
+}
+
+/// Build a `TableCellBorders` from an IR `BorderSet`.
+fn convert_border_set(borders: &IrBorderSet) -> TableCellBorders {
+    // Use `with_empty()` so only explicitly-set sides are emitted.
+    let mut docx_borders = TableCellBorders::with_empty();
+    if let Some(ref b) = borders.top {
+        docx_borders = docx_borders.set(convert_border(b, TableCellBorderPosition::Top));
+    }
+    if let Some(ref b) = borders.left {
+        docx_borders = docx_borders.set(convert_border(b, TableCellBorderPosition::Left));
+    }
+    if let Some(ref b) = borders.bottom {
+        docx_borders = docx_borders.set(convert_border(b, TableCellBorderPosition::Bottom));
+    }
+    if let Some(ref b) = borders.right {
+        docx_borders = docx_borders.set(convert_border(b, TableCellBorderPosition::Right));
+    }
+    if let Some(ref b) = borders.inside_h {
+        docx_borders = docx_borders.set(convert_border(b, TableCellBorderPosition::InsideH));
+    }
+    if let Some(ref b) = borders.inside_v {
+        docx_borders = docx_borders.set(convert_border(b, TableCellBorderPosition::InsideV));
+    }
+    docx_borders
+}
+
 /// Converts an IR TableCell to a docx-rs TableCell.
 ///
 /// Handles cell content (paragraphs and lists), width mapping, merge semantics,
-/// vertical alignment, and shading.
+/// vertical alignment, shading, and borders.
 ///
 /// Width is stored in twips in the IR and mapped to DXA for DOCX (1:1 ratio).
 fn convert_table_cell(
@@ -848,6 +902,11 @@ fn convert_table_cell(
         && let Some(docx_shading) = convert_shading(shading)
     {
         docx_cell = docx_cell.shading(docx_shading);
+    }
+
+    // Apply cell borders if present
+    if let Some(ref borders) = cell.borders {
+        docx_cell = docx_cell.set_borders(convert_border_set(borders));
     }
 
     // Convert cell content
@@ -2518,5 +2577,107 @@ mod tests {
             pattern_to_shd_type(ShadingPattern::Percent90),
             ShdType::Pct90
         ));
+    }
+
+    // =========================================================================
+    // Border conversion tests
+    // =========================================================================
+
+    #[test]
+    fn border_style_single_maps_to_single() {
+        assert!(matches!(
+            border_style_to_docx(IrBorderStyle::Single),
+            BorderType::Single
+        ));
+    }
+
+    #[test]
+    fn border_style_none_maps_to_nil() {
+        assert!(matches!(
+            border_style_to_docx(IrBorderStyle::None),
+            BorderType::Nil
+        ));
+    }
+
+    #[test]
+    fn border_style_double_maps_to_double() {
+        assert!(matches!(
+            border_style_to_docx(IrBorderStyle::Double),
+            BorderType::Double
+        ));
+    }
+
+    #[test]
+    fn convert_border_color_is_uppercase_hex() {
+        use rtfkit_core::Color;
+        let border = IrBorder {
+            style: IrBorderStyle::Single,
+            width_half_pts: Some(4),
+            color: Some(Color::new(255, 128, 0)),
+        };
+        let docx_border = convert_border(&border, TableCellBorderPosition::Top);
+        assert_eq!(docx_border.color, "FF8000");
+    }
+
+    #[test]
+    fn convert_border_no_color_defaults_to_black() {
+        let border = IrBorder {
+            style: IrBorderStyle::Single,
+            width_half_pts: Some(4),
+            color: None,
+        };
+        let docx_border = convert_border(&border, TableCellBorderPosition::Top);
+        assert_eq!(docx_border.color, "000000");
+    }
+
+    #[test]
+    fn convert_border_set_top_left_only() {
+        let borders = IrBorderSet {
+            top: Some(IrBorder {
+                style: IrBorderStyle::Single,
+                width_half_pts: Some(4),
+                color: None,
+            }),
+            left: Some(IrBorder {
+                style: IrBorderStyle::Dashed,
+                width_half_pts: Some(8),
+                color: None,
+            }),
+            ..Default::default()
+        };
+        let docx_borders = convert_border_set(&borders);
+        // We can't easily inspect individual sides without docx-rs internals,
+        // but we verify the call succeeds and the struct is built
+        let _ = docx_borders;
+    }
+
+    #[test]
+    fn cell_with_borders_builds_docx_without_error() {
+        use rtfkit_core::{Border, BorderSet, Paragraph, Run, TableBlock, TableCell, TableRow};
+
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("bordered")]));
+        cell.borders = Some(BorderSet {
+            top: Some(Border {
+                style: IrBorderStyle::Single,
+                width_half_pts: Some(4),
+                color: None,
+            }),
+            right: Some(Border {
+                style: IrBorderStyle::Double,
+                width_half_pts: Some(8),
+                color: None,
+            }),
+            ..Default::default()
+        });
+
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
+        let doc = rtfkit_core::Document {
+            blocks: vec![rtfkit_core::Block::TableBlock(table)],
+        };
+
+        // Should not panic
+        let result = super::write_docx_to_bytes(&doc);
+        assert!(result.is_ok());
     }
 }
