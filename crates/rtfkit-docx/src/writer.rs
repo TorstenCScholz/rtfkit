@@ -16,10 +16,10 @@ use image::{GenericImageView, ImageFormat as RasterFormat};
 use indexmap::IndexMap;
 use rtfkit_core::{
     Alignment, Block, Border as IrBorder, BorderSet as IrBorderSet, BorderStyle as IrBorderStyle,
-    CellMerge, CellVerticalAlign, Document, Hyperlink as IrHyperlink, ImageBlock, Inline,
-    ListBlock, ListId, ListKind, Paragraph, RowAlignment, RowHeightRule, Run, Shading as IrShading,
-    ShadingPattern, TableBlock, TableCell as IrTableCell, TableRow as IrTableRow, WidthUnit,
-    resolve_effective_cell_borders,
+    CellMerge, CellVerticalAlign, Document, Hyperlink as IrHyperlink, HyperlinkTarget, ImageBlock,
+    Inline, ListBlock, ListId, ListKind, Paragraph, RowAlignment, RowHeightRule, Run,
+    Shading as IrShading, ShadingPattern, TableBlock, TableCell as IrTableCell,
+    TableRow as IrTableRow, WidthUnit, resolve_effective_cell_borders,
 };
 use std::fs::File;
 use std::io::{Cursor, Write};
@@ -316,10 +316,11 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
 
     // Second pass: convert blocks
     // Note: docx-rs handles hyperlink relationships internally
+    let mut bookmark_id: usize = 0;
     for block in &document.blocks {
         match block {
             Block::Paragraph(para) => {
-                doc = doc.add_paragraph(convert_paragraph(para));
+                doc = doc.add_paragraph(convert_paragraph(para, &mut bookmark_id));
             }
             Block::ListBlock(list) => {
                 let num_id = numbering.register_list(list);
@@ -327,8 +328,12 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
                     for item_block in &item.blocks {
                         match item_block {
                             Block::Paragraph(para) => {
-                                let paragraph =
-                                    convert_paragraph_with_numbering(para, num_id, item.level);
+                                let paragraph = convert_paragraph_with_numbering(
+                                    para,
+                                    num_id,
+                                    item.level,
+                                    &mut bookmark_id,
+                                );
                                 doc = doc.add_paragraph(paragraph);
                             }
                             Block::ImageBlock(image) => {
@@ -339,7 +344,12 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
                                 doc = doc.add_paragraph(paragraph);
                             }
                             Block::TableBlock(table) => {
-                                let table = convert_table(table, &numbering, &mut images)?;
+                                let table = convert_table(
+                                    table,
+                                    &numbering,
+                                    &mut images,
+                                    &mut bookmark_id,
+                                )?;
                                 doc = doc.add_table(table);
                             }
                             Block::ListBlock(_) => {}
@@ -348,7 +358,8 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
                 }
             }
             Block::TableBlock(table) => {
-                let docx_table = convert_table(table, &numbering, &mut images)?;
+                let docx_table =
+                    convert_table(table, &numbering, &mut images, &mut bookmark_id)?;
                 doc = doc.add_table(docx_table);
             }
             Block::ImageBlock(image) => {
@@ -394,12 +405,17 @@ fn register_lists_in_block(block: &Block, numbering: &mut NumberingAllocator) {
 }
 
 /// Converts an IR paragraph to a docx-rs paragraph without numbering.
-fn convert_paragraph(para: &Paragraph) -> DocxParagraph {
-    convert_paragraph_with_numbering(para, 0, 0)
+fn convert_paragraph(para: &Paragraph, bookmark_id: &mut usize) -> DocxParagraph {
+    convert_paragraph_with_numbering(para, 0, 0, bookmark_id)
 }
 
 /// Converts an IR paragraph to a docx-rs paragraph with optional numbering.
-fn convert_paragraph_with_numbering(para: &Paragraph, num_id: u32, level: u8) -> DocxParagraph {
+fn convert_paragraph_with_numbering(
+    para: &Paragraph,
+    num_id: u32,
+    level: u8,
+    bookmark_id: &mut usize,
+) -> DocxParagraph {
     let mut p = DocxParagraph::new();
 
     // Add numbering properties if this is a list item
@@ -432,6 +448,12 @@ fn convert_paragraph_with_numbering(para: &Paragraph, num_id: u32, level: u8) ->
                 let docx_hyperlink = convert_hyperlink(hyperlink);
                 p = p.add_hyperlink(docx_hyperlink);
             }
+            Inline::BookmarkAnchor(anchor) => {
+                let id = *bookmark_id;
+                *bookmark_id += 1;
+                p = p.add_bookmark_start(id, &anchor.name);
+                p = p.add_bookmark_end(id);
+            }
         }
     }
 
@@ -440,10 +462,11 @@ fn convert_paragraph_with_numbering(para: &Paragraph, num_id: u32, level: u8) ->
 
 /// Converts an IR Hyperlink to a docx-rs Hyperlink.
 fn convert_hyperlink(hyperlink: &IrHyperlink) -> DocxHyperlink {
-    // Create the hyperlink with the URL
-    let mut docx_hyperlink = DocxHyperlink::new(&hyperlink.url, HyperlinkType::External);
+    let mut docx_hyperlink = match &hyperlink.target {
+        HyperlinkTarget::ExternalUrl(url) => DocxHyperlink::new(url, HyperlinkType::External),
+        HyperlinkTarget::InternalBookmark(name) => DocxHyperlink::new(name, HyperlinkType::Anchor),
+    };
 
-    // Add runs to the hyperlink
     for run in &hyperlink.runs {
         docx_hyperlink = docx_hyperlink.add_run(convert_run(run));
     }
@@ -727,12 +750,15 @@ fn convert_table(
     table: &TableBlock,
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
+    bookmark_id: &mut usize,
 ) -> Result<Table, DocxError> {
     let rows: Vec<TableRow> = table
         .rows
         .iter()
         .enumerate()
-        .map(|(row_idx, row)| convert_table_row(table, row_idx, row, numbering, images))
+        .map(|(row_idx, row)| {
+            convert_table_row(table, row_idx, row, numbering, images, bookmark_id)
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
     let mut docx_table = Table::new(rows);
@@ -810,6 +836,7 @@ fn convert_table_row(
     row: &IrTableRow,
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
+    bookmark_id: &mut usize,
 ) -> Result<TableRow, DocxError> {
     let mut cells = Vec::with_capacity(row.cells.len());
     let mut expected_continuations = 0usize;
@@ -823,6 +850,7 @@ fn convert_table_row(
                     effective_borders,
                     numbering,
                     images,
+                    bookmark_id,
                 )?);
                 expected_continuations = span.saturating_sub(1) as usize;
             }
@@ -836,6 +864,7 @@ fn convert_table_row(
                     effective_borders,
                     numbering,
                     images,
+                    bookmark_id,
                 )?);
             }
             Some(CellMerge::HorizontalContinue) if expected_continuations > 0 => {
@@ -850,6 +879,7 @@ fn convert_table_row(
                     effective_borders,
                     numbering,
                     images,
+                    bookmark_id,
                 )?);
             }
             _ => {
@@ -859,6 +889,7 @@ fn convert_table_row(
                     effective_borders,
                     numbering,
                     images,
+                    bookmark_id,
                 )?);
             }
         }
@@ -952,6 +983,7 @@ fn convert_table_cell(
     effective_borders: Option<IrBorderSet>,
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
+    bookmark_id: &mut usize,
 ) -> Result<TableCell, DocxError> {
     let mut docx_cell = TableCell::new();
 
@@ -1055,7 +1087,7 @@ fn convert_table_cell(
     for block in &cell.blocks {
         match block {
             Block::Paragraph(para) => {
-                docx_cell = docx_cell.add_paragraph(convert_paragraph(para));
+                docx_cell = docx_cell.add_paragraph(convert_paragraph(para, bookmark_id));
             }
             Block::ListBlock(list) => {
                 if let Some(num_id) = numbering.num_id_for(list.list_id) {
@@ -1063,8 +1095,12 @@ fn convert_table_cell(
                         for item_block in &item.blocks {
                             match item_block {
                                 Block::Paragraph(para) => {
-                                    let paragraph =
-                                        convert_paragraph_with_numbering(para, num_id, item.level);
+                                    let paragraph = convert_paragraph_with_numbering(
+                                        para,
+                                        num_id,
+                                        item.level,
+                                        bookmark_id,
+                                    );
                                     docx_cell = docx_cell.add_paragraph(paragraph);
                                 }
                                 Block::ImageBlock(image) => {
@@ -1079,6 +1115,7 @@ fn convert_table_cell(
                                         nested_table,
                                         numbering,
                                         images,
+                                        bookmark_id,
                                     )?);
                                 }
                                 Block::ListBlock(_) => {}
@@ -1091,7 +1128,8 @@ fn convert_table_cell(
                         for item_block in &item.blocks {
                             match item_block {
                                 Block::Paragraph(para) => {
-                                    docx_cell = docx_cell.add_paragraph(convert_paragraph(para));
+                                    docx_cell = docx_cell
+                                        .add_paragraph(convert_paragraph(para, bookmark_id));
                                 }
                                 Block::ImageBlock(image) => {
                                     docx_cell = docx_cell
@@ -1102,6 +1140,7 @@ fn convert_table_cell(
                                         nested_table,
                                         numbering,
                                         images,
+                                        bookmark_id,
                                     )?);
                                 }
                                 Block::ListBlock(_) => {}
@@ -1112,7 +1151,12 @@ fn convert_table_cell(
             }
             Block::TableBlock(nested_table) => {
                 // Support for nested tables
-                docx_cell = docx_cell.add_table(convert_table(nested_table, numbering, images)?);
+                docx_cell = docx_cell.add_table(convert_table(
+                    nested_table,
+                    numbering,
+                    images,
+                    bookmark_id,
+                )?);
             }
             Block::ImageBlock(image) => {
                 docx_cell = docx_cell.add_paragraph(convert_image_block(image, images)?);
@@ -2052,7 +2096,7 @@ mod tests {
         let para = Paragraph::from_inlines(vec![
             Inline::Run(Run::new("Visit ")),
             Inline::Hyperlink(IrHyperlink {
-                url: "https://example.com".to_string(),
+                target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
                 runs: vec![Run::new("Example")],
             }),
         ]);
@@ -2068,7 +2112,7 @@ mod tests {
     #[test]
     fn test_hyperlink_emits_relationship_entry() {
         let para = Paragraph::from_inlines(vec![Inline::Hyperlink(IrHyperlink {
-            url: "https://example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
             runs: vec![Run::new("Example")],
         })]);
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
@@ -2086,12 +2130,12 @@ mod tests {
     fn test_multiple_hyperlinks_emit_multiple_targets() {
         let para = Paragraph::from_inlines(vec![
             Inline::Hyperlink(IrHyperlink {
-                url: "https://example.com".to_string(),
+                target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
                 runs: vec![Run::new("Example")],
             }),
             Inline::Run(Run::new(" and ")),
             Inline::Hyperlink(IrHyperlink {
-                url: "https://docs.example.com".to_string(),
+                target: HyperlinkTarget::ExternalUrl("https://docs.example.com".to_string()),
                 runs: vec![Run::new("Docs")],
             }),
         ]);
@@ -2111,7 +2155,7 @@ mod tests {
         italic.italic = true;
 
         let para = Paragraph::from_inlines(vec![Inline::Hyperlink(IrHyperlink {
-            url: "https://example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
             runs: vec![bold, italic],
         })]);
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
@@ -2221,7 +2265,7 @@ mod tests {
         styled_run.underline = true;
 
         let para = Paragraph::from_inlines(vec![Inline::Hyperlink(IrHyperlink {
-            url: "https://example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
             runs: vec![styled_run],
         })]);
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
@@ -2371,7 +2415,7 @@ mod tests {
         run.underline = true;
 
         let para = Paragraph::from_inlines(vec![Inline::Hyperlink(IrHyperlink {
-            url: "https://example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
             runs: vec![run],
         })]);
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);

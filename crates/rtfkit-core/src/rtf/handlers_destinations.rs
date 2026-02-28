@@ -38,6 +38,10 @@ pub enum DestinationBehavior {
     Shppict,
     /// Non-shape picture destination - fallback when no shppict
     Nonshppict,
+    /// Bookmark start destination - capture name, emit BookmarkAnchor inline
+    BkmkStart,
+    /// Bookmark end destination - silently skip (no visible content)
+    BkmkEnd,
 }
 
 // =============================================================================
@@ -69,6 +73,9 @@ pub fn destination_behavior(word: &str) -> Option<DestinationBehavior> {
         "pict" => Some(DestinationBehavior::Pict),
         "shppict" => Some(DestinationBehavior::Shppict),
         "nonshppict" => Some(DestinationBehavior::Nonshppict),
+        // Bookmark destinations - need special handling to emit BookmarkAnchor inlines
+        "bkmkstart" => Some(DestinationBehavior::BkmkStart),
+        "bkmkend" => Some(DestinationBehavior::BkmkEnd),
         // Destinations that represent currently unsupported visible content.
         "obj" | "objclass" | "objdata" | "picprop" | "datafield" | "header" | "headerl"
         | "headerr" | "footer" | "footerl" | "footerr" | "footnote" | "annotation" | "pn"
@@ -164,6 +171,17 @@ pub fn maybe_start_destination(state: &mut RuntimeState, word: &str) -> bool {
                     state.mark_current_group_non_destination();
                     return false;
                 }
+            }
+            DestinationBehavior::BkmkStart => {
+                // Start capturing bookmark name; don't skip — text will be accumulated
+                state.fields.start_bkmkstart(state.current_depth);
+                state.destinations.destination_marker = false;
+                state.mark_current_group_non_destination();
+                return false;
+            }
+            DestinationBehavior::BkmkEnd => {
+                // No visible content in bkmkend; silently skip
+                state.destinations.enter_destination();
             }
         }
         state.destinations.destination_marker = false;

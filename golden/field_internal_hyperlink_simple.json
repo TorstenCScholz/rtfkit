@@ -6,7 +6,7 @@
       "inlines": [
         {
           "type": "run",
-          "text": "Click ",
+          "text": "Go to ",
           "bold": false,
           "italic": false,
           "underline": false,
@@ -16,30 +16,14 @@
         {
           "type": "hyperlink",
           "target": {
-            "type": "external_url",
-            "value": "https://example.com"
+            "type": "internal_bookmark",
+            "value": "section1"
           },
           "runs": [
             {
-              "text": "Bold",
-              "bold": true,
-              "italic": false,
-              "underline": false,
-              "font_family": "Arial",
-              "font_size": 12.0
-            },
-            {
-              "text": " and ",
+              "text": "Section One",
               "bold": false,
               "italic": false,
-              "underline": false,
-              "font_family": "Arial",
-              "font_size": 12.0
-            },
-            {
-              "text": "Italic",
-              "bold": false,
-              "italic": true,
               "underline": false,
               "font_family": "Arial",
               "font_size": 12.0
@@ -48,7 +32,7 @@
         },
         {
           "type": "run",
-          "text": " to visit.",
+          "text": " for details.",
           "bold": false,
           "italic": false,
           "underline": false,

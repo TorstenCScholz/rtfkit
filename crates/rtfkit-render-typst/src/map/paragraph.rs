@@ -32,8 +32,8 @@
 //! - `~` - Typst non-breaking space
 
 use rtfkit_core::{
-    Alignment, Color, Hyperlink, Inline, Paragraph, Run, Shading, ShadingPattern,
-    ShadingRenderPolicy, percent_pattern_density, resolve_shading_fill_color,
+    Alignment, BookmarkAnchor, Color, Hyperlink, HyperlinkTarget, Inline, Paragraph, Run, Shading,
+    ShadingPattern, ShadingRenderPolicy, percent_pattern_density, resolve_shading_fill_color,
 };
 
 use super::MappingWarning;
@@ -163,6 +163,14 @@ fn map_inlines(inlines: &[Inline], warnings: &mut Vec<MappingWarning>) -> String
                 }
                 result.push_str(&map_hyperlink(hyperlink, warnings));
             }
+            Inline::BookmarkAnchor(anchor) => {
+                // Flush any pending runs before the anchor
+                if !pending_runs.is_empty() {
+                    result.push_str(&map_runs(&pending_runs, warnings));
+                    pending_runs.clear();
+                }
+                result.push_str(&map_bookmark_anchor(anchor, warnings));
+            }
         }
     }
 
@@ -176,20 +184,57 @@ fn map_inlines(inlines: &[Inline], warnings: &mut Vec<MappingWarning>) -> String
 
 /// Map a hyperlink to Typst `#link()` syntax.
 ///
-/// Generates `#link("url")[content]` with proper formatting for runs.
+/// External links generate `#link("url")[content]`.
+/// Internal links generate `#link(label("name"))[content]` with a partial-support warning.
 fn map_hyperlink(hyperlink: &Hyperlink, warnings: &mut Vec<MappingWarning>) -> String {
-    // Map the runs inside the hyperlink
     let content = map_runs(&hyperlink.runs, warnings);
 
     if content.is_empty() {
         return String::new();
     }
 
-    // Escape the URL for Typst string literal
-    let escaped_url = escape_typst_string(&hyperlink.url);
+    match &hyperlink.target {
+        HyperlinkTarget::ExternalUrl(url) => {
+            let escaped_url = escape_typst_string(url);
+            format!("#link(\"{}\")[{}]", escaped_url, content)
+        }
+        HyperlinkTarget::InternalBookmark(name) => {
+            let label = sanitize_typst_label(name);
+            warnings.push(MappingWarning::PartialSupport {
+                feature: "internal_hyperlink".into(),
+                reason: "Typst label refs require manually placed labels; anchor placement may differ".into(),
+            });
+            format!("#link(label(\"{label}\"))[{content}]")
+        }
+    }
+}
 
-    // Generate #link("url")[content]
-    format!("#link(\"{}\")[{}]", escaped_url, content)
+/// Map a bookmark anchor to a Typst label.
+///
+/// Emits `#[#label("name")]` as a zero-width content block.
+/// A partial-support warning is emitted since Typst label semantics differ from DOCX bookmarks.
+fn map_bookmark_anchor(anchor: &BookmarkAnchor, warnings: &mut Vec<MappingWarning>) -> String {
+    let label = sanitize_typst_label(&anchor.name);
+    warnings.push(MappingWarning::PartialSupport {
+        feature: "bookmark_anchor".into(),
+        reason: "Typst labels are placed inline; exact cross-reference semantics may differ".into(),
+    });
+    format!("#[#label(\"{label}\")]")
+}
+
+/// Sanitize a bookmark name to a valid Typst label identifier.
+///
+/// Replaces whitespace and non-alphanumeric characters (except `-` and `_`) with `-`.
+fn sanitize_typst_label(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect()
 }
 
 /// Escape a string for use in a Typst string literal.
@@ -867,7 +912,7 @@ mod tests {
     #[test]
     fn test_map_hyperlink_inline() {
         let paragraph = Paragraph::from_inlines(vec![Inline::Hyperlink(Hyperlink {
-            url: "https://example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
             runs: vec![Run::new("Example")],
         })]);
 
@@ -886,7 +931,7 @@ mod tests {
         italic.italic = true;
 
         let paragraph = Paragraph::from_inlines(vec![Inline::Hyperlink(Hyperlink {
-            url: "https://example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
             runs: vec![bold, Run::new(" "), italic],
         })]);
 
@@ -900,7 +945,9 @@ mod tests {
     #[test]
     fn test_hyperlink_url_is_escaped_for_typst_string_literal() {
         let paragraph = Paragraph::from_inlines(vec![Inline::Hyperlink(Hyperlink {
-            url: "https://example.com?q=\\\"x\\\"".to_string(),
+            target: HyperlinkTarget::ExternalUrl(
+                "https://example.com?q=\\\"x\\\"".to_string(),
+            ),
             runs: vec![Run::new("Example")],
         })]);
 
@@ -1040,7 +1087,7 @@ mod tests {
         run.background_color = Some(Color::new(255, 255, 0));
 
         let paragraph = Paragraph::from_inlines(vec![Inline::Hyperlink(Hyperlink {
-            url: "https://example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
             runs: vec![run],
         })]);
 

@@ -768,6 +768,9 @@ fn print_report_text(report: &Report) {
                 Warning::TableGeometryConflict { reason, .. } => {
                     println!("  - Table geometry conflict: {}", reason);
                 }
+                Warning::UnsupportedField { reason, .. } => {
+                    println!("  - Unsupported field (result preserved): {}", reason);
+                }
             }
         }
     }

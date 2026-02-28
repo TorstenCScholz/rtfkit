@@ -605,7 +605,9 @@ mod exit_code_tests {
     }
 
     #[test]
-    fn strict_mode_fails_on_unsupported_field_fixture() {
+    fn strict_mode_passes_on_unsupported_field_with_preserved_result() {
+        // An unsupported field (PAGE) whose fldrslt text is preserved emits UnsupportedField
+        // (non-strict warning), so strict mode should succeed.
         let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let project_root = manifest_dir.parent().unwrap().parent().unwrap();
         let fixture = project_root.join("fixtures/hyperlink_unsupported_field.rtf");
@@ -618,10 +620,7 @@ mod exit_code_tests {
             "--format",
             "json",
         ]);
-        cmd.assert()
-            .failure()
-            .code(4)
-            .stderr(contains("Strict mode violated"));
+        cmd.assert().success().code(0);
     }
 
     #[test]

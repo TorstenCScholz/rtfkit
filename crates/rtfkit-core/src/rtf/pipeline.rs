@@ -95,6 +95,7 @@ fn handle_group_end(state: &mut RuntimeState) {
     state.current_depth = state.current_depth.saturating_sub(1);
     state.destinations.destination_marker = false;
 
+    super::handlers_fields::process_bookmark_group_end(state);
     super::handlers_fields::process_field_group_end(state);
 
     // Check if we're ending a pict group

@@ -6,7 +6,7 @@
 //! - Nested fields
 
 use crate::rtf::parse;
-use crate::{Block, Inline};
+use crate::{Block, HyperlinkTarget, Inline, Warning};
 
 // =============================================================================
 // Simple Hyperlink Tests
@@ -60,8 +60,8 @@ fn test_hyperlink_url_extraction() {
         .flat_map(|p| p.inlines.iter())
         .find(|i| matches!(i, Inline::Hyperlink(_)))
     {
-        // URL should be extracted
-        assert!(!hlink.url.is_empty());
+        // Target should be an external URL
+        assert!(matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if !url.is_empty()));
     }
 }
 
@@ -172,7 +172,7 @@ fn test_http_url_scheme() {
         .flat_map(|p| p.inlines.iter())
         .find(|i| matches!(i, Inline::Hyperlink(_)))
     {
-        assert!(hlink.url.starts_with("http://") || hlink.url.starts_with("https://"));
+        assert!(matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url.starts_with("http://") || url.starts_with("https://")));
     }
 }
 
@@ -199,7 +199,7 @@ fn test_https_url_scheme() {
         .flat_map(|p| p.inlines.iter())
         .find(|i| matches!(i, Inline::Hyperlink(_)))
     {
-        assert!(hlink.url.starts_with("https://"));
+        assert!(matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url.starts_with("https://")));
     }
 }
 
@@ -226,7 +226,7 @@ fn test_mailto_url_scheme() {
         .flat_map(|p| p.inlines.iter())
         .find(|i| matches!(i, Inline::Hyperlink(_)))
     {
-        assert!(hlink.url.starts_with("mailto:"));
+        assert!(matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url.starts_with("mailto:")));
     }
 }
 
@@ -362,7 +362,7 @@ fn test_hyperlink_with_quotes() {
         .find(|i| matches!(i, Inline::Hyperlink(_)))
     {
         // URL should include the path
-        assert!(hlink.url.contains("path"));
+        assert!(matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url.contains("path")));
     }
 }
 
@@ -420,7 +420,7 @@ fn test_hyperlink_with_special_characters() {
         .find(|i| matches!(i, Inline::Hyperlink(_)))
     {
         // URL should preserve special characters
-        assert!(hlink.url.contains("?") || hlink.url.contains("&"));
+        assert!(matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url.contains('?') || url.contains('&')));
     }
 }
 
@@ -459,6 +459,99 @@ fn test_time_field() {
     let result = parse(input);
 
     assert!(result.is_ok());
+}
+
+// =============================================================================
+// Internal Hyperlink (Bookmark Reference) Tests
+// =============================================================================
+
+#[test]
+fn test_internal_hyperlink_parses_to_internal_bookmark_target() {
+    let input = r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK \l "section1"}{\fldrslt Go to section}}}"#;
+    let result = parse(input);
+
+    assert!(result.is_ok());
+
+    let (doc, _report) = result.unwrap();
+
+    let hlink = doc
+        .blocks
+        .iter()
+        .filter_map(|b| if let Block::Paragraph(p) = b { Some(p) } else { None })
+        .flat_map(|p| p.inlines.iter())
+        .find_map(|i| if let Inline::Hyperlink(h) = i { Some(h) } else { None });
+
+    assert!(hlink.is_some(), "Expected a hyperlink in the document");
+    let hlink = hlink.unwrap();
+    assert!(
+        matches!(&hlink.target, HyperlinkTarget::InternalBookmark(name) if name == "section1"),
+        "Expected InternalBookmark(\"section1\"), got {:?}",
+        hlink.target
+    );
+}
+
+#[test]
+fn test_bookmark_anchor_emitted_inline() {
+    let input = r#"{\rtf1\ansi {\*\bkmkstart mybookmark}{\*\bkmkend mybookmark}}"#;
+    let result = parse(input);
+
+    assert!(result.is_ok());
+
+    let (doc, _report) = result.unwrap();
+
+    let has_anchor = doc
+        .blocks
+        .iter()
+        .filter_map(|b| if let Block::Paragraph(p) = b { Some(p) } else { None })
+        .flat_map(|p| p.inlines.iter())
+        .any(|i| matches!(i, Inline::BookmarkAnchor(a) if a.name == "mybookmark"));
+
+    assert!(has_anchor, "Expected BookmarkAnchor(\"mybookmark\") inline");
+}
+
+#[test]
+fn test_mixed_external_internal_links() {
+    let input = r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK "https://example.com"}{\fldrslt External}} {\field{\*\fldinst HYPERLINK \l "anchor1"}{\fldrslt Internal}}}"#;
+    let result = parse(input);
+
+    assert!(result.is_ok());
+
+    let (doc, _report) = result.unwrap();
+
+    let hyperlinks: Vec<_> = doc
+        .blocks
+        .iter()
+        .filter_map(|b| if let Block::Paragraph(p) = b { Some(p) } else { None })
+        .flat_map(|p| p.inlines.iter())
+        .filter_map(|i| if let Inline::Hyperlink(h) = i { Some(h) } else { None })
+        .collect();
+
+    assert_eq!(hyperlinks.len(), 2, "Expected 2 hyperlinks");
+
+    let has_external = hyperlinks
+        .iter()
+        .any(|h| matches!(&h.target, HyperlinkTarget::ExternalUrl(url) if url.starts_with("https://")));
+    let has_internal = hyperlinks
+        .iter()
+        .any(|h| matches!(&h.target, HyperlinkTarget::InternalBookmark(name) if name == "anchor1"));
+
+    assert!(has_external, "Expected an ExternalUrl hyperlink");
+    assert!(has_internal, "Expected an InternalBookmark hyperlink");
+}
+
+#[test]
+fn test_unsupported_field_does_not_strict_fail_when_result_preserved() {
+    // DATE field with fldrslt text: the result text is preserved, so strict mode should NOT trigger
+    let input = r#"{\rtf1\ansi {\field{\*\fldinst DATE}{\fldrslt 2024-01-01}}}"#;
+    let result = parse(input);
+
+    assert!(result.is_ok());
+
+    let (_doc, report) = result.unwrap();
+
+    // Should not have any DroppedContent warnings (which trigger strict mode)
+    let has_dropped_content = report.warnings.iter().any(|w| matches!(w, Warning::DroppedContent { .. }));
+    assert!(!has_dropped_content, "DATE field with result text should not emit DroppedContent");
 }
 
 // =============================================================================

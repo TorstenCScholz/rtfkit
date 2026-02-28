@@ -39,11 +39,18 @@ pub fn handle_text(state: &mut RuntimeState, text: String) {
 /// Internal text handling (after skip logic).
 ///
 /// This function handles:
+/// - Bookmark name capture
 /// - Table context management
 /// - Paragraph alignment capture
 /// - Style change detection
 /// - Text accumulation
 fn handle_text_internal(state: &mut RuntimeState, text: String) {
+    // If we're capturing a bookmark name, accumulate it instead of emitting a run.
+    if state.fields.parsing_bkmkstart {
+        state.fields.bkmkstart_name.push_str(&text);
+        return;
+    }
+
     // If we already completed table rows and prose starts, close table first.
     if state.current_paragraph.inlines.is_empty()
         && state.current_text.is_empty()

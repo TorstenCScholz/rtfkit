@@ -13,7 +13,10 @@
                   "inlines": [
                     {
                       "type": "hyperlink",
-                      "url": "https://example.com",
+                      "target": {
+                        "type": "external_url",
+                        "value": "https://example.com"
+                      },
                       "runs": [
                         {
                           "text": "Link centered",
@@ -36,7 +39,10 @@
                   "inlines": [
                     {
                       "type": "hyperlink",
-                      "url": "https://example.com",
+                      "target": {
+                        "type": "external_url",
+                        "value": "https://example.com"
+                      },
                       "runs": [
                         {
                           "text": "Link right",

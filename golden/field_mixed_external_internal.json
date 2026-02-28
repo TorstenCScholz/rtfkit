@@ -21,7 +21,7 @@
           },
           "runs": [
             {
-              "text": "Example Site",
+              "text": "Example",
               "bold": false,
               "italic": false,
               "underline": false,
@@ -32,7 +32,41 @@
         },
         {
           "type": "run",
-          "text": " or ",
+          "text": " online.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "bookmark_anchor",
+          "name": "intro"
+        },
+        {
+          "type": "run",
+          "text": "Introduction section.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Jump to ",
           "bold": false,
           "italic": false,
           "underline": false,
@@ -42,12 +76,12 @@
         {
           "type": "hyperlink",
           "target": {
-            "type": "external_url",
-            "value": "https://docs.example.com"
+            "type": "internal_bookmark",
+            "value": "intro"
           },
           "runs": [
             {
-              "text": "Documentation",
+              "text": "Introduction",
               "bold": false,
               "italic": false,
               "underline": false,
@@ -58,7 +92,7 @@
         },
         {
           "type": "run",
-          "text": " for more info.",
+          "text": " above.",
           "bold": false,
           "italic": false,
           "underline": false,

@@ -79,6 +79,7 @@ fn extract_runs(para: &rtfkit_core::Paragraph) -> Vec<&rtfkit_core::Run> {
             rtfkit_core::Inline::Hyperlink(hyperlink) => {
                 runs.extend(hyperlink.runs.iter());
             }
+            rtfkit_core::Inline::BookmarkAnchor(_) => {}
         }
     }
     runs

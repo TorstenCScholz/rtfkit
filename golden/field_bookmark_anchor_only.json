@@ -6,7 +6,7 @@
       "inlines": [
         {
           "type": "run",
-          "text": "Visit ",
+          "text": "Before anchor.",
           "bold": false,
           "italic": false,
           "underline": false,
@@ -14,25 +14,12 @@
           "font_size": 12.0
         },
         {
-          "type": "hyperlink",
-          "target": {
-            "type": "external_url",
-            "value": "https://example.com"
-          },
-          "runs": [
-            {
-              "text": "Example Site",
-              "bold": false,
-              "italic": false,
-              "underline": false,
-              "font_family": "Arial",
-              "font_size": 12.0
-            }
-          ]
+          "type": "bookmark_anchor",
+          "name": "mybookmark"
         },
         {
           "type": "run",
-          "text": " for more info.",
+          "text": " After anchor.",
           "bold": false,
           "italic": false,
           "underline": false,

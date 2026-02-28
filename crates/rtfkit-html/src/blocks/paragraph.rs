@@ -4,8 +4,8 @@
 //! semantic tags and run merging.
 
 use rtfkit_core::{
-    Color, Hyperlink, Inline, Paragraph, Run, Shading, ShadingRenderPolicy,
-    resolve_shading_fill_color,
+    BookmarkAnchor, Color, Hyperlink, HyperlinkTarget, Inline, Paragraph, Run, Shading,
+    ShadingRenderPolicy, resolve_shading_fill_color,
 };
 
 use crate::escape::{escape_attribute, sanitize_font_family};
@@ -184,7 +184,7 @@ pub fn paragraph_to_html(para: &Paragraph, buf: &mut HtmlBuffer) {
 
     buf.push_open_tag("p", &attrs);
 
-    // Emit inlines in order, handling hyperlinks specially
+    // Emit inlines in order, handling hyperlinks and bookmark anchors specially
     for inline in &para.inlines {
         match inline {
             Inline::Run(run) => {
@@ -193,39 +193,58 @@ pub fn paragraph_to_html(para: &Paragraph, buf: &mut HtmlBuffer) {
             Inline::Hyperlink(hyperlink) => {
                 hyperlink_to_html(hyperlink, buf);
             }
+            Inline::BookmarkAnchor(anchor) => {
+                bookmark_anchor_to_html(anchor, buf);
+            }
         }
     }
 
     buf.push_close_tag("p");
 }
 
+/// Converts a bookmark anchor to an empty HTML `<a id="...">` element.
+fn bookmark_anchor_to_html(anchor: &BookmarkAnchor, buf: &mut HtmlBuffer) {
+    let escaped_id = escape_attribute(&anchor.name);
+    buf.push_raw(&format!("<a id=\"{escaped_id}\"></a>"));
+}
+
 /// Converts a hyperlink to HTML.
 ///
 /// Emits an `<a href="...">` element with `rtf-link` class.
-/// URLs are sanitized to reject dangerous schemes (javascript:, data:, vbscript:).
+/// External URLs are sanitized to reject dangerous schemes (javascript:, data:, vbscript:).
+/// Internal bookmarks link to `#name` and are always safe.
 /// If the URL is unsafe, the hyperlink content is emitted as plain text.
 fn hyperlink_to_html(hyperlink: &Hyperlink, buf: &mut HtmlBuffer) {
-    let normalized_url = hyperlink.url.trim();
-
-    // Check if URL is safe
-    if !is_safe_url(normalized_url) {
-        // Unsafe URL: emit content as plain text (security fallback)
-        for run in &hyperlink.runs {
-            run_to_html(run, buf);
+    match &hyperlink.target {
+        HyperlinkTarget::ExternalUrl(url) => {
+            let normalized_url = url.trim();
+            if !is_safe_url(normalized_url) {
+                // Unsafe URL: emit content as plain text (security fallback)
+                for run in &hyperlink.runs {
+                    run_to_html(run, buf);
+                }
+                return;
+            }
+            let escaped_url = escape_attribute(normalized_url);
+            buf.push_raw(&format!("<a href=\"{}\" class=\"rtf-link\">", escaped_url));
+            for run in &hyperlink.runs {
+                run_to_html(run, buf);
+            }
+            buf.push_raw("</a>");
         }
-        return;
+        HyperlinkTarget::InternalBookmark(name) => {
+            // Internal anchors are always safe — no scheme injection possible
+            let escaped_name = escape_attribute(name);
+            buf.push_raw(&format!(
+                "<a href=\"#{}\" class=\"rtf-link\">",
+                escaped_name
+            ));
+            for run in &hyperlink.runs {
+                run_to_html(run, buf);
+            }
+            buf.push_raw("</a>");
+        }
     }
-
-    // Safe URL: emit proper hyperlink
-    let escaped_url = escape_attribute(normalized_url);
-    buf.push_raw(&format!("<a href=\"{}\" class=\"rtf-link\">", escaped_url));
-
-    // Emit runs inside the hyperlink
-    for run in &hyperlink.runs {
-        run_to_html(run, buf);
-    }
-
-    buf.push_raw("</a>");
 }
 
 /// Converts a run to HTML with semantic tags.
@@ -485,7 +504,7 @@ mod tests {
     #[test]
     fn simple_hyperlink() {
         let hyperlink = Hyperlink {
-            url: "https://example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
             runs: vec![Run::new("Example Site")],
         };
         let para = Paragraph {
@@ -508,7 +527,7 @@ mod tests {
         let mut italic_run = Run::new("Italic");
         italic_run.italic = true;
         let hyperlink = Hyperlink {
-            url: "https://example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
             runs: vec![bold_run, italic_run],
         };
         let para = Paragraph {
@@ -527,7 +546,7 @@ mod tests {
     #[test]
     fn hyperlink_mixed_with_text() {
         let hyperlink = Hyperlink {
-            url: "https://example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
             runs: vec![Run::new("link")],
         };
         let para = Paragraph {
@@ -550,7 +569,7 @@ mod tests {
     #[test]
     fn hyperlink_javascript_blocked() {
         let hyperlink = Hyperlink {
-            url: "javascript:alert('xss')".to_string(),
+            target: HyperlinkTarget::ExternalUrl("javascript:alert('xss')".to_string()),
             runs: vec![Run::new("Evil Link")],
         };
         let para = Paragraph {
@@ -567,7 +586,9 @@ mod tests {
     #[test]
     fn hyperlink_data_uri_blocked() {
         let hyperlink = Hyperlink {
-            url: "data:text/html,<script>alert('xss')</script>".to_string(),
+            target: HyperlinkTarget::ExternalUrl(
+                "data:text/html,<script>alert('xss')</script>".to_string(),
+            ),
             runs: vec![Run::new("Data Link")],
         };
         let para = Paragraph {
@@ -584,7 +605,7 @@ mod tests {
     #[test]
     fn hyperlink_mailto_allowed() {
         let hyperlink = Hyperlink {
-            url: "mailto:test@example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("mailto:test@example.com".to_string()),
             runs: vec![Run::new("Email Us")],
         };
         let para = Paragraph {
@@ -604,7 +625,9 @@ mod tests {
     #[test]
     fn hyperlink_url_escaping() {
         let hyperlink = Hyperlink {
-            url: "https://example.com/search?q=hello&lang=en".to_string(),
+            target: HyperlinkTarget::ExternalUrl(
+                "https://example.com/search?q=hello&lang=en".to_string(),
+            ),
             runs: vec![Run::new("Search")],
         };
         let para = Paragraph {
@@ -789,7 +812,7 @@ mod tests {
         run.font_family = Some("Arial".to_string());
         run.color = Some(Color::new(0, 0, 255));
         let hyperlink = Hyperlink {
-            url: "https://example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
             runs: vec![run],
         };
         let para = Paragraph {
@@ -811,7 +834,7 @@ mod tests {
         run.bold = true;
         run.font_family = Some("Verdana".to_string());
         let hyperlink = Hyperlink {
-            url: "https://example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
             runs: vec![run],
         };
         let para = Paragraph {
@@ -1119,7 +1142,7 @@ mod tests {
         let mut run = Run::new("highlighted link");
         run.background_color = Some(Color::new(255, 255, 0));
         let hyperlink = Hyperlink {
-            url: "https://example.com".to_string(),
+            target: HyperlinkTarget::ExternalUrl("https://example.com".to_string()),
             runs: vec![run],
         };
         let para = Paragraph {

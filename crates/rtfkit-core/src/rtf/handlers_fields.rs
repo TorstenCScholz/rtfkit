@@ -4,6 +4,7 @@
 //! and field group finalization.
 
 use super::state::RuntimeState;
+use crate::{BookmarkAnchor, HyperlinkTarget, Inline};
 
 /// Handle field-related control words.
 ///
@@ -30,6 +31,13 @@ pub fn handle_field_control_word(state: &mut RuntimeState, word: &str) -> bool {
             state.fields.start_fldrslt(state.current_depth);
             true
         }
+        // \l - Field switch for internal bookmark reference (HYPERLINK \l "name").
+        // When inside a fldinst group, the RTF parser consumes \l as a control word;
+        // we re-inject it as literal text so parse_hyperlink_target can see it.
+        "l" if state.fields.parsing_fldinst => {
+            state.fields.field_instruction_text.push_str("\\l");
+            true
+        }
         _ => false,
     }
 }
@@ -50,6 +58,26 @@ pub fn handle_field_text(state: &mut RuntimeState, text: String) {
         state.fields.field_instruction_text.push_str(&text);
     } else if state.fields.parsing_fldrslt {
         super::handlers_text::handle_field_result_text(state, text);
+    }
+}
+
+/// Process bookmark state on group end, emitting a BookmarkAnchor if we've exited the group.
+pub fn process_bookmark_group_end(state: &mut RuntimeState) {
+    if state.fields.parsing_bkmkstart
+        && state.current_depth < state.fields.bkmkstart_group_depth
+    {
+        let name = state.fields.bkmkstart_name.trim().to_string();
+        if !name.is_empty() {
+            // Capture alignment if this is the first content in the paragraph (no text yet).
+            state.capture_paragraph_alignment_if_start();
+            // Flush any pending text so preceding text runs appear before the anchor.
+            super::handlers_text::flush_current_text_as_run(state);
+            state
+                .current_paragraph
+                .inlines
+                .push(Inline::BookmarkAnchor(BookmarkAnchor { name }));
+        }
+        state.fields.reset_bkmkstart();
     }
 }
 
@@ -102,7 +130,7 @@ pub fn process_field_group_end(state: &mut RuntimeState) {
 }
 
 fn finalize_field(state: &mut RuntimeState) {
-    use crate::{Hyperlink, Inline};
+    use crate::Hyperlink;
 
     if state.fields.parsing_fldrslt && !state.current_text.is_empty() {
         super::handlers_text::flush_current_text_as_field_run(state);
@@ -112,14 +140,20 @@ fn finalize_field(state: &mut RuntimeState) {
     let has_instruction = !instruction.is_empty();
     let is_hyperlink_instruction = instruction.to_ascii_uppercase().starts_with("HYPERLINK");
     let had_result_content = !state.fields.field_result_inlines.is_empty();
-    let parsed_url = if is_hyperlink_instruction {
-        extract_hyperlink_url(instruction).map(|url| url.trim().to_string())
+
+    let parsed_target = if is_hyperlink_instruction {
+        parse_hyperlink_target(instruction)
     } else {
         None
     };
 
-    if let Some(url) = parsed_url {
-        if is_supported_hyperlink_url(&url) {
+    if let Some(target) = parsed_target {
+        let valid = match &target {
+            HyperlinkTarget::ExternalUrl(url) => is_supported_hyperlink_url(url),
+            HyperlinkTarget::InternalBookmark(_) => true,
+        };
+
+        if valid {
             let runs: Vec<crate::Run> = state
                 .fields
                 .field_result_inlines
@@ -132,7 +166,7 @@ fn finalize_field(state: &mut RuntimeState) {
 
             if !runs.is_empty() {
                 state.capture_paragraph_alignment_if_start();
-                let hyperlink = Hyperlink { url, runs };
+                let hyperlink = Hyperlink { target, runs };
                 state
                     .current_paragraph
                     .inlines
@@ -143,6 +177,7 @@ fn finalize_field(state: &mut RuntimeState) {
                     .dropped_content("Field with no result text", None);
             }
         } else {
+            // Unsupported external URL scheme — preserve result text
             if had_result_content {
                 state.capture_paragraph_alignment_if_start();
             }
@@ -154,6 +189,7 @@ fn finalize_field(state: &mut RuntimeState) {
                 .dropped_content("Unsupported hyperlink URL scheme", None);
         }
     } else {
+        // No recognized target — preserve result text
         if had_result_content {
             state.capture_paragraph_alignment_if_start();
         }
@@ -172,9 +208,17 @@ fn finalize_field(state: &mut RuntimeState) {
                     .dropped_content("Field with no result text", None);
             }
         } else if has_instruction {
-            state
-                .report_builder
-                .dropped_content("Dropped unsupported field type", None);
+            if had_result_content {
+                // Result text preserved — non-strict degradation
+                state
+                    .report_builder
+                    .unsupported_field("Unrecognized field type; result text preserved");
+            } else {
+                // No result text — content is truly lost
+                state
+                    .report_builder
+                    .dropped_content("Dropped unsupported field type with no result", None);
+            }
         } else if had_result_content {
             state
                 .report_builder
@@ -208,26 +252,44 @@ pub(crate) fn is_supported_hyperlink_url(url: &str) -> bool {
         || lowered.starts_with("mailto:")
 }
 
-pub(crate) fn extract_hyperlink_url(instruction: &str) -> Option<String> {
+/// Parse a HYPERLINK field instruction into a typed target.
+///
+/// Handles:
+/// - `HYPERLINK "https://example.com"` → `ExternalUrl`
+/// - `HYPERLINK \l "bookmark_name"` → `InternalBookmark`
+///
+/// Returns `None` if the instruction is not a HYPERLINK or cannot be parsed.
+pub(crate) fn parse_hyperlink_target(instruction: &str) -> Option<HyperlinkTarget> {
     let text = instruction.trim();
 
-    if !text.to_uppercase().starts_with("HYPERLINK") {
+    if !text.to_ascii_uppercase().starts_with("HYPERLINK") {
         return None;
     }
 
-    let rest = &text["HYPERLINK".len()..];
-    let rest = rest.trim_start();
+    let rest = text["HYPERLINK".len()..].trim_start();
 
-    if !rest.starts_with('"') {
+    // Check for \l switch (internal bookmark link)
+    if let Some(after_l) = rest.strip_prefix("\\l") {
+        let after_l = after_l.trim_start();
+        if let Some(name) = extract_quoted_string(after_l) {
+            return Some(HyperlinkTarget::InternalBookmark(name));
+        }
         return None;
     }
 
-    let rest = &rest[1..];
-    if let Some(end_quote_pos) = rest.find('"') {
-        return Some(rest[..end_quote_pos].to_string());
+    // Otherwise: quoted external URL
+    if let Some(url) = extract_quoted_string(rest) {
+        return Some(HyperlinkTarget::ExternalUrl(url));
     }
 
     None
+}
+
+fn extract_quoted_string(s: &str) -> Option<String> {
+    let s = s.trim_start();
+    let s = s.strip_prefix('"')?;
+    let end = s.find('"')?;
+    Some(s[..end].to_string())
 }
 
 #[cfg(test)]
@@ -235,17 +297,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_extract_hyperlink_url() {
+    fn test_parse_hyperlink_target_external_url() {
         assert_eq!(
-            extract_hyperlink_url(r#"HYPERLINK "https://example.com""#),
-            Some("https://example.com".to_string())
+            parse_hyperlink_target(r#"HYPERLINK "https://example.com""#),
+            Some(HyperlinkTarget::ExternalUrl("https://example.com".to_string()))
         );
         assert_eq!(
-            extract_hyperlink_url(r#"HYPERLINK "https://test.com/path""#),
-            Some("https://test.com/path".to_string())
+            parse_hyperlink_target(r#"HYPERLINK "https://test.com/path""#),
+            Some(HyperlinkTarget::ExternalUrl("https://test.com/path".to_string()))
         );
-        assert_eq!(extract_hyperlink_url("HYPERLINK"), None);
-        assert_eq!(extract_hyperlink_url("HYPERLINK noquote"), None);
+        assert_eq!(parse_hyperlink_target("HYPERLINK"), None);
+        assert_eq!(parse_hyperlink_target("HYPERLINK noquote"), None);
+        assert_eq!(parse_hyperlink_target("DATE"), None);
+    }
+
+    #[test]
+    fn test_parse_hyperlink_target_internal_bookmark() {
+        assert_eq!(
+            parse_hyperlink_target(r#"HYPERLINK \l "section1""#),
+            Some(HyperlinkTarget::InternalBookmark("section1".to_string()))
+        );
+        assert_eq!(
+            parse_hyperlink_target(r#"HYPERLINK \l "my bookmark""#),
+            Some(HyperlinkTarget::InternalBookmark("my bookmark".to_string()))
+        );
+        // \l with no quoted string → None
+        assert_eq!(parse_hyperlink_target(r#"HYPERLINK \l noquote"#), None);
     }
 
     #[test]

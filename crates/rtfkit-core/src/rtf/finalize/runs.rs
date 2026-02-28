@@ -54,6 +54,7 @@ pub fn inline_run_count(inlines: &[Inline]) -> usize {
         .map(|inline| match inline {
             Inline::Run(_) => 1,
             Inline::Hyperlink(link) => link.runs.len(),
+            Inline::BookmarkAnchor(_) => 0,
         })
         .sum()
 }

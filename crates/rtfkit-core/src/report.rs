@@ -280,6 +280,23 @@ pub enum Warning {
         /// Severity of this warning
         severity: WarningSeverity,
     },
+
+    /// An unrecognized field type was encountered, but the result text was preserved.
+    ///
+    /// This indicates a field instruction (e.g. `DATE`, `SEQ`, `TOC`) that is not
+    /// yet supported. When the field's `\fldrslt` text is present, it is emitted
+    /// as plain text so visible content is not lost.
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This is a **cosmetic degradation** warning and does NOT cause strict mode to
+    /// fail. The visible result text is preserved; only the field semantics are lost.
+    UnsupportedField {
+        /// Description of the issue
+        reason: String,
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
 }
 
 impl Warning {
@@ -380,6 +397,14 @@ impl Warning {
         }
     }
 
+    /// Creates a new `UnsupportedField` warning.
+    pub fn unsupported_field(reason: impl Into<String>) -> Self {
+        Warning::UnsupportedField {
+            reason: reason.into(),
+            severity: WarningSeverity::Warning,
+        }
+    }
+
     /// Returns the severity of this warning.
     pub fn severity(&self) -> WarningSeverity {
         match self {
@@ -395,6 +420,7 @@ impl Warning {
             Warning::UnclosedTableRow { severity } => *severity,
             Warning::MergeConflict { severity, .. } => *severity,
             Warning::TableGeometryConflict { severity, .. } => *severity,
+            Warning::UnsupportedField { severity, .. } => *severity,
         }
     }
 }
@@ -669,6 +695,15 @@ impl ReportBuilder {
     pub fn table_geometry_conflict(&mut self, reason: &str) {
         if self.can_add_warning() {
             self.warnings.push(Warning::table_geometry_conflict(reason));
+        }
+    }
+
+    /// Records an unsupported field warning (non-strict: result text was preserved).
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn unsupported_field(&mut self, reason: &str) {
+        if self.can_add_warning() {
+            self.warnings.push(Warning::unsupported_field(reason));
         }
     }
 

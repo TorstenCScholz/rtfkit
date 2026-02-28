@@ -1,0 +1,70 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Today is ",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0
+        },
+        {
+          "type": "run",
+          "text": "January 1, 2024",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0
+        },
+        {
+          "type": "run",
+          "text": ".",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "There are ",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0
+        },
+        {
+          "type": "run",
+          "text": "5",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0
+        },
+        {
+          "type": "run",
+          "text": " pages total.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "font_family": "Arial",
+          "font_size": 12.0
+        }
+      ]
+    }
+  ]
+}

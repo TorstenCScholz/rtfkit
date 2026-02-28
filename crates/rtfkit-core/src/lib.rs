@@ -692,8 +692,8 @@ impl Run {
 /// An inline element within a paragraph.
 ///
 /// `Inline` represents content that flows within a paragraph.
-/// It can be either a plain text run with formatting, or a hyperlink
-/// wrapping one or more formatted runs.
+/// It can be either a plain text run with formatting, a hyperlink
+/// wrapping one or more formatted runs, or a zero-width bookmark anchor.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Inline {
@@ -701,18 +701,40 @@ pub enum Inline {
     Run(Run),
     /// A hyperlink wrapping one or more formatted runs.
     Hyperlink(Hyperlink),
+    /// A zero-width bookmark anchor marking a named position in the document.
+    BookmarkAnchor(BookmarkAnchor),
 }
 
-/// A hyperlink with a target URL and visible content.
+/// The target of a hyperlink — either an external URL or an internal bookmark.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+pub enum HyperlinkTarget {
+    /// An external URL (http, https, mailto, …).
+    ExternalUrl(String),
+    /// A named bookmark anchor within the same document.
+    InternalBookmark(String),
+}
+
+/// A hyperlink with a typed target and visible content.
 ///
 /// The hyperlink wraps one or more `Run` elements that represent
 /// the visible, clickable text of the link.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Hyperlink {
-    /// Target URL
-    pub url: String,
+    /// The link target (external URL or internal bookmark name).
+    pub target: HyperlinkTarget,
     /// Visible content (formatted runs)
     pub runs: Vec<Run>,
+}
+
+/// A zero-width inline anchor marking a named bookmark position.
+///
+/// Emitted at the inline position corresponding to a `\bkmkstart` group.
+/// Used by writers to place named anchors (HTML `id`, DOCX bookmark, Typst label).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BookmarkAnchor {
+    /// The bookmark name as it appears in the RTF source.
+    pub name: String,
 }
 
 /// A paragraph containing one or more inline elements.

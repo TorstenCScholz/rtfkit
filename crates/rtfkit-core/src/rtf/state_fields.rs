@@ -61,6 +61,16 @@ pub struct FieldState {
     // =============================================================================
     /// Nested field state stack (fields inside fldrslt are degraded to plain text)
     pub nested_fields: Vec<NestedFieldState>,
+
+    // =============================================================================
+    // Bookmark Start Tracking
+    // =============================================================================
+    /// Whether we're currently capturing the name of a \bkmkstart group
+    pub parsing_bkmkstart: bool,
+    /// Depth of the \bkmkstart group (to detect when we've exited it)
+    pub bkmkstart_group_depth: usize,
+    /// Accumulated bookmark name text from within the \bkmkstart group
+    pub bkmkstart_name: String,
 }
 
 impl FieldState {
@@ -108,6 +118,20 @@ impl FieldState {
             self.parsing_fldrslt = true;
             self.fldrslt_group_depth = current_depth;
         }
+    }
+
+    /// Start capturing a bookmark name from a \bkmkstart group.
+    pub fn start_bkmkstart(&mut self, current_depth: usize) {
+        self.parsing_bkmkstart = true;
+        self.bkmkstart_group_depth = current_depth;
+        self.bkmkstart_name.clear();
+    }
+
+    /// Reset bookmark start state after emitting the anchor.
+    pub fn reset_bkmkstart(&mut self) {
+        self.parsing_bkmkstart = false;
+        self.bkmkstart_group_depth = 0;
+        self.bkmkstart_name.clear();
     }
 
     /// Pop nested field state.
