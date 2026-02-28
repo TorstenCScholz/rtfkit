@@ -996,6 +996,285 @@ impl TableCell {
     }
 }
 
+/// Cell border side selector for table border resolution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TableBorderSide {
+    /// Top side of a cell.
+    Top,
+    /// Left side of a cell.
+    Left,
+    /// Bottom side of a cell.
+    Bottom,
+    /// Right side of a cell.
+    Right,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BorderCandidateSource {
+    Explicit,
+    Fallback,
+}
+
+impl BorderCandidateSource {
+    fn rank(self) -> u8 {
+        match self {
+            Self::Explicit => 1,
+            Self::Fallback => 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct BorderCandidate<'a> {
+    border: &'a Border,
+    source: BorderCandidateSource,
+}
+
+enum SharedEdgeWinner<'a> {
+    First(&'a Border),
+    Second(&'a Border),
+}
+
+fn side_border_ref(borders: &BorderSet, side: TableBorderSide) -> Option<&Border> {
+    match side {
+        TableBorderSide::Top => borders.top.as_ref(),
+        TableBorderSide::Left => borders.left.as_ref(),
+        TableBorderSide::Bottom => borders.bottom.as_ref(),
+        TableBorderSide::Right => borders.right.as_ref(),
+    }
+}
+
+fn cell_side_explicit_border(
+    table: &TableBlock,
+    row_idx: usize,
+    col_idx: usize,
+    side: TableBorderSide,
+) -> Option<&Border> {
+    table
+        .rows
+        .get(row_idx)
+        .and_then(|row| row.cells.get(col_idx))
+        .and_then(|cell| cell.borders.as_ref())
+        .and_then(|borders| side_border_ref(borders, side))
+}
+
+fn row_borders_ref(table: &TableBlock, row_idx: usize) -> Option<&BorderSet> {
+    table
+        .rows
+        .get(row_idx)
+        .and_then(|row| row.row_props.as_ref())
+        .and_then(|props| props.borders.as_ref())
+}
+
+fn row_outer_border_ref(
+    table: &TableBlock,
+    row_idx: usize,
+    side: TableBorderSide,
+) -> Option<&Border> {
+    row_borders_ref(table, row_idx).and_then(|borders| side_border_ref(borders, side))
+}
+
+fn row_inside_v_border_ref(table: &TableBlock, row_idx: usize) -> Option<&Border> {
+    row_borders_ref(table, row_idx).and_then(|borders| borders.inside_v.as_ref())
+}
+
+fn row_inside_h_border_ref(table: &TableBlock, row_idx: usize) -> Option<&Border> {
+    row_borders_ref(table, row_idx).and_then(|borders| borders.inside_h.as_ref())
+}
+
+fn vertical_shared_candidate(
+    table: &TableBlock,
+    row_idx: usize,
+    col_idx: usize,
+    side: TableBorderSide,
+) -> Option<BorderCandidate<'_>> {
+    let explicit = cell_side_explicit_border(table, row_idx, col_idx, side);
+    if let Some(border) = explicit {
+        return Some(BorderCandidate {
+            border,
+            source: BorderCandidateSource::Explicit,
+        });
+    }
+    row_inside_v_border_ref(table, row_idx).map(|border| BorderCandidate {
+        border,
+        source: BorderCandidateSource::Fallback,
+    })
+}
+
+fn horizontal_shared_candidate(
+    table: &TableBlock,
+    row_idx: usize,
+    col_idx: usize,
+    side: TableBorderSide,
+) -> Option<BorderCandidate<'_>> {
+    let explicit = cell_side_explicit_border(table, row_idx, col_idx, side);
+    if let Some(border) = explicit {
+        return Some(BorderCandidate {
+            border,
+            source: BorderCandidateSource::Explicit,
+        });
+    }
+    row_inside_h_border_ref(table, row_idx).map(|border| BorderCandidate {
+        border,
+        source: BorderCandidateSource::Fallback,
+    })
+}
+
+fn pick_shared_edge_winner<'a>(
+    first: Option<BorderCandidate<'a>>,
+    second: Option<BorderCandidate<'a>>,
+) -> Option<SharedEdgeWinner<'a>> {
+    match (first, second) {
+        (Some(first), Some(second)) => {
+            if first.source.rank() >= second.source.rank() {
+                Some(SharedEdgeWinner::First(first.border))
+            } else {
+                Some(SharedEdgeWinner::Second(second.border))
+            }
+        }
+        (Some(first), None) => Some(SharedEdgeWinner::First(first.border)),
+        (None, Some(second)) => Some(SharedEdgeWinner::Second(second.border)),
+        (None, None) => None,
+    }
+}
+
+/// Resolves one effective cell border side with deterministic precedence:
+///
+/// 1. explicit cell side border
+/// 2. row outer side fallback (outer edges only)
+/// 3. row inside fallback (shared edges)
+/// 4. none
+///
+/// Shared-edge ties are resolved deterministically in favor of the left/top cell.
+pub fn resolve_effective_cell_border(
+    table: &TableBlock,
+    row_idx: usize,
+    col_idx: usize,
+    side: TableBorderSide,
+) -> Option<Border> {
+    let Some(row) = table.rows.get(row_idx) else {
+        return None;
+    };
+    if row.cells.get(col_idx).is_none() {
+        return None;
+    }
+
+    match side {
+        TableBorderSide::Top => {
+            let has_top_neighbor = row_idx > 0
+                && table
+                    .rows
+                    .get(row_idx - 1)
+                    .and_then(|top_row| top_row.cells.get(col_idx))
+                    .is_some();
+            if !has_top_neighbor {
+                return cell_side_explicit_border(table, row_idx, col_idx, TableBorderSide::Top)
+                    .cloned()
+                    .or_else(|| {
+                        row_outer_border_ref(table, row_idx, TableBorderSide::Top).cloned()
+                    });
+            }
+
+            let top_candidate =
+                horizontal_shared_candidate(table, row_idx - 1, col_idx, TableBorderSide::Bottom);
+            let current_candidate =
+                horizontal_shared_candidate(table, row_idx, col_idx, TableBorderSide::Top);
+            match pick_shared_edge_winner(top_candidate, current_candidate) {
+                Some(SharedEdgeWinner::Second(border)) => Some(border.clone()),
+                _ => None,
+            }
+        }
+        TableBorderSide::Left => {
+            let has_left_neighbor = col_idx > 0 && row.cells.get(col_idx - 1).is_some();
+            if !has_left_neighbor {
+                return cell_side_explicit_border(table, row_idx, col_idx, TableBorderSide::Left)
+                    .cloned()
+                    .or_else(|| {
+                        row_outer_border_ref(table, row_idx, TableBorderSide::Left).cloned()
+                    });
+            }
+
+            let left_candidate =
+                vertical_shared_candidate(table, row_idx, col_idx - 1, TableBorderSide::Right);
+            let current_candidate =
+                vertical_shared_candidate(table, row_idx, col_idx, TableBorderSide::Left);
+            match pick_shared_edge_winner(left_candidate, current_candidate) {
+                Some(SharedEdgeWinner::Second(border)) => Some(border.clone()),
+                _ => None,
+            }
+        }
+        TableBorderSide::Bottom => {
+            let has_bottom_neighbor = table
+                .rows
+                .get(row_idx + 1)
+                .and_then(|bottom_row| bottom_row.cells.get(col_idx))
+                .is_some();
+            if !has_bottom_neighbor {
+                return cell_side_explicit_border(table, row_idx, col_idx, TableBorderSide::Bottom)
+                    .cloned()
+                    .or_else(|| {
+                        row_outer_border_ref(table, row_idx, TableBorderSide::Bottom).cloned()
+                    });
+            }
+
+            let current_candidate =
+                horizontal_shared_candidate(table, row_idx, col_idx, TableBorderSide::Bottom);
+            let bottom_candidate =
+                horizontal_shared_candidate(table, row_idx + 1, col_idx, TableBorderSide::Top);
+            match pick_shared_edge_winner(current_candidate, bottom_candidate) {
+                Some(SharedEdgeWinner::First(border)) => Some(border.clone()),
+                _ => None,
+            }
+        }
+        TableBorderSide::Right => {
+            let has_right_neighbor = row.cells.get(col_idx + 1).is_some();
+            if !has_right_neighbor {
+                return cell_side_explicit_border(table, row_idx, col_idx, TableBorderSide::Right)
+                    .cloned()
+                    .or_else(|| {
+                        row_outer_border_ref(table, row_idx, TableBorderSide::Right).cloned()
+                    });
+            }
+
+            let current_candidate =
+                vertical_shared_candidate(table, row_idx, col_idx, TableBorderSide::Right);
+            let right_candidate =
+                vertical_shared_candidate(table, row_idx, col_idx + 1, TableBorderSide::Left);
+            match pick_shared_edge_winner(current_candidate, right_candidate) {
+                Some(SharedEdgeWinner::First(border)) => Some(border.clone()),
+                _ => None,
+            }
+        }
+    }
+}
+
+/// Resolves effective borders for one cell.
+///
+/// Returns `None` when no side resolves to a border.
+pub fn resolve_effective_cell_borders(
+    table: &TableBlock,
+    row_idx: usize,
+    col_idx: usize,
+) -> Option<BorderSet> {
+    let top = resolve_effective_cell_border(table, row_idx, col_idx, TableBorderSide::Top);
+    let left = resolve_effective_cell_border(table, row_idx, col_idx, TableBorderSide::Left);
+    let bottom = resolve_effective_cell_border(table, row_idx, col_idx, TableBorderSide::Bottom);
+    let right = resolve_effective_cell_border(table, row_idx, col_idx, TableBorderSide::Right);
+
+    if top.is_none() && left.is_none() && bottom.is_none() && right.is_none() {
+        return None;
+    }
+
+    Some(BorderSet {
+        top,
+        left,
+        bottom,
+        right,
+        inside_h: None,
+        inside_v: None,
+    })
+}
+
 // =============================================================================
 // Image Types for Phase 6 (Images)
 // =============================================================================
@@ -1182,6 +1461,127 @@ mod tests {
         let stats = analyze("the the the cat");
         assert_eq!(stats.most_common_word, Some("the".to_string()));
         assert_eq!(stats.unique_words, 2);
+    }
+
+    fn make_border(style: BorderStyle, width_half_pts: u32) -> Border {
+        Border {
+            style,
+            width_half_pts: Some(width_half_pts),
+            color: None,
+        }
+    }
+
+    #[test]
+    fn table_border_resolver_outer_row_fallback() {
+        let row = TableRow {
+            cells: vec![TableCell::new(), TableCell::new()],
+            row_props: Some(RowProps {
+                borders: Some(BorderSet {
+                    top: Some(make_border(BorderStyle::Single, 4)),
+                    bottom: Some(make_border(BorderStyle::Single, 4)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+        let table = TableBlock::from_rows(vec![row]);
+
+        let first = resolve_effective_cell_borders(&table, 0, 0).unwrap();
+        let second = resolve_effective_cell_borders(&table, 0, 1).unwrap();
+        assert_eq!(first.top.as_ref().unwrap().style, BorderStyle::Single);
+        assert_eq!(first.bottom.as_ref().unwrap().style, BorderStyle::Single);
+        assert_eq!(second.top.as_ref().unwrap().style, BorderStyle::Single);
+        assert_eq!(second.bottom.as_ref().unwrap().style, BorderStyle::Single);
+    }
+
+    #[test]
+    fn table_border_resolver_inside_vertical_prefers_left_cell() {
+        let row = TableRow {
+            cells: vec![TableCell::new(), TableCell::new()],
+            row_props: Some(RowProps {
+                borders: Some(BorderSet {
+                    inside_v: Some(make_border(BorderStyle::Single, 4)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+        let table = TableBlock::from_rows(vec![row]);
+
+        let left = resolve_effective_cell_borders(&table, 0, 0).unwrap();
+        assert!(left.right.is_some(), "left cell owns shared vertical edge");
+        assert!(
+            resolve_effective_cell_border(&table, 0, 1, TableBorderSide::Left).is_none(),
+            "right cell yields shared edge to left cell"
+        );
+    }
+
+    #[test]
+    fn table_border_resolver_explicit_beats_fallback_on_shared_edge() {
+        let mut right_cell = TableCell::new();
+        right_cell.borders = Some(BorderSet {
+            left: Some(make_border(BorderStyle::Double, 8)),
+            ..Default::default()
+        });
+
+        let row = TableRow {
+            cells: vec![TableCell::new(), right_cell],
+            row_props: Some(RowProps {
+                borders: Some(BorderSet {
+                    inside_v: Some(make_border(BorderStyle::Single, 4)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+        let table = TableBlock::from_rows(vec![row]);
+
+        assert!(
+            resolve_effective_cell_border(&table, 0, 0, TableBorderSide::Right).is_none(),
+            "left cell fallback loses to right explicit border"
+        );
+        assert_eq!(
+            resolve_effective_cell_border(&table, 0, 1, TableBorderSide::Left)
+                .as_ref()
+                .unwrap()
+                .style,
+            BorderStyle::Double
+        );
+    }
+
+    #[test]
+    fn table_border_resolver_inside_horizontal_prefers_top_row() {
+        let top = TableRow {
+            cells: vec![TableCell::new()],
+            row_props: Some(RowProps {
+                borders: Some(BorderSet {
+                    inside_h: Some(make_border(BorderStyle::Single, 4)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+        let bottom = TableRow {
+            cells: vec![TableCell::new()],
+            row_props: Some(RowProps {
+                borders: Some(BorderSet {
+                    inside_h: Some(make_border(BorderStyle::Single, 4)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+        let table = TableBlock::from_rows(vec![top, bottom]);
+
+        let top_effective = resolve_effective_cell_borders(&table, 0, 0).unwrap();
+        assert!(
+            top_effective.bottom.is_some(),
+            "top row owns shared horizontal edge"
+        );
+        assert!(
+            resolve_effective_cell_border(&table, 1, 0, TableBorderSide::Top).is_none(),
+            "bottom row yields shared edge to top row"
+        );
     }
 
     // ==========================================================================

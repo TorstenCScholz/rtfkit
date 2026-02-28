@@ -17,7 +17,10 @@
 
 use super::paragraph::{build_paragraph_style, paragraph_to_html};
 use crate::serialize::HtmlBuffer;
-use rtfkit_core::{Block, Border, BorderStyle, CellMerge, CellVerticalAlign, TableBlock, TableCell, TableRow};
+use rtfkit_core::{
+    Block, Border, BorderStyle, CellMerge, CellVerticalAlign, TableBlock, TableCell, TableRow,
+    resolve_effective_cell_borders,
+};
 use std::collections::HashSet;
 
 /// Converts twips to points.
@@ -129,6 +132,7 @@ pub fn table_to_html_with_warnings(
     if can_split_header_body {
         buf.push_raw("<thead>");
         row_to_html(
+            table,
             &table.rows[0],
             0,
             &rowspan_map,
@@ -141,6 +145,7 @@ pub fn table_to_html_with_warnings(
         buf.push_raw("<tbody>");
         for (row_idx, row) in table.rows.iter().enumerate().skip(1) {
             row_to_html(
+                table,
                 row,
                 row_idx,
                 &rowspan_map,
@@ -153,6 +158,7 @@ pub fn table_to_html_with_warnings(
     } else {
         for (row_idx, row) in table.rows.iter().enumerate() {
             row_to_html(
+                table,
                 row,
                 row_idx,
                 &rowspan_map,
@@ -171,6 +177,7 @@ pub fn table_to_html_with_warnings(
 /// Handles horizontal merge normalization by skipping continuation cells
 /// that are covered by a start cell's colspan, and vertical merge skipping.
 fn row_to_html(
+    table: &TableBlock,
     row: &TableRow,
     row_idx: usize,
     rowspan_map: &[Vec<usize>],
@@ -196,7 +203,7 @@ fn row_to_html(
                     .and_then(|r| r.get(col_idx))
                     .copied()
                     .unwrap_or(0);
-                cell_to_html(cell, rowspan, buf, dropped_reasons);
+                cell_to_html(table, row_idx, col_idx, cell, rowspan, buf, dropped_reasons);
                 expected_h_continuations = span.saturating_sub(1) as usize;
             }
             Some(CellMerge::HorizontalStart { .. }) => {
@@ -204,7 +211,15 @@ fn row_to_html(
                 expected_h_continuations = 0;
                 let mut standalone = cell.clone();
                 standalone.merge = None;
-                cell_to_html(&standalone, 0, buf, dropped_reasons);
+                cell_to_html(
+                    table,
+                    row_idx,
+                    col_idx,
+                    &standalone,
+                    0,
+                    buf,
+                    dropped_reasons,
+                );
             }
             Some(CellMerge::HorizontalContinue) if expected_h_continuations > 0 => {
                 // Valid continuation - skip this cell (covered by colspan)
@@ -214,7 +229,15 @@ fn row_to_html(
                 // Orphan continuation - preserve content rather than silently dropping
                 let mut standalone = cell.clone();
                 standalone.merge = None;
-                cell_to_html(&standalone, 0, buf, dropped_reasons);
+                cell_to_html(
+                    table,
+                    row_idx,
+                    col_idx,
+                    &standalone,
+                    0,
+                    buf,
+                    dropped_reasons,
+                );
             }
             Some(CellMerge::VerticalStart) | Some(CellMerge::VerticalContinue) => {
                 // Vertical merge - emit with computed rowspan (already handled skip_cells above)
@@ -223,12 +246,12 @@ fn row_to_html(
                     .and_then(|r| r.get(col_idx))
                     .copied()
                     .unwrap_or(0);
-                cell_to_html(cell, rowspan, buf, dropped_reasons);
+                cell_to_html(table, row_idx, col_idx, cell, rowspan, buf, dropped_reasons);
             }
             _ => {
                 // No merge - emit normally
                 expected_h_continuations = 0;
-                cell_to_html(cell, 0, buf, dropped_reasons);
+                cell_to_html(table, row_idx, col_idx, cell, 0, buf, dropped_reasons);
             }
         }
     }
@@ -270,6 +293,9 @@ fn border_side_to_css(side: &str, border: &Border) -> String {
 /// - `style="background-color: #rrggbb"` for cell shading
 /// - `style="border-{side}: ..."` for cell borders
 fn cell_to_html(
+    table: &TableBlock,
+    row_idx: usize,
+    col_idx: usize,
     cell: &TableCell,
     rowspan: usize,
     buf: &mut HtmlBuffer,
@@ -318,7 +344,7 @@ fn cell_to_html(
     }
 
     // Handle cell borders
-    if let Some(ref borders) = cell.borders {
+    if let Some(ref borders) = resolve_effective_cell_borders(table, row_idx, col_idx) {
         let sides: [(&str, Option<&Border>); 4] = [
             ("top", borders.top.as_ref()),
             ("left", borders.left.as_ref()),
@@ -1088,8 +1114,14 @@ mod tests {
         let width_pos = html.find("width:").unwrap();
         let bg_pos = html.find("background-color:").unwrap();
         let border_pos = html.find("border-bottom:").unwrap();
-        assert!(width_pos < bg_pos, "width should come before background-color");
-        assert!(bg_pos < border_pos, "background-color should come before border");
+        assert!(
+            width_pos < bg_pos,
+            "width should come before background-color"
+        );
+        assert!(
+            bg_pos < border_pos,
+            "background-color should come before border"
+        );
     }
 
     #[test]
@@ -1107,5 +1139,71 @@ mod tests {
         assert!(!html.contains("border-left:"));
         assert!(!html.contains("border-bottom:"));
         assert!(!html.contains("border-right:"));
+    }
+
+    #[test]
+    fn row_outer_borders_fallback_to_cells() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle, RowProps};
+
+        let row = TableRow {
+            cells: vec![
+                TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("A")])),
+                TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("B")])),
+            ],
+            row_props: Some(RowProps {
+                borders: Some(BorderSet {
+                    top: Some(Border {
+                        style: BorderStyle::Single,
+                        width_half_pts: Some(4),
+                        color: None,
+                    }),
+                    bottom: Some(Border {
+                        style: BorderStyle::Single,
+                        width_half_pts: Some(4),
+                        color: None,
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+        let table = TableBlock::from_rows(vec![row]);
+
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+        assert!(html.contains("border-top: 2.0pt solid currentColor"));
+        assert!(html.contains("border-bottom: 2.0pt solid currentColor"));
+    }
+
+    #[test]
+    fn inside_vertical_fallback_prefers_left_cell_edge() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle, RowProps};
+
+        let row = TableRow {
+            cells: vec![
+                TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("A")])),
+                TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("B")])),
+            ],
+            row_props: Some(RowProps {
+                borders: Some(BorderSet {
+                    inside_v: Some(Border {
+                        style: BorderStyle::Single,
+                        width_half_pts: Some(4),
+                        color: None,
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+        let table = TableBlock::from_rows(vec![row]);
+
+        let mut buf = HtmlBuffer::new();
+        table_to_html(&table, &mut buf);
+        let html = buf.as_str();
+
+        assert!(html.contains("border-right: 2.0pt solid currentColor"));
+        assert!(!html.contains("border-left: 2.0pt solid currentColor"));
     }
 }

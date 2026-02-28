@@ -565,15 +565,36 @@ fn test_cell_border_style_variants() {
     if let Some(Block::TableBlock(table)) = doc.blocks.first() {
         let row = &table.rows[0];
         assert_eq!(
-            row.cells[0].borders.as_ref().unwrap().top.as_ref().unwrap().style,
+            row.cells[0]
+                .borders
+                .as_ref()
+                .unwrap()
+                .top
+                .as_ref()
+                .unwrap()
+                .style,
             BorderStyle::Dotted
         );
         assert_eq!(
-            row.cells[1].borders.as_ref().unwrap().top.as_ref().unwrap().style,
+            row.cells[1]
+                .borders
+                .as_ref()
+                .unwrap()
+                .top
+                .as_ref()
+                .unwrap()
+                .style,
             BorderStyle::Double
         );
         assert_eq!(
-            row.cells[2].borders.as_ref().unwrap().top.as_ref().unwrap().style,
+            row.cells[2]
+                .borders
+                .as_ref()
+                .unwrap()
+                .top
+                .as_ref()
+                .unwrap()
+                .style,
             BorderStyle::Dashed
         );
     } else {
@@ -599,13 +620,18 @@ fn test_cell_border_none_style() {
 
 #[test]
 fn test_cell_border_color_resolved() {
-    let input =
-        r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\trowd\clbrdrt\brdrs\brdrcf1\cellx1440\intbl T\cell\row}"#;
+    let input = r#"{\rtf1\ansi{\colortbl;\red255\green0\blue0;}\trowd\clbrdrt\brdrs\brdrcf1\cellx1440\intbl T\cell\row}"#;
     let (doc, _report) = parse(input).unwrap();
     if let Some(Block::TableBlock(table)) = doc.blocks.first() {
         let cell = &table.rows[0].cells[0];
         let borders = cell.borders.as_ref().expect("cell should have borders");
-        let color = borders.top.as_ref().unwrap().color.as_ref().expect("color should resolve");
+        let color = borders
+            .top
+            .as_ref()
+            .unwrap()
+            .color
+            .as_ref()
+            .expect("color should resolve");
         assert_eq!(color.r, 255);
         assert_eq!(color.g, 0);
         assert_eq!(color.b, 0);
@@ -626,11 +652,17 @@ fn test_multi_cell_each_gets_own_borders() {
     if let Some(Block::TableBlock(table)) = doc.blocks.first() {
         let row = &table.rows[0];
         // First cell: top border only
-        let c0_borders = row.cells[0].borders.as_ref().expect("cell 0 should have borders");
+        let c0_borders = row.cells[0]
+            .borders
+            .as_ref()
+            .expect("cell 0 should have borders");
         assert!(c0_borders.top.is_some());
         assert!(c0_borders.left.is_none());
         // Second cell: left border only
-        let c1_borders = row.cells[1].borders.as_ref().expect("cell 1 should have borders");
+        let c1_borders = row.cells[1]
+            .borders
+            .as_ref()
+            .expect("cell 1 should have borders");
         assert!(c1_borders.left.is_some());
         assert_eq!(c1_borders.left.as_ref().unwrap().width_half_pts, Some(8));
         assert!(c1_borders.top.is_none());

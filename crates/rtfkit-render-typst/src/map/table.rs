@@ -33,7 +33,8 @@
 use rtfkit_core::{
     Border as IrBorder, BorderSet as IrBorderSet, BorderStyle as IrBorderStyle, CellMerge, Color,
     ShadingPattern, ShadingRenderPolicy, TableBlock as IrTableBlock, TableCell as IrTableCell,
-    TableRow as IrTableRow, percent_pattern_density, resolve_shading_fill_color,
+    TableRow as IrTableRow, percent_pattern_density, resolve_effective_cell_borders,
+    resolve_shading_fill_color,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -103,13 +104,7 @@ pub(crate) fn map_table_with_assets(
     let (rowspan_map, skip_cells) = compute_vertical_merges(table);
 
     // Map rows to cell info
-    let rows = map_rows(
-        &table.rows,
-        &rowspan_map,
-        &skip_cells,
-        assets,
-        &mut warnings,
-    );
+    let rows = map_rows(table, &rowspan_map, &skip_cells, assets, &mut warnings);
 
     if rows.is_empty() || rows.iter().all(|r| r.is_empty()) {
         return TableOutput {
@@ -188,20 +183,33 @@ fn compute_vertical_merges(table: &IrTableBlock) -> (RowspanMap, SkipCells) {
 
 /// Map IR rows to cell info structures.
 fn map_rows(
-    rows: &[IrTableRow],
+    table: &IrTableBlock,
     rowspan_map: &RowspanMap,
     skip_cells: &SkipCells,
     assets: &mut TypstAssetAllocator,
     warnings: &mut Vec<MappingWarning>,
 ) -> Vec<Vec<CellInfo>> {
-    rows.iter()
+    table
+        .rows
+        .iter()
         .enumerate()
-        .map(|(row_idx, row)| map_row(row, row_idx, rowspan_map, skip_cells, assets, warnings))
+        .map(|(row_idx, row)| {
+            map_row(
+                table,
+                row,
+                row_idx,
+                rowspan_map,
+                skip_cells,
+                assets,
+                warnings,
+            )
+        })
         .collect()
 }
 
 /// Map a single IR row to cell info structures.
 fn map_row(
+    table: &IrTableBlock,
     row: &IrTableRow,
     row_idx: usize,
     rowspan_map: &RowspanMap,
@@ -226,15 +234,16 @@ fn map_row(
                     .copied()
                     .unwrap_or(1)
                     .max(1);
-
-                let cell_info = map_cell(cell, *span as u32, rowspan, assets, warnings);
+                let borders = resolve_effective_cell_borders(table, row_idx, col_idx);
+                let cell_info = map_cell(cell, *span as u32, rowspan, borders, assets, warnings);
                 cells.push(cell_info);
                 expected_h_continuations = (*span as usize).saturating_sub(1);
             }
             Some(CellMerge::HorizontalStart { .. }) => {
                 // span=0/1 is not a real merge
                 expected_h_continuations = 0;
-                cells.push(map_cell(cell, 1, 1, assets, warnings));
+                let borders = resolve_effective_cell_borders(table, row_idx, col_idx);
+                cells.push(map_cell(cell, 1, 1, borders, assets, warnings));
             }
             Some(CellMerge::HorizontalContinue) if expected_h_continuations > 0 => {
                 // Valid continuation - skip this cell
@@ -243,17 +252,20 @@ fn map_row(
             Some(CellMerge::HorizontalContinue) => {
                 // Orphan continuation - preserve content
                 warnings.push(MappingWarning::OrphanHorizontalContinue);
-                cells.push(map_cell(cell, 1, 1, assets, warnings));
+                let borders = resolve_effective_cell_borders(table, row_idx, col_idx);
+                cells.push(map_cell(cell, 1, 1, borders, assets, warnings));
             }
             Some(CellMerge::VerticalStart) | Some(CellMerge::VerticalContinue) => {
                 // Vertical merge - emit with computed rowspan
                 let rowspan = rowspan_map.get(&(row_idx, col_idx)).copied().unwrap_or(1);
-                cells.push(map_cell(cell, 1, rowspan, assets, warnings));
+                let borders = resolve_effective_cell_borders(table, row_idx, col_idx);
+                cells.push(map_cell(cell, 1, rowspan, borders, assets, warnings));
             }
             _ => {
                 // No merge
                 expected_h_continuations = 0;
-                cells.push(map_cell(cell, 1, 1, assets, warnings));
+                let borders = resolve_effective_cell_borders(table, row_idx, col_idx);
+                cells.push(map_cell(cell, 1, 1, borders, assets, warnings));
             }
         }
     }
@@ -285,6 +297,7 @@ fn map_cell(
     cell: &IrTableCell,
     colspan: u32,
     rowspan: u32,
+    effective_borders: Option<IrBorderSet>,
     assets: &mut TypstAssetAllocator,
     warnings: &mut Vec<MappingWarning>,
 ) -> CellInfo {
@@ -334,7 +347,7 @@ fn map_cell(
         rowspan,
         width_twips: cell.width_twips,
         fill_color,
-        borders: cell.borders.clone(),
+        borders: effective_borders,
     }
 }
 
@@ -1003,9 +1016,15 @@ mod tests {
         let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
         let output = map_table(&table);
 
-        assert!(output.typst_source.contains("stroke:"), "should emit stroke parameter");
+        assert!(
+            output.typst_source.contains("stroke:"),
+            "should emit stroke parameter"
+        );
         assert!(output.typst_source.contains("top:"), "should have top side");
-        assert!(output.typst_source.contains("2.0pt + black"), "should format width and color");
+        assert!(
+            output.typst_source.contains("2.0pt + black"),
+            "should format width and color"
+        );
     }
 
     #[test]
@@ -1025,7 +1044,10 @@ mod tests {
         let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
         let output = map_table(&table);
 
-        assert!(output.typst_source.contains("left: none"), "None style should emit 'none'");
+        assert!(
+            output.typst_source.contains("left: none"),
+            "None style should emit 'none'"
+        );
     }
 
     #[test]
@@ -1045,9 +1067,18 @@ mod tests {
         let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
         let output = map_table(&table);
 
-        assert!(output.typst_source.contains("bottom:"), "should have bottom side");
-        assert!(output.typst_source.contains("rgb(255, 0, 0)"), "color should be rgb()");
-        assert!(output.typst_source.contains("3.0pt"), "width should be 3.0pt (6/2)");
+        assert!(
+            output.typst_source.contains("bottom:"),
+            "should have bottom side"
+        );
+        assert!(
+            output.typst_source.contains("rgb(255, 0, 0)"),
+            "color should be rgb()"
+        );
+        assert!(
+            output.typst_source.contains("3.0pt"),
+            "width should be 3.0pt (6/2)"
+        );
     }
 
     #[test]
@@ -1056,7 +1087,10 @@ mod tests {
         let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
         let output = map_table(&table);
 
-        assert!(!output.typst_source.contains("stroke:"), "no borders means no stroke param");
+        assert!(
+            !output.typst_source.contains("stroke:"),
+            "no borders means no stroke param"
+        );
     }
 
     #[test]
@@ -1086,5 +1120,66 @@ mod tests {
         assert!(src.contains("left:"));
         assert!(src.contains("bottom:"));
         assert!(src.contains("right:"));
+    }
+
+    #[test]
+    fn test_row_outer_borders_fallback_applied() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle, RowProps};
+
+        let row = IrTableRow {
+            cells: vec![
+                IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("A")])),
+                IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("B")])),
+            ],
+            row_props: Some(RowProps {
+                borders: Some(BorderSet {
+                    top: Some(Border {
+                        style: BorderStyle::Single,
+                        width_half_pts: Some(4),
+                        color: None,
+                    }),
+                    bottom: Some(Border {
+                        style: BorderStyle::Single,
+                        width_half_pts: Some(4),
+                        color: None,
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+        let table = IrTableBlock::from_rows(vec![row]);
+        let output = map_table(&table);
+
+        assert!(output.typst_source.contains("top: 2.0pt + black"));
+        assert!(output.typst_source.contains("bottom: 2.0pt + black"));
+    }
+
+    #[test]
+    fn test_inside_vertical_fallback_prefers_left_cell() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle, RowProps};
+
+        let row = IrTableRow {
+            cells: vec![
+                IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("A")])),
+                IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("B")])),
+            ],
+            row_props: Some(RowProps {
+                borders: Some(BorderSet {
+                    inside_v: Some(Border {
+                        style: BorderStyle::Single,
+                        width_half_pts: Some(4),
+                        color: None,
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+        let table = IrTableBlock::from_rows(vec![row]);
+        let output = map_table(&table);
+
+        assert!(output.typst_source.contains("right: 2.0pt + black"));
+        assert!(!output.typst_source.contains("left: 2.0pt + black"));
     }
 }

@@ -113,9 +113,7 @@ pub fn finalize_current_cell(state: &mut RuntimeState) {
 
         // Apply cell borders from per-cellx capture
         if let Some(capture) = state.tables.pending_cell_border_captures.get(cell_index) {
-            if let Some(borders) =
-                super::borders::build_border_set_from_cell(capture, state)
-            {
+            if let Some(borders) = super::borders::build_border_set_from_cell(capture, state) {
                 cell_with_props.borders = Some(borders);
             }
         }
@@ -159,8 +157,7 @@ pub fn finalize_current_row(state: &mut RuntimeState) {
 
         // Apply row-level borders to RowProps
         let row_border_capture = std::mem::take(&mut state.tables.pending_row_borders);
-        if let Some(borders) =
-            super::borders::build_border_set_from_row(&row_border_capture, state)
+        if let Some(borders) = super::borders::build_border_set_from_row(&row_border_capture, state)
         {
             state.tables.pending_row_props.borders = Some(borders);
         }

@@ -17,7 +17,7 @@ use rtfkit_core::{
     Alignment, Block, Border as IrBorder, BorderSet as IrBorderSet, BorderStyle as IrBorderStyle,
     CellMerge, CellVerticalAlign, Document, Hyperlink as IrHyperlink, ImageBlock, Inline,
     ListBlock, ListId, ListKind, Paragraph, Run, Shading as IrShading, ShadingPattern, TableBlock,
-    TableCell as IrTableCell, TableRow as IrTableRow,
+    TableCell as IrTableCell, TableRow as IrTableRow, resolve_effective_cell_borders,
 };
 use std::fs::File;
 use std::io::{Cursor, Write};
@@ -729,7 +729,8 @@ fn convert_table(
     let rows: Vec<TableRow> = table
         .rows
         .iter()
-        .map(|row| convert_table_row(row, numbering, images))
+        .enumerate()
+        .map(|(row_idx, row)| convert_table_row(table, row_idx, row, numbering, images))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(Table::new(rows))
 }
@@ -742,6 +743,8 @@ fn convert_table(
 /// represented by the start cell's gridSpan. Orphan continuation cells are
 /// preserved as standalone cells to avoid silent text loss.
 fn convert_table_row(
+    table: &TableBlock,
+    row_idx: usize,
     row: &IrTableRow,
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
@@ -749,10 +752,16 @@ fn convert_table_row(
     let mut cells = Vec::with_capacity(row.cells.len());
     let mut expected_continuations = 0usize;
 
-    for cell in &row.cells {
+    for (col_idx, cell) in row.cells.iter().enumerate() {
+        let effective_borders = resolve_effective_cell_borders(table, row_idx, col_idx);
         match cell.merge {
             Some(CellMerge::HorizontalStart { span }) if span > 1 => {
-                cells.push(convert_table_cell(cell, numbering, images)?);
+                cells.push(convert_table_cell(
+                    cell,
+                    effective_borders,
+                    numbering,
+                    images,
+                )?);
                 expected_continuations = span.saturating_sub(1) as usize;
             }
             Some(CellMerge::HorizontalStart { .. }) => {
@@ -760,7 +769,12 @@ fn convert_table_row(
                 expected_continuations = 0;
                 let mut standalone = cell.clone();
                 standalone.merge = None;
-                cells.push(convert_table_cell(&standalone, numbering, images)?);
+                cells.push(convert_table_cell(
+                    &standalone,
+                    effective_borders,
+                    numbering,
+                    images,
+                )?);
             }
             Some(CellMerge::HorizontalContinue) if expected_continuations > 0 => {
                 expected_continuations -= 1;
@@ -769,11 +783,21 @@ fn convert_table_row(
                 // Orphan continuation: preserve content rather than silently dropping it.
                 let mut standalone = cell.clone();
                 standalone.merge = None;
-                cells.push(convert_table_cell(&standalone, numbering, images)?);
+                cells.push(convert_table_cell(
+                    &standalone,
+                    effective_borders,
+                    numbering,
+                    images,
+                )?);
             }
             _ => {
                 expected_continuations = 0;
-                cells.push(convert_table_cell(cell, numbering, images)?);
+                cells.push(convert_table_cell(
+                    cell,
+                    effective_borders,
+                    numbering,
+                    images,
+                )?);
             }
         }
     }
@@ -800,8 +824,11 @@ fn border_style_to_docx(style: IrBorderStyle) -> BorderType {
 /// Build a single `TableCellBorder` from an IR `Border`.
 fn convert_border(border: &IrBorder, pos: TableCellBorderPosition) -> TableCellBorder {
     let bt = border_style_to_docx(border.style);
-    // docx-rs size unit is 1/8 pt; IR width is in half-points → multiply by 4.
-    let size = border.width_half_pts.unwrap_or(4) as usize;
+    // docx-rs size unit is 1/8 pt; IR width is half-points, so multiply by 4.
+    let size = border
+        .width_half_pts
+        .map(|hp| hp.saturating_mul(4))
+        .unwrap_or(8) as usize;
     let color = border
         .color
         .as_ref()
@@ -846,6 +873,7 @@ fn convert_border_set(borders: &IrBorderSet) -> TableCellBorders {
 /// Width is stored in twips in the IR and mapped to DXA for DOCX (1:1 ratio).
 fn convert_table_cell(
     cell: &IrTableCell,
+    effective_borders: Option<IrBorderSet>,
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
 ) -> Result<TableCell, DocxError> {
@@ -905,7 +933,7 @@ fn convert_table_cell(
     }
 
     // Apply cell borders if present
-    if let Some(ref borders) = cell.borders {
+    if let Some(ref borders) = effective_borders {
         docx_cell = docx_cell.set_borders(convert_border_set(borders));
     }
 
@@ -2631,6 +2659,28 @@ mod tests {
     }
 
     #[test]
+    fn convert_border_size_maps_half_points_to_eighth_points() {
+        let border = IrBorder {
+            style: IrBorderStyle::Single,
+            width_half_pts: Some(4), // 2pt
+            color: None,
+        };
+        let docx_border = convert_border(&border, TableCellBorderPosition::Top);
+        assert_eq!(docx_border.size, 16); // 2pt = 16 eighth-points
+    }
+
+    #[test]
+    fn convert_border_default_size_is_one_point() {
+        let border = IrBorder {
+            style: IrBorderStyle::Single,
+            width_half_pts: None,
+            color: None,
+        };
+        let docx_border = convert_border(&border, TableCellBorderPosition::Top);
+        assert_eq!(docx_border.size, 8); // 1pt default
+    }
+
+    #[test]
     fn convert_border_set_top_left_only() {
         let borders = IrBorderSet {
             top: Some(IrBorder {
@@ -2655,8 +2705,7 @@ mod tests {
     fn cell_with_borders_builds_docx_without_error() {
         use rtfkit_core::{Border, BorderSet, Paragraph, Run, TableBlock, TableCell, TableRow};
 
-        let mut cell =
-            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("bordered")]));
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("bordered")]));
         cell.borders = Some(BorderSet {
             top: Some(Border {
                 style: IrBorderStyle::Single,
@@ -2679,5 +2728,46 @@ mod tests {
         // Should not panic
         let result = super::write_docx_to_bytes(&doc);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn row_border_fallback_emits_tc_borders() {
+        use rtfkit_core::{
+            Border, BorderSet, Paragraph, RowProps, Run, TableBlock, TableCell, TableRow,
+        };
+
+        let row = TableRow {
+            cells: vec![
+                TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("A")])),
+                TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("B")])),
+            ],
+            row_props: Some(RowProps {
+                borders: Some(BorderSet {
+                    top: Some(Border {
+                        style: IrBorderStyle::Single,
+                        width_half_pts: Some(4),
+                        color: None,
+                    }),
+                    bottom: Some(Border {
+                        style: IrBorderStyle::Single,
+                        width_half_pts: Some(4),
+                        color: None,
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        };
+        let table = TableBlock::from_rows(vec![row]);
+        let doc = rtfkit_core::Document {
+            blocks: vec![rtfkit_core::Block::TableBlock(table)],
+        };
+        let bytes = super::write_docx_to_bytes(&doc).unwrap();
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+
+        assert!(document_xml.contains("<w:tcBorders"));
+        assert!(document_xml.contains("w:top"));
+        assert!(document_xml.contains("w:bottom"));
+        assert!(document_xml.contains("w:sz=\"16\""));
     }
 }

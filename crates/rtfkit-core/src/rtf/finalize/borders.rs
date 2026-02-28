@@ -32,10 +32,7 @@ pub fn build_border_set_from_cell(
 ) -> Option<BorderSet> {
     let top = capture.top.as_ref().and_then(|a| build_border(a, state));
     let left = capture.left.as_ref().and_then(|a| build_border(a, state));
-    let bottom = capture
-        .bottom
-        .as_ref()
-        .and_then(|a| build_border(a, state));
+    let bottom = capture.bottom.as_ref().and_then(|a| build_border(a, state));
     let right = capture.right.as_ref().and_then(|a| build_border(a, state));
 
     if top.is_none() && left.is_none() && bottom.is_none() && right.is_none() {
@@ -60,10 +57,7 @@ pub fn build_border_set_from_row(
 ) -> Option<BorderSet> {
     let top = capture.top.as_ref().and_then(|a| build_border(a, state));
     let left = capture.left.as_ref().and_then(|a| build_border(a, state));
-    let bottom = capture
-        .bottom
-        .as_ref()
-        .and_then(|a| build_border(a, state));
+    let bottom = capture.bottom.as_ref().and_then(|a| build_border(a, state));
     let right = capture.right.as_ref().and_then(|a| build_border(a, state));
     let inside_h = capture
         .inside_h

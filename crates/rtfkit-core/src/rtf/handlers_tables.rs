@@ -5,8 +5,8 @@
 
 use super::state::RuntimeState;
 use crate::error::ConversionError;
-use crate::{BorderStyle, CellMerge, CellVerticalAlign, RowAlignment};
 use crate::rtf::state_tables::BorderTarget;
+use crate::{BorderStyle, CellMerge, CellVerticalAlign, RowAlignment};
 
 /// Handle table-related control words.
 ///
