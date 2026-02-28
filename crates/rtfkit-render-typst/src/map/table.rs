@@ -151,6 +151,15 @@ pub(crate) fn map_table_with_assets(
         });
     }
 
+    if table_has_double_border(&rows) {
+        warnings.push(MappingWarning::PartialSupport {
+            feature: "double border style".to_string(),
+            reason:
+                "Typst table strokes do not natively support double lines; approximated where possible."
+                    .to_string(),
+        });
+    }
+
     // Generate Typst source
     let table_source = generate_table_source(
         &rows,
@@ -352,7 +361,8 @@ fn map_row(
 
 /// Convert a single IR `Border` to a Typst stroke expression.
 ///
-/// Double/Dotted/Dashed degrade to solid with the same color (cosmetic only).
+/// Dotted/Dashed map to Typst `dash` patterns.
+/// Double currently degrades to a solid stroke (warning emitted at table level).
 fn border_to_typst_stroke(border: &IrBorder) -> String {
     if border.style == IrBorderStyle::None {
         return "none".to_string();
@@ -366,7 +376,53 @@ fn border_to_typst_stroke(border: &IrBorder) -> String {
         .as_ref()
         .map(|c| format!("rgb({}, {}, {})", c.r, c.g, c.b))
         .unwrap_or_else(|| "black".to_string());
-    format!("{width_pt:.1}pt + {color}")
+    match border.style {
+        IrBorderStyle::Dotted => {
+            let dot_gap = (width_pt * 1.8).max(1.0);
+            format!(
+                "(paint: {color}, thickness: {width_pt:.1}pt, cap: \"round\", dash: (\"dot\", {dot_gap:.1}pt))"
+            )
+        }
+        IrBorderStyle::Dashed => {
+            // Use an explicit dash array with butt caps to avoid looking dotted in PDF.
+            let dash_len = (width_pt * 4.0).max(4.0);
+            let gap_len = (width_pt * 2.0).max(2.0);
+            format!(
+                "(paint: {color}, thickness: {width_pt:.1}pt, cap: \"butt\", dash: ({dash_len:.1}pt, {gap_len:.1}pt))"
+            )
+        }
+        IrBorderStyle::Single | IrBorderStyle::Double => format!("{width_pt:.1}pt + {color}"),
+        IrBorderStyle::None => "none".to_string(),
+    }
+}
+
+fn border_set_has_double(border_set: &IrBorderSet) -> bool {
+    border_set
+        .top
+        .iter()
+        .chain(border_set.left.iter())
+        .chain(border_set.bottom.iter())
+        .chain(border_set.right.iter())
+        .chain(border_set.inside_h.iter())
+        .chain(border_set.inside_v.iter())
+        .any(|b| b.style == IrBorderStyle::Double)
+}
+
+fn table_has_double_border(rows: &[Vec<CellInfo>]) -> bool {
+    rows.iter().any(|row| {
+        row.iter()
+            .any(|cell| cell.borders.as_ref().is_some_and(border_set_has_double))
+    })
+}
+
+fn push_unique_overlay_entry(
+    overlay_entries: &mut Vec<String>,
+    seen_overlays: &mut HashSet<String>,
+    entry: String,
+) {
+    if seen_overlays.insert(entry.clone()) {
+        overlay_entries.push(entry);
+    }
 }
 
 /// Map a single IR cell to cell info.
@@ -561,8 +617,22 @@ fn generate_table_source(
 
     // Generate cells
     let mut cell_entries = Vec::new();
-    for row in rows {
+    let mut overlay_entries = Vec::new();
+    let mut seen_overlays = HashSet::new();
+    let has_gutter = cell_gap.is_some_and(|gap| gap > 0);
+    let row_count = rows.len();
+    let mut outer_top_double: Option<String> = None;
+    let mut outer_left_double: Option<String> = None;
+    let mut outer_bottom_double: Option<String> = None;
+    let mut outer_right_double: Option<String> = None;
+
+    for (row_idx, row) in rows.iter().enumerate() {
+        let mut col_idx = 0usize;
         for cell in row {
+            let col_start = col_idx;
+            let col_end = col_idx + cell.colspan as usize;
+            let row_start = row_idx;
+            let row_end = row_idx + cell.rowspan as usize;
             // Add parameters if needed
             let mut params = Vec::new();
             if cell.colspan > 1 {
@@ -593,6 +663,104 @@ fn generate_table_source(
                 if !stroke_parts.is_empty() {
                     params.push(format!("stroke: ({})", stroke_parts.join(", ")));
                 }
+
+                if row_start == 0
+                    && outer_top_double.is_none()
+                    && let Some(border) = borders
+                        .top
+                        .as_ref()
+                        .filter(|b| b.style == IrBorderStyle::Double)
+                {
+                    outer_top_double = Some(border_to_typst_stroke(border));
+                }
+                if col_start == 0
+                    && outer_left_double.is_none()
+                    && let Some(border) = borders
+                        .left
+                        .as_ref()
+                        .filter(|b| b.style == IrBorderStyle::Double)
+                {
+                    outer_left_double = Some(border_to_typst_stroke(border));
+                }
+                if row_end == row_count
+                    && outer_bottom_double.is_none()
+                    && let Some(border) = borders
+                        .bottom
+                        .as_ref()
+                        .filter(|b| b.style == IrBorderStyle::Double)
+                {
+                    outer_bottom_double = Some(border_to_typst_stroke(border));
+                }
+                if col_end == column_count
+                    && outer_right_double.is_none()
+                    && let Some(border) = borders
+                        .right
+                        .as_ref()
+                        .filter(|b| b.style == IrBorderStyle::Double)
+                {
+                    outer_right_double = Some(border_to_typst_stroke(border));
+                }
+
+                // Approximate double borders by adding an extra line on the opposite gutter edge.
+                // This is only visible when gutter/cell gap is present.
+                if has_gutter {
+                    if let Some(border) = borders
+                        .top
+                        .as_ref()
+                        .filter(|b| b.style == IrBorderStyle::Double)
+                    {
+                        push_unique_overlay_entry(
+                            &mut overlay_entries,
+                            &mut seen_overlays,
+                            format!(
+                                "table.hline(y: {row_start}, start: {col_start}, end: {col_end}, position: bottom, stroke: {})",
+                                border_to_typst_stroke(border)
+                            ),
+                        );
+                    }
+                    if let Some(border) = borders
+                        .bottom
+                        .as_ref()
+                        .filter(|b| b.style == IrBorderStyle::Double)
+                    {
+                        push_unique_overlay_entry(
+                            &mut overlay_entries,
+                            &mut seen_overlays,
+                            format!(
+                                "table.hline(y: {row_end}, start: {col_start}, end: {col_end}, position: top, stroke: {})",
+                                border_to_typst_stroke(border)
+                            ),
+                        );
+                    }
+                    if let Some(border) = borders
+                        .left
+                        .as_ref()
+                        .filter(|b| b.style == IrBorderStyle::Double)
+                    {
+                        push_unique_overlay_entry(
+                            &mut overlay_entries,
+                            &mut seen_overlays,
+                            format!(
+                                "table.vline(x: {col_start}, start: {row_start}, end: {row_end}, position: end, stroke: {})",
+                                border_to_typst_stroke(border)
+                            ),
+                        );
+                    }
+                    if let Some(border) = borders
+                        .right
+                        .as_ref()
+                        .filter(|b| b.style == IrBorderStyle::Double)
+                    {
+                        push_unique_overlay_entry(
+                            &mut overlay_entries,
+                            &mut seen_overlays,
+                            format!(
+                                "table.vline(x: {col_end}, start: {row_start}, end: {row_end}, position: start, stroke: {})",
+                                border_to_typst_stroke(border)
+                            ),
+                        );
+                    }
+                }
             }
 
             // Add inset parameter for cell padding
@@ -622,8 +790,11 @@ fn generate_table_source(
             };
 
             cell_entries.push(cell_spec);
+            col_idx = col_end;
         }
     }
+
+    cell_entries.extend(overlay_entries);
 
     // Add cells to output
     for (i, entry) in cell_entries.iter().enumerate() {
@@ -636,7 +807,29 @@ fn generate_table_source(
 
     lines.push(")".to_string());
 
-    let table_str = lines.join("\n");
+    let mut table_str = lines.join("\n");
+
+    let mut outer_stroke_parts = Vec::new();
+    if let Some(stroke) = outer_top_double {
+        outer_stroke_parts.push(format!("top: {stroke}"));
+    }
+    if let Some(stroke) = outer_left_double {
+        outer_stroke_parts.push(format!("left: {stroke}"));
+    }
+    if let Some(stroke) = outer_bottom_double {
+        outer_stroke_parts.push(format!("bottom: {stroke}"));
+    }
+    if let Some(stroke) = outer_right_double {
+        outer_stroke_parts.push(format!("right: {stroke}"));
+    }
+    if !outer_stroke_parts.is_empty() {
+        // Add a second outer stroke layer to approximate RTF double outer borders.
+        table_str = format!(
+            "#box(stroke: ({}), inset: 1.0pt)[\n{}\n]",
+            outer_stroke_parts.join(", "),
+            table_str
+        );
+    }
 
     // Wrap in block if preferred width requested
     if let Some(prefix) = width_prefix {
@@ -1237,6 +1430,149 @@ mod tests {
             output.typst_source.contains("3.0pt"),
             "width should be 3.0pt (6/2)"
         );
+    }
+
+    #[test]
+    fn test_cell_border_dotted_emits_dash_pattern() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle};
+
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("x")]));
+        cell.borders = Some(BorderSet {
+            top: Some(Border {
+                style: BorderStyle::Dotted,
+                width_half_pts: Some(4),
+                color: None,
+            }),
+            ..Default::default()
+        });
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+        let output = map_table(&table);
+
+        assert!(output.typst_source.contains("top:"));
+        assert!(output.typst_source.contains("dash: (\"dot\","));
+        assert!(output.typst_source.contains("cap: \"round\""));
+        assert!(output.typst_source.contains("thickness: 2.0pt"));
+    }
+
+    #[test]
+    fn test_cell_border_dashed_emits_dash_pattern() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle};
+
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("x")]));
+        cell.borders = Some(BorderSet {
+            right: Some(Border {
+                style: BorderStyle::Dashed,
+                width_half_pts: Some(2),
+                color: None,
+            }),
+            ..Default::default()
+        });
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+        let output = map_table(&table);
+
+        assert!(output.typst_source.contains("right:"));
+        assert!(output.typst_source.contains("dash: ("));
+        assert!(output.typst_source.contains("cap: \"butt\""));
+        assert!(output.typst_source.contains("thickness: 1.0pt"));
+    }
+
+    #[test]
+    fn test_cell_border_double_emits_partial_support_warning() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle};
+
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("x")]));
+        cell.borders = Some(BorderSet {
+            left: Some(Border {
+                style: BorderStyle::Double,
+                width_half_pts: Some(4),
+                color: None,
+            }),
+            ..Default::default()
+        });
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+        let output = map_table(&table);
+
+        assert!(output.typst_source.contains("left: 2.0pt + black"));
+        assert!(
+            output.warnings.iter().any(|w| matches!(
+                w,
+                MappingWarning::PartialSupport { feature, .. } if feature == "double border style"
+            )),
+            "double border fallback warning should be emitted"
+        );
+    }
+
+    #[test]
+    fn test_cell_border_double_with_gutter_emits_overlay_line() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle, RowProps};
+
+        let mut left = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("L")]));
+        left.borders = Some(BorderSet {
+            right: Some(Border {
+                style: BorderStyle::Double,
+                width_half_pts: Some(4),
+                color: None,
+            }),
+            ..Default::default()
+        });
+        let right = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("R")]));
+
+        let row = IrTableRow {
+            cells: vec![left, right],
+            row_props: Some(RowProps {
+                cell_gap_twips: Some(120),
+                ..Default::default()
+            }),
+        };
+
+        let table = IrTableBlock::from_rows(vec![row]);
+        let output = map_table(&table);
+
+        assert!(output.typst_source.contains("table.vline("));
+        assert!(output.typst_source.contains("x: 1"));
+        assert!(output.typst_source.contains("position: start"));
+    }
+
+    #[test]
+    fn test_outer_double_border_emits_box_wrapper() {
+        use rtfkit_core::{Border, BorderSet, BorderStyle};
+
+        let mut cell = IrTableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("x")]));
+        cell.borders = Some(BorderSet {
+            top: Some(Border {
+                style: BorderStyle::Double,
+                width_half_pts: Some(4),
+                color: None,
+            }),
+            left: Some(Border {
+                style: BorderStyle::Double,
+                width_half_pts: Some(4),
+                color: None,
+            }),
+            bottom: Some(Border {
+                style: BorderStyle::Double,
+                width_half_pts: Some(4),
+                color: None,
+            }),
+            right: Some(Border {
+                style: BorderStyle::Double,
+                width_half_pts: Some(4),
+                color: None,
+            }),
+            ..Default::default()
+        });
+
+        let table = IrTableBlock::from_rows(vec![IrTableRow::from_cells(vec![cell])]);
+        let output = map_table(&table);
+
+        assert!(output.typst_source.contains("#box(stroke:"));
+        assert!(output.typst_source.contains("top: 2.0pt + black"));
+        assert!(output.typst_source.contains("left: 2.0pt + black"));
+        assert!(output.typst_source.contains("bottom: 2.0pt + black"));
+        assert!(output.typst_source.contains("right: 2.0pt + black"));
     }
 
     #[test]
