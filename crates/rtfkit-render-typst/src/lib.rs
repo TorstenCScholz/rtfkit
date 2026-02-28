@@ -160,7 +160,10 @@ pub fn document_to_pdf_with_warnings(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rtfkit_core::{Block, ListBlock, ListItem, ListKind, Paragraph, Run};
+    use rtfkit_core::{
+        Block, BookmarkAnchor, Hyperlink, HyperlinkTarget, Inline, ListBlock, ListItem, ListKind,
+        Paragraph, Run,
+    };
 
     #[test]
     fn test_public_api_compiles() {
@@ -277,6 +280,31 @@ mod tests {
 
         // Note: Warnings may be present due to font fallbacks in the style preamble.
         // The important thing is that the PDF is generated successfully.
+    }
+
+    #[test]
+    fn test_internal_bookmark_navigation_renders_to_pdf() {
+        let doc = Document::from_blocks(vec![
+            Block::Paragraph(Paragraph::from_inlines(vec![
+                Inline::BookmarkAnchor(BookmarkAnchor {
+                    name: "sec_program_delivery".to_string(),
+                }),
+                Inline::Run(Run::new("Program Delivery")),
+            ])),
+            Block::Paragraph(Paragraph::from_inlines(vec![Inline::Hyperlink(
+                Hyperlink {
+                    target: HyperlinkTarget::InternalBookmark("sec_program_delivery".to_string()),
+                    runs: vec![Run::new("Jump to Program Delivery")],
+                },
+            )])),
+        ]);
+
+        let options = RenderOptions::default();
+        let result = document_to_pdf_with_warnings(&doc, &options);
+        assert!(
+            result.is_ok(),
+            "internal bookmark navigation should compile"
+        );
     }
 
     #[test]

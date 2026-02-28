@@ -185,7 +185,7 @@ fn map_inlines(inlines: &[Inline], warnings: &mut Vec<MappingWarning>) -> String
 /// Map a hyperlink to Typst `#link()` syntax.
 ///
 /// External links generate `#link("url")[content]`.
-/// Internal links generate `#link(label("name"))[content]` with a partial-support warning.
+/// Internal links generate `#link(<name>)[content]` with a partial-support warning.
 fn map_hyperlink(hyperlink: &Hyperlink, warnings: &mut Vec<MappingWarning>) -> String {
     let content = map_runs(&hyperlink.runs, warnings);
 
@@ -202,16 +202,18 @@ fn map_hyperlink(hyperlink: &Hyperlink, warnings: &mut Vec<MappingWarning>) -> S
             let label = sanitize_typst_label(name);
             warnings.push(MappingWarning::PartialSupport {
                 feature: "internal_hyperlink".into(),
-                reason: "Typst label refs require manually placed labels; anchor placement may differ".into(),
+                reason:
+                    "Typst label refs require manually placed labels; anchor placement may differ"
+                        .into(),
             });
-            format!("#link(label(\"{label}\"))[{content}]")
+            format!("#link(<{label}>)[{content}]")
         }
     }
 }
 
 /// Map a bookmark anchor to a Typst label.
 ///
-/// Emits `#[#label("name")]` as a zero-width content block.
+/// Emits a zero-width box labeled with `<name>`.
 /// A partial-support warning is emitted since Typst label semantics differ from DOCX bookmarks.
 fn map_bookmark_anchor(anchor: &BookmarkAnchor, warnings: &mut Vec<MappingWarning>) -> String {
     let label = sanitize_typst_label(&anchor.name);
@@ -219,7 +221,7 @@ fn map_bookmark_anchor(anchor: &BookmarkAnchor, warnings: &mut Vec<MappingWarnin
         feature: "bookmark_anchor".into(),
         reason: "Typst labels are placed inline; exact cross-reference semantics may differ".into(),
     });
-    format!("#[#label(\"{label}\")]")
+    format!("#box(width: 0pt, height: 0pt)[] <{label}>")
 }
 
 /// Sanitize a bookmark name to a valid Typst label identifier.
@@ -945,9 +947,7 @@ mod tests {
     #[test]
     fn test_hyperlink_url_is_escaped_for_typst_string_literal() {
         let paragraph = Paragraph::from_inlines(vec![Inline::Hyperlink(Hyperlink {
-            target: HyperlinkTarget::ExternalUrl(
-                "https://example.com?q=\\\"x\\\"".to_string(),
-            ),
+            target: HyperlinkTarget::ExternalUrl("https://example.com?q=\\\"x\\\"".to_string()),
             runs: vec![Run::new("Example")],
         })]);
 
@@ -956,6 +956,43 @@ mod tests {
             output.typst_source,
             "#link(\"https://example.com?q=\\\\\\\"x\\\\\\\"\")[Example]"
         );
+    }
+
+    #[test]
+    fn test_map_internal_hyperlink_inline() {
+        let paragraph = Paragraph::from_inlines(vec![Inline::Hyperlink(Hyperlink {
+            target: HyperlinkTarget::InternalBookmark("section1".to_string()),
+            runs: vec![Run::new("Go")],
+        })]);
+
+        let output = map_paragraph(&paragraph);
+        assert_eq!(output.typst_source, "#link(<section1>)[Go]");
+        assert!(output
+            .warnings
+            .iter()
+            .any(|w| matches!(w, MappingWarning::PartialSupport { feature, .. } if feature == "internal_hyperlink")));
+    }
+
+    #[test]
+    fn test_map_bookmark_anchor_inline() {
+        let paragraph = Paragraph::from_inlines(vec![
+            Inline::BookmarkAnchor(BookmarkAnchor {
+                name: "anchor_1".to_string(),
+            }),
+            Inline::Run(Run::new("Target")),
+        ]);
+
+        let output = map_paragraph(&paragraph);
+        assert!(
+            output
+                .typst_source
+                .starts_with("#box(width: 0pt, height: 0pt)[] <anchor_1>")
+        );
+        assert!(output.typst_source.contains("Target"));
+        assert!(output
+            .warnings
+            .iter()
+            .any(|w| matches!(w, MappingWarning::PartialSupport { feature, .. } if feature == "bookmark_anchor")));
     }
 
     // =============================================================================

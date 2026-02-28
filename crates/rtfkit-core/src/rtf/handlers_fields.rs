@@ -6,6 +6,34 @@
 use super::state::RuntimeState;
 use crate::{BookmarkAnchor, HyperlinkTarget, Inline};
 
+/// Capture a control word as literal fldinst instruction content.
+///
+/// Returns `true` when the control word was consumed as instruction text.
+pub fn capture_fldinst_control_word(
+    state: &mut RuntimeState,
+    word: &str,
+    parameter: Option<i32>,
+) -> bool {
+    if !state.fields.parsing_fldinst {
+        return false;
+    }
+
+    // Structural field words are handled by normal field state transitions.
+    if matches!(word, "field" | "fldinst" | "fldrslt") {
+        return false;
+    }
+
+    state.fields.field_instruction_text.push('\\');
+    state.fields.field_instruction_text.push_str(word);
+    if let Some(value) = parameter {
+        state
+            .fields
+            .field_instruction_text
+            .push_str(&value.to_string());
+    }
+    true
+}
+
 /// Handle field-related control words.
 ///
 /// Returns `true` if `word` was recognized and handled.
@@ -31,19 +59,18 @@ pub fn handle_field_control_word(state: &mut RuntimeState, word: &str) -> bool {
             state.fields.start_fldrslt(state.current_depth);
             true
         }
-        // \l - Field switch for internal bookmark reference (HYPERLINK \l "name").
-        // When inside a fldinst group, the RTF parser consumes \l as a control word;
-        // we re-inject it as literal text so parse_hyperlink_target can see it.
-        "l" if state.fields.parsing_fldinst => {
-            state.fields.field_instruction_text.push_str("\\l");
-            true
-        }
         _ => false,
     }
 }
 
 /// Handle text while a field is being parsed.
 pub fn handle_field_text(state: &mut RuntimeState, text: String) {
+    // Destination payload for \bkmkstart should never become visible field text.
+    if state.fields.parsing_bkmkstart {
+        state.fields.bkmkstart_name.push_str(&text);
+        return;
+    }
+
     if let Some(nested) = state.fields.nested_fields.last() {
         if nested.parsing_fldinst {
             return;
@@ -63,19 +90,27 @@ pub fn handle_field_text(state: &mut RuntimeState, text: String) {
 
 /// Process bookmark state on group end, emitting a BookmarkAnchor if we've exited the group.
 pub fn process_bookmark_group_end(state: &mut RuntimeState) {
-    if state.fields.parsing_bkmkstart
-        && state.current_depth < state.fields.bkmkstart_group_depth
-    {
+    if state.fields.parsing_bkmkstart && state.current_depth < state.fields.bkmkstart_group_depth {
         let name = state.fields.bkmkstart_name.trim().to_string();
         if !name.is_empty() {
             // Capture alignment if this is the first content in the paragraph (no text yet).
             state.capture_paragraph_alignment_if_start();
-            // Flush any pending text so preceding text runs appear before the anchor.
-            super::handlers_text::flush_current_text_as_run(state);
-            state
-                .current_paragraph
-                .inlines
-                .push(Inline::BookmarkAnchor(BookmarkAnchor { name }));
+            // If this bookmark lives inside fldrslt, keep it in field result flow
+            // so relative ordering with link text is preserved.
+            if state.fields.parsing_fldrslt {
+                super::handlers_text::flush_current_text_as_field_run(state);
+                state
+                    .fields
+                    .field_result_inlines
+                    .push(Inline::BookmarkAnchor(BookmarkAnchor { name }));
+            } else {
+                // Flush any pending text so preceding text runs appear before the anchor.
+                super::handlers_text::flush_current_text_as_run(state);
+                state
+                    .current_paragraph
+                    .inlines
+                    .push(Inline::BookmarkAnchor(BookmarkAnchor { name }));
+            }
         }
         state.fields.reset_bkmkstart();
     }
@@ -154,27 +189,57 @@ fn finalize_field(state: &mut RuntimeState) {
         };
 
         if valid {
-            let runs: Vec<crate::Run> = state
-                .fields
-                .field_result_inlines
-                .iter()
-                .filter_map(|inline| match inline {
-                    Inline::Run(run) => Some(run.clone()),
-                    _ => None,
-                })
-                .collect();
+            let mut pending_runs: Vec<crate::Run> = Vec::new();
+            let mut emitted_hyperlink_segment = false;
+            let mut saw_non_run_inline = false;
+            let result_inlines: Vec<Inline> = state.fields.field_result_inlines.drain(..).collect();
 
-            if !runs.is_empty() {
+            for inline in result_inlines {
+                match inline {
+                    Inline::Run(run) => pending_runs.push(run),
+                    other_inline => {
+                        if !pending_runs.is_empty() {
+                            state.capture_paragraph_alignment_if_start();
+                            let runs = std::mem::take(&mut pending_runs);
+                            state
+                                .current_paragraph
+                                .inlines
+                                .push(Inline::Hyperlink(Hyperlink {
+                                    target: target.clone(),
+                                    runs,
+                                }));
+                            emitted_hyperlink_segment = true;
+                        }
+                        state.capture_paragraph_alignment_if_start();
+                        state.current_paragraph.inlines.push(other_inline);
+                        saw_non_run_inline = true;
+                    }
+                }
+            }
+
+            if !pending_runs.is_empty() {
                 state.capture_paragraph_alignment_if_start();
-                let hyperlink = Hyperlink { target, runs };
                 state
                     .current_paragraph
                     .inlines
-                    .push(Inline::Hyperlink(hyperlink));
-            } else {
-                state
-                    .report_builder
-                    .dropped_content("Field with no result text", None);
+                    .push(Inline::Hyperlink(Hyperlink {
+                        target,
+                        runs: pending_runs,
+                    }));
+                emitted_hyperlink_segment = true;
+            }
+
+            if !emitted_hyperlink_segment {
+                if !saw_non_run_inline {
+                    state
+                        .report_builder
+                        .dropped_content("Field with no result text", None);
+                } else {
+                    state.report_builder.dropped_content(
+                        "Hyperlink field had no text runs for clickable content",
+                        None,
+                    );
+                }
             }
         } else {
             // Unsupported external URL scheme — preserve result text
@@ -262,34 +327,139 @@ pub(crate) fn is_supported_hyperlink_url(url: &str) -> bool {
 pub(crate) fn parse_hyperlink_target(instruction: &str) -> Option<HyperlinkTarget> {
     let text = instruction.trim();
 
-    if !text.to_ascii_uppercase().starts_with("HYPERLINK") {
+    let upper = text.to_ascii_uppercase();
+    if !upper.starts_with("HYPERLINK") {
+        return None;
+    }
+    if text.len() > "HYPERLINK".len()
+        && !text["HYPERLINK".len()..]
+            .chars()
+            .next()
+            .map(|c| c.is_whitespace())
+            .unwrap_or(false)
+    {
         return None;
     }
 
     let rest = text["HYPERLINK".len()..].trim_start();
+    let tokens = tokenize_hyperlink_instruction(rest);
 
-    // Check for \l switch (internal bookmark link)
-    if let Some(after_l) = rest.strip_prefix("\\l") {
-        let after_l = after_l.trim_start();
-        if let Some(name) = extract_quoted_string(after_l) {
-            return Some(HyperlinkTarget::InternalBookmark(name));
+    let mut idx = 0usize;
+    while idx < tokens.len() {
+        match &tokens[idx] {
+            HyperlinkToken::Switch(name) => {
+                if name.eq_ignore_ascii_case("l") {
+                    if let Some(value) = tokens.get(idx + 1).and_then(HyperlinkToken::as_value) {
+                        return Some(HyperlinkTarget::InternalBookmark(value.to_string()));
+                    }
+                    return None;
+                }
+
+                if switch_takes_value(name) {
+                    idx += 1;
+                    if idx < tokens.len() && tokens[idx].as_value().is_some() {
+                        idx += 1;
+                        continue;
+                    }
+                }
+                idx += 1;
+            }
+            token => {
+                if let Some(url) = token.as_value() {
+                    return Some(HyperlinkTarget::ExternalUrl(url.to_string()));
+                }
+                idx += 1;
+            }
         }
-        return None;
-    }
-
-    // Otherwise: quoted external URL
-    if let Some(url) = extract_quoted_string(rest) {
-        return Some(HyperlinkTarget::ExternalUrl(url));
     }
 
     None
 }
 
-fn extract_quoted_string(s: &str) -> Option<String> {
-    let s = s.trim_start();
-    let s = s.strip_prefix('"')?;
-    let end = s.find('"')?;
-    Some(s[..end].to_string())
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum HyperlinkToken {
+    Switch(String),
+    Value(String),
+}
+
+impl HyperlinkToken {
+    fn as_value(&self) -> Option<&str> {
+        match self {
+            HyperlinkToken::Value(value) => Some(value.as_str()),
+            HyperlinkToken::Switch(_) => None,
+        }
+    }
+}
+
+fn switch_takes_value(name: &str) -> bool {
+    // Common HYPERLINK switches with following value payload.
+    matches!(name.to_ascii_lowercase().as_str(), "o" | "m" | "n" | "t")
+}
+
+fn tokenize_hyperlink_instruction(input: &str) -> Vec<HyperlinkToken> {
+    let mut tokens = Vec::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.peek().copied() {
+        if ch.is_whitespace() {
+            chars.next();
+            continue;
+        }
+
+        if ch == '\\' {
+            chars.next();
+            let mut switch_name = String::new();
+            while let Some(next) = chars.peek().copied() {
+                if next.is_ascii_alphabetic() {
+                    switch_name.push(next);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            if !switch_name.is_empty() {
+                tokens.push(HyperlinkToken::Switch(switch_name));
+                continue;
+            }
+        }
+
+        if ch == '"' {
+            chars.next();
+            let mut value = String::new();
+            let mut escaped = false;
+            while let Some(next) = chars.next() {
+                if escaped {
+                    value.push(next);
+                    escaped = false;
+                    continue;
+                }
+                if next == '\\' {
+                    escaped = true;
+                    continue;
+                }
+                if next == '"' {
+                    break;
+                }
+                value.push(next);
+            }
+            tokens.push(HyperlinkToken::Value(value));
+            continue;
+        }
+
+        let mut value = String::new();
+        while let Some(next) = chars.peek().copied() {
+            if next.is_whitespace() {
+                break;
+            }
+            value.push(next);
+            chars.next();
+        }
+        if !value.is_empty() {
+            tokens.push(HyperlinkToken::Value(value));
+        }
+    }
+
+    tokens
 }
 
 #[cfg(test)]
@@ -300,14 +470,33 @@ mod tests {
     fn test_parse_hyperlink_target_external_url() {
         assert_eq!(
             parse_hyperlink_target(r#"HYPERLINK "https://example.com""#),
-            Some(HyperlinkTarget::ExternalUrl("https://example.com".to_string()))
+            Some(HyperlinkTarget::ExternalUrl(
+                "https://example.com".to_string()
+            ))
         );
         assert_eq!(
             parse_hyperlink_target(r#"HYPERLINK "https://test.com/path""#),
-            Some(HyperlinkTarget::ExternalUrl("https://test.com/path".to_string()))
+            Some(HyperlinkTarget::ExternalUrl(
+                "https://test.com/path".to_string()
+            ))
+        );
+        assert_eq!(
+            parse_hyperlink_target(r#"HYPERLINK \o "tooltip" "https://example.com""#),
+            Some(HyperlinkTarget::ExternalUrl(
+                "https://example.com".to_string()
+            ))
+        );
+        assert_eq!(
+            parse_hyperlink_target(r#"HYPERLINK https://example.com"#),
+            Some(HyperlinkTarget::ExternalUrl(
+                "https://example.com".to_string()
+            ))
         );
         assert_eq!(parse_hyperlink_target("HYPERLINK"), None);
-        assert_eq!(parse_hyperlink_target("HYPERLINK noquote"), None);
+        assert_eq!(
+            parse_hyperlink_target("HYPERLINK noquote"),
+            Some(HyperlinkTarget::ExternalUrl("noquote".to_string()))
+        );
         assert_eq!(parse_hyperlink_target("DATE"), None);
     }
 
@@ -321,8 +510,14 @@ mod tests {
             parse_hyperlink_target(r#"HYPERLINK \l "my bookmark""#),
             Some(HyperlinkTarget::InternalBookmark("my bookmark".to_string()))
         );
-        // \l with no quoted string → None
-        assert_eq!(parse_hyperlink_target(r#"HYPERLINK \l noquote"#), None);
+        assert_eq!(
+            parse_hyperlink_target(r#"HYPERLINK \l noquote"#),
+            Some(HyperlinkTarget::InternalBookmark("noquote".to_string()))
+        );
+        assert_eq!(
+            parse_hyperlink_target(r#"HYPERLINK \o "tip" \l "section1""#),
+            Some(HyperlinkTarget::InternalBookmark("section1".to_string()))
+        );
     }
 
     #[test]

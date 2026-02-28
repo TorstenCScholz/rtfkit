@@ -20,6 +20,13 @@ pub fn handle_control_word(state: &mut RuntimeState, word: &str, parameter: Opti
     }
     state.mark_current_group_non_destination();
 
+    // Inside fldinst, treat control words as instruction text tokens.
+    // This avoids applying formatting semantics to instruction groups and
+    // preserves switches like \o, \h, etc. for hyperlink target parsing.
+    if super::handlers_fields::capture_fldinst_control_word(state, word, parameter) {
+        return;
+    }
+
     match word {
         // =============================================================================
         // Character Formatting

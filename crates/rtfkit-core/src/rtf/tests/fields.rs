@@ -172,7 +172,9 @@ fn test_http_url_scheme() {
         .flat_map(|p| p.inlines.iter())
         .find(|i| matches!(i, Inline::Hyperlink(_)))
     {
-        assert!(matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url.starts_with("http://") || url.starts_with("https://")));
+        assert!(
+            matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url.starts_with("http://") || url.starts_with("https://"))
+        );
     }
 }
 
@@ -199,7 +201,9 @@ fn test_https_url_scheme() {
         .flat_map(|p| p.inlines.iter())
         .find(|i| matches!(i, Inline::Hyperlink(_)))
     {
-        assert!(matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url.starts_with("https://")));
+        assert!(
+            matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url.starts_with("https://"))
+        );
     }
 }
 
@@ -226,7 +230,9 @@ fn test_mailto_url_scheme() {
         .flat_map(|p| p.inlines.iter())
         .find(|i| matches!(i, Inline::Hyperlink(_)))
     {
-        assert!(matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url.starts_with("mailto:")));
+        assert!(
+            matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url.starts_with("mailto:"))
+        );
     }
 }
 
@@ -420,7 +426,9 @@ fn test_hyperlink_with_special_characters() {
         .find(|i| matches!(i, Inline::Hyperlink(_)))
     {
         // URL should preserve special characters
-        assert!(matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url.contains('?') || url.contains('&')));
+        assert!(
+            matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url.contains('?') || url.contains('&'))
+        );
     }
 }
 
@@ -467,7 +475,8 @@ fn test_time_field() {
 
 #[test]
 fn test_internal_hyperlink_parses_to_internal_bookmark_target() {
-    let input = r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK \l "section1"}{\fldrslt Go to section}}}"#;
+    let input =
+        r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK \l "section1"}{\fldrslt Go to section}}}"#;
     let result = parse(input);
 
     assert!(result.is_ok());
@@ -477,9 +486,21 @@ fn test_internal_hyperlink_parses_to_internal_bookmark_target() {
     let hlink = doc
         .blocks
         .iter()
-        .filter_map(|b| if let Block::Paragraph(p) = b { Some(p) } else { None })
+        .filter_map(|b| {
+            if let Block::Paragraph(p) = b {
+                Some(p)
+            } else {
+                None
+            }
+        })
         .flat_map(|p| p.inlines.iter())
-        .find_map(|i| if let Inline::Hyperlink(h) = i { Some(h) } else { None });
+        .find_map(|i| {
+            if let Inline::Hyperlink(h) = i {
+                Some(h)
+            } else {
+                None
+            }
+        });
 
     assert!(hlink.is_some(), "Expected a hyperlink in the document");
     let hlink = hlink.unwrap();
@@ -487,6 +508,43 @@ fn test_internal_hyperlink_parses_to_internal_bookmark_target() {
         matches!(&hlink.target, HyperlinkTarget::InternalBookmark(name) if name == "section1"),
         "Expected InternalBookmark(\"section1\"), got {:?}",
         hlink.target
+    );
+}
+
+#[test]
+fn test_hyperlink_with_switch_before_target_url_is_parsed() {
+    let input = r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK \o "tooltip" "https://example.com"}{\fldrslt Link}}}"#;
+    let result = parse(input);
+
+    assert!(result.is_ok());
+
+    let (doc, _report) = result.unwrap();
+    let hlink = doc
+        .blocks
+        .iter()
+        .filter_map(|b| {
+            if let Block::Paragraph(p) = b {
+                Some(p)
+            } else {
+                None
+            }
+        })
+        .flat_map(|p| p.inlines.iter())
+        .find_map(|i| {
+            if let Inline::Hyperlink(h) = i {
+                Some(h)
+            } else {
+                None
+            }
+        });
+
+    assert!(
+        hlink.is_some(),
+        "Expected hyperlink for switch-based fldinst"
+    );
+    let hlink = hlink.unwrap();
+    assert!(
+        matches!(&hlink.target, HyperlinkTarget::ExternalUrl(url) if url == "https://example.com")
     );
 }
 
@@ -502,11 +560,61 @@ fn test_bookmark_anchor_emitted_inline() {
     let has_anchor = doc
         .blocks
         .iter()
-        .filter_map(|b| if let Block::Paragraph(p) = b { Some(p) } else { None })
+        .filter_map(|b| {
+            if let Block::Paragraph(p) = b {
+                Some(p)
+            } else {
+                None
+            }
+        })
         .flat_map(|p| p.inlines.iter())
         .any(|i| matches!(i, Inline::BookmarkAnchor(a) if a.name == "mybookmark"));
 
     assert!(has_anchor, "Expected BookmarkAnchor(\"mybookmark\") inline");
+}
+
+#[test]
+fn test_bookmark_name_in_field_result_is_not_rendered_as_text() {
+    let input = r#"{\rtf1\ansi {\field{\*\fldinst HYPERLINK "https://example.com"}{\fldrslt pre {\*\bkmkstart mark1}{\*\bkmkend mark1} post}}}"#;
+    let result = parse(input);
+
+    assert!(result.is_ok());
+
+    let (doc, _report) = result.unwrap();
+    let para = doc
+        .blocks
+        .iter()
+        .find_map(|b| {
+            if let Block::Paragraph(p) = b {
+                Some(p)
+            } else {
+                None
+            }
+        })
+        .expect("expected paragraph");
+
+    // The bookmark name should not leak into visible text.
+    let visible_text: String = para
+        .inlines
+        .iter()
+        .flat_map(|inline| match inline {
+            Inline::Run(run) => vec![run.text.as_str()],
+            Inline::Hyperlink(link) => link.runs.iter().map(|r| r.text.as_str()).collect(),
+            Inline::BookmarkAnchor(_) => Vec::new(),
+        })
+        .collect();
+    assert!(
+        !visible_text.contains("mark1"),
+        "bookmark destination text leaked into output: {visible_text:?}"
+    );
+
+    // Anchor should still be represented as an inline bookmark anchor.
+    assert!(
+        para.inlines
+            .iter()
+            .any(|i| matches!(i, Inline::BookmarkAnchor(a) if a.name == "mark1")),
+        "expected bookmark anchor inline"
+    );
 }
 
 #[test]
@@ -521,16 +629,28 @@ fn test_mixed_external_internal_links() {
     let hyperlinks: Vec<_> = doc
         .blocks
         .iter()
-        .filter_map(|b| if let Block::Paragraph(p) = b { Some(p) } else { None })
+        .filter_map(|b| {
+            if let Block::Paragraph(p) = b {
+                Some(p)
+            } else {
+                None
+            }
+        })
         .flat_map(|p| p.inlines.iter())
-        .filter_map(|i| if let Inline::Hyperlink(h) = i { Some(h) } else { None })
+        .filter_map(|i| {
+            if let Inline::Hyperlink(h) = i {
+                Some(h)
+            } else {
+                None
+            }
+        })
         .collect();
 
     assert_eq!(hyperlinks.len(), 2, "Expected 2 hyperlinks");
 
-    let has_external = hyperlinks
-        .iter()
-        .any(|h| matches!(&h.target, HyperlinkTarget::ExternalUrl(url) if url.starts_with("https://")));
+    let has_external = hyperlinks.iter().any(
+        |h| matches!(&h.target, HyperlinkTarget::ExternalUrl(url) if url.starts_with("https://")),
+    );
     let has_internal = hyperlinks
         .iter()
         .any(|h| matches!(&h.target, HyperlinkTarget::InternalBookmark(name) if name == "anchor1"));
@@ -550,8 +670,14 @@ fn test_unsupported_field_does_not_strict_fail_when_result_preserved() {
     let (_doc, report) = result.unwrap();
 
     // Should not have any DroppedContent warnings (which trigger strict mode)
-    let has_dropped_content = report.warnings.iter().any(|w| matches!(w, Warning::DroppedContent { .. }));
-    assert!(!has_dropped_content, "DATE field with result text should not emit DroppedContent");
+    let has_dropped_content = report
+        .warnings
+        .iter()
+        .any(|w| matches!(w, Warning::DroppedContent { .. }));
+    assert!(
+        !has_dropped_content,
+        "DATE field with result text should not emit DroppedContent"
+    );
 }
 
 // =============================================================================
