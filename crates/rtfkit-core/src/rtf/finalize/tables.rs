@@ -112,10 +112,10 @@ pub fn finalize_current_cell(state: &mut RuntimeState) {
         }
 
         // Apply cell borders from per-cellx capture
-        if let Some(capture) = state.tables.pending_cell_border_captures.get(cell_index) {
-            if let Some(borders) = super::borders::build_border_set_from_cell(capture, state) {
-                cell_with_props.borders = Some(borders);
-            }
+        if let Some(capture) = state.tables.pending_cell_border_captures.get(cell_index)
+            && let Some(borders) = super::borders::build_border_set_from_cell(capture, state)
+        {
+            cell_with_props.borders = Some(borders);
         }
 
         if let Some(ref mut row) = state.tables.current_row {

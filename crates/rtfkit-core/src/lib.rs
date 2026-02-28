@@ -1152,12 +1152,8 @@ pub fn resolve_effective_cell_border(
     col_idx: usize,
     side: TableBorderSide,
 ) -> Option<Border> {
-    let Some(row) = table.rows.get(row_idx) else {
-        return None;
-    };
-    if row.cells.get(col_idx).is_none() {
-        return None;
-    }
+    let row = table.rows.get(row_idx)?;
+    row.cells.get(col_idx)?;
 
     match side {
         TableBorderSide::Top => {
