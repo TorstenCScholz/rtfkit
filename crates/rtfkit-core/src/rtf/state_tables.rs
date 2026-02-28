@@ -3,7 +3,10 @@
 //! This module contains table, merge, and shading state for handling
 //! RTF table parsing.
 
-use crate::{BorderStyle, CellMerge, CellVerticalAlign, RowProps, TableBlock, TableCell, TableRow};
+use crate::{
+    BorderStyle, BoxSpacingTwips, CellMerge, CellVerticalAlign, RowProps, TableBlock, TableCell,
+    TableRow,
+};
 
 // =============================================================================
 // Parser-only border state types (not part of IR)
@@ -120,6 +123,52 @@ pub struct TableState {
     pub pending_table_cfpat: Option<i32>,
     /// Pending table shading percentage (from first-row \trshdngN)
     pub pending_table_shading: Option<i32>,
+    /// Pending table preferred width ftsWidth selector (from \trftsWidth, first row)
+    pub pending_table_fts_width: Option<i32>,
+    /// Pending table preferred width value (from \trwWidth, first row)
+    pub pending_table_w_width: Option<i32>,
+
+    // =============================================================================
+    // Width pending (per-row for table, per-cell for cells)
+    // =============================================================================
+    /// ftsWidth selector for current row's table-level preferred width
+    pub pending_row_fts_width: Option<i32>,
+    /// wWidth value for current row's table-level preferred width
+    pub pending_row_w_width: Option<i32>,
+    /// Per-cell ftsWidth selectors (parallel to pending_cellx)
+    pub pending_cell_fts_widths: Vec<Option<i32>>,
+    /// Per-cell wWidth values (parallel to pending_cellx)
+    pub pending_cell_w_widths: Vec<Option<i32>>,
+    /// Current cell's ftsWidth selector (reset per cellx)
+    pub pending_cell_fts_width: Option<i32>,
+    /// Current cell's wWidth value (reset per cellx)
+    pub pending_cell_w_width: Option<i32>,
+
+    // =============================================================================
+    // Row height (from \trrh)
+    // =============================================================================
+    /// Raw \trrh value (positive = AtLeast, negative = Exact, zero = unset)
+    pub pending_row_height_raw: Option<i32>,
+
+    // =============================================================================
+    // Row padding (from \trpadd* / \trpaddf*)
+    // =============================================================================
+    /// Accumulated row-default padding
+    pub pending_row_padding: BoxSpacingTwips,
+    /// Per-side padding unit selectors (3 = twips/dxa; others warn and ignore)
+    pub pending_row_padding_fmt: [Option<i32>; 4],
+
+    // =============================================================================
+    // Cell padding (from \clpad* / \clpadf*)
+    // =============================================================================
+    /// Current-cell accumulated padding (reset per cellx)
+    pub pending_cell_padding: BoxSpacingTwips,
+    /// Current-cell per-side padding unit (reset per cellx)
+    pub pending_cell_padding_fmt: [Option<i32>; 4],
+    /// Per-cellx captured paddings (parallel to pending_cellx)
+    pub pending_cell_padding_captures: Vec<BoxSpacingTwips>,
+    /// Per-cellx captured padding unit selectors (parallel to pending_cellx)
+    pub pending_cell_padding_fmt_captures: Vec<[Option<i32>; 4]>,
 
     // =============================================================================
     // Border accumulation (cleared at \cellx and \row boundaries)
@@ -227,6 +276,22 @@ impl TableState {
         self.pending_border_width_hp = None;
         self.pending_border_color_idx = None;
         self.seen_intbl_in_paragraph = false;
+        // Width model reset
+        self.pending_row_fts_width = None;
+        self.pending_row_w_width = None;
+        self.pending_cell_fts_widths.clear();
+        self.pending_cell_w_widths.clear();
+        self.pending_cell_fts_width = None;
+        self.pending_cell_w_width = None;
+        // Row height reset
+        self.pending_row_height_raw = None;
+        // Padding reset
+        self.pending_row_padding = BoxSpacingTwips::default();
+        self.pending_row_padding_fmt = [None; 4];
+        self.pending_cell_padding = BoxSpacingTwips::default();
+        self.pending_cell_padding_fmt = [None; 4];
+        self.pending_cell_padding_captures.clear();
+        self.pending_cell_padding_fmt_captures.clear();
     }
 
     /// Reset state for a new cell.
@@ -236,6 +301,10 @@ impl TableState {
         self.pending_cell_cbpat = None;
         self.pending_cell_cfpat = None;
         self.pending_cell_shading = None;
+        self.pending_cell_fts_width = None;
+        self.pending_cell_w_width = None;
+        self.pending_cell_padding = BoxSpacingTwips::default();
+        self.pending_cell_padding_fmt = [None; 4];
     }
 
     /// Reset paragraph-level table state.
@@ -270,6 +339,17 @@ impl TableState {
         self.pending_cell_border_captures
             .push(self.current_cell_borders.clone());
         self.current_cell_borders = CellBorderCapture::default();
+        // Store width model state for this cell
+        self.pending_cell_fts_widths
+            .push(self.pending_cell_fts_width.take());
+        self.pending_cell_w_widths
+            .push(self.pending_cell_w_width.take());
+        // Store padding state for this cell
+        self.pending_cell_padding_captures
+            .push(std::mem::take(&mut self.pending_cell_padding));
+        self.pending_cell_padding_fmt_captures
+            .push(self.pending_cell_padding_fmt);
+        self.pending_cell_padding_fmt = [None; 4];
     }
 
     /// Clear state after table finalization.
@@ -290,6 +370,12 @@ impl TableState {
         self.pending_table_cbpat = None;
         self.pending_table_cfpat = None;
         self.pending_table_shading = None;
+        self.pending_table_fts_width = None;
+        self.pending_table_w_width = None;
+        self.pending_cell_fts_widths.clear();
+        self.pending_cell_w_widths.clear();
+        self.pending_cell_padding_captures.clear();
+        self.pending_cell_padding_fmt_captures.clear();
     }
 }
 

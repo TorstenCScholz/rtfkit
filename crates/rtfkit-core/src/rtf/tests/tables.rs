@@ -444,6 +444,30 @@ fn test_hyperlink_first_inline_in_cell_captures_alignment() {
     ));
 }
 
+#[test]
+fn test_unsupported_cell_padding_units_are_ignored() {
+    let input = include_str!("../../../../../fixtures/table_layout_unsupported_units.rtf");
+    let result = parse(input);
+    assert!(result.is_ok());
+
+    let (doc, _report) = result.unwrap();
+    let Some(Block::TableBlock(table)) = doc.blocks.first() else {
+        panic!("Expected table block");
+    };
+    let Some(row) = table.rows.first() else {
+        panic!("Expected row");
+    };
+    assert_eq!(row.cells.len(), 2);
+    assert!(
+        row.cells[0].padding.is_none(),
+        "Unsupported \\clpadf* unit should not produce cell padding"
+    );
+    assert!(
+        row.cells[1].padding.is_none(),
+        "Unsupported \\trpaddf* unit should not backfill row default padding"
+    );
+}
+
 // =============================================================================
 // Edge Cases
 // =============================================================================

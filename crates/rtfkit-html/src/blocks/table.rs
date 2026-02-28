@@ -18,8 +18,8 @@
 use super::paragraph::{build_paragraph_style, paragraph_to_html};
 use crate::serialize::HtmlBuffer;
 use rtfkit_core::{
-    Block, Border, BorderStyle, CellMerge, CellVerticalAlign, TableBlock, TableCell, TableRow,
-    resolve_effective_cell_borders,
+    Block, Border, BorderStyle, CellMerge, CellVerticalAlign, RowAlignment, RowHeightRule,
+    TableBlock, TableCell, TableRow, WidthUnit, resolve_effective_cell_borders,
 };
 use std::collections::HashSet;
 
@@ -111,13 +111,82 @@ pub fn table_to_html(table: &TableBlock, buf: &mut HtmlBuffer) {
     table_to_html_with_warnings(table, buf, &mut dropped_reasons);
 }
 
+/// Build table-level style string from first-row properties.
+///
+/// Alignment, indent, gap, and preferred width are driven by first-row RowProps since RTF
+/// stores table layout controls per row.  When rows disagree we use the first row as the
+/// table default (variance is layout-only, not content-lossy).
+fn build_table_style(table: &TableBlock) -> String {
+    let mut parts: Vec<String> = Vec::new();
+
+    // Extract properties from the first row
+    let first_row_props = table.rows.first().and_then(|r| r.row_props.as_ref());
+
+    // Alignment: emit via margins.
+    // Also apply left_indent regardless of alignment.
+    let alignment = first_row_props.and_then(|p| p.alignment);
+    let left_indent = first_row_props.and_then(|p| p.left_indent);
+    let indent_pt = left_indent.map(twips_to_points);
+
+    match alignment {
+        Some(RowAlignment::Center) => {
+            parts.push("margin-left: auto".to_string());
+            parts.push("margin-right: auto".to_string());
+        }
+        Some(RowAlignment::Right) => {
+            parts.push("margin-left: auto".to_string());
+            parts.push("margin-right: 0".to_string());
+        }
+        _ => {
+            // Left or default: apply indent if present
+            if let Some(pt) = indent_pt
+                && pt != 0.0
+            {
+                parts.push(format!("margin-left: {:.1}pt", pt));
+            }
+        }
+    }
+
+    // Cell gap: border-spacing + border-collapse: separate when gap > 0
+    let cell_gap = first_row_props.and_then(|p| p.cell_gap_twips);
+    if let Some(gap) = cell_gap
+        && gap > 0
+    {
+        let gap_pt = twips_to_points(gap);
+        parts.push("border-collapse: separate".to_string());
+        parts.push(format!("border-spacing: {:.1}pt", gap_pt));
+    }
+
+    // Preferred table width (from TableProps)
+    if let Some(ref pw) = table.table_props.as_ref().and_then(|tp| tp.preferred_width) {
+        match pw {
+            WidthUnit::Auto => {} // don't emit width: auto
+            WidthUnit::Twips(t) => {
+                parts.push(format!("width: {:.1}pt", twips_to_points(*t)));
+            }
+            WidthUnit::Percent(bp) => {
+                // basis points: 10000 = 100%
+                let pct = *bp as f32 / 100.0;
+                parts.push(format!("width: {:.1}%", pct));
+            }
+        }
+    }
+
+    parts.join("; ")
+}
+
 /// Converts a table block to HTML while recording semantic degradations.
 pub fn table_to_html_with_warnings(
     table: &TableBlock,
     buf: &mut HtmlBuffer,
     dropped_reasons: &mut Vec<String>,
 ) {
-    buf.push_open_tag("table", &[("class", "rtf-table")]);
+    let table_style = build_table_style(table);
+    if table_style.is_empty() {
+        buf.push_open_tag("table", &[("class", "rtf-table")]);
+    } else {
+        buf.push_open_tag("table", &[("class", "rtf-table"), ("style", &table_style)]);
+    }
 
     // Pre-compute vertical merge information
     let (rowspan_map, skip_cells) = compute_vertical_merges(table);
@@ -185,7 +254,32 @@ fn row_to_html(
     buf: &mut HtmlBuffer,
     dropped_reasons: &mut Vec<String>,
 ) {
-    buf.push_open_tag("tr", &[]);
+    // Build row-level style (height)
+    let row_style: String = {
+        let mut parts = Vec::new();
+        if let Some((h, rule)) = row
+            .row_props
+            .as_ref()
+            .and_then(|rp| rp.height_twips.zip(rp.height_rule))
+        {
+            let h_pt = twips_to_points(h);
+            match rule {
+                RowHeightRule::AtLeast => {
+                    parts.push(format!("height: {:.1}pt", h_pt));
+                }
+                RowHeightRule::Exact => {
+                    parts.push(format!("height: {:.1}pt", h_pt));
+                    parts.push(format!("max-height: {:.1}pt", h_pt));
+                }
+            }
+        }
+        parts.join("; ")
+    };
+    if row_style.is_empty() {
+        buf.push_open_tag("tr", &[]);
+    } else {
+        buf.push_open_tag("tr", &[("style", &row_style)]);
+    }
 
     let mut expected_h_continuations = 0usize;
 
@@ -327,12 +421,40 @@ fn cell_to_html(
         attrs.push(("rowspan", rowspan.to_string()));
     }
 
-    // Handle width styling
-    if let Some(width_twips) = cell.width_twips
+    // Handle preferred width (overrides cellx-derived width if present)
+    if let Some(ref pw) = cell.preferred_width {
+        match pw {
+            WidthUnit::Auto => style_parts.push("width: auto".to_string()),
+            WidthUnit::Twips(t) if *t > 0 => {
+                style_parts.push(format!("width: {:.1}pt", twips_to_points(*t)));
+            }
+            WidthUnit::Percent(bp) => {
+                let pct = *bp as f32 / 100.0;
+                style_parts.push(format!("width: {:.1}%", pct));
+            }
+            _ => {}
+        }
+    } else if let Some(width_twips) = cell.width_twips
         && width_twips > 0
     {
+        // Fall back to cellx-derived width
         let points = twips_to_points(width_twips);
         style_parts.push(format!("width: {:.1}pt", points));
+    }
+
+    // Handle explicit cell padding
+    if let Some(ref pad) = cell.padding {
+        let sides = [
+            ("padding-top", pad.top),
+            ("padding-right", pad.right),
+            ("padding-bottom", pad.bottom),
+            ("padding-left", pad.left),
+        ];
+        for (prop, maybe_val) in sides {
+            if let Some(v) = maybe_val {
+                style_parts.push(format!("{}: {:.1}pt", prop, twips_to_points(v)));
+            }
+        }
     }
 
     // Handle cell shading (background color)

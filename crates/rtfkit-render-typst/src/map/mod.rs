@@ -58,6 +58,13 @@ pub enum MappingWarning {
     MalformedPngImagePayload,
     /// Image payload bytes are malformed for the declared JPEG format.
     MalformedJpegImagePayload,
+    /// A feature has partial support in Typst (best-effort mapping, no content loss).
+    PartialSupport {
+        /// The feature name (e.g., "exact row height").
+        feature: String,
+        /// Human-readable reason for the degradation.
+        reason: String,
+    },
 }
 
 impl MappingWarning {
@@ -73,6 +80,9 @@ impl MappingWarning {
             }
             Self::MalformedPngImagePayload => "Dropped malformed PNG image payload".to_string(),
             Self::MalformedJpegImagePayload => "Dropped malformed JPEG image payload".to_string(),
+            Self::PartialSupport { feature, .. } => {
+                format!("partial_support_{}", feature.replace(' ', "_"))
+            }
         }
     }
 
@@ -86,6 +96,8 @@ impl MappingWarning {
             }
             // Pattern degradation is partial support (not dropped content).
             Self::PatternDegraded { .. } => WarningKind::PartialSupport,
+            // Explicit partial support variant.
+            Self::PartialSupport { .. } => WarningKind::PartialSupport,
             // Remaining current mapper degradations are partial support.
             _ => WarningKind::PartialSupport,
         }

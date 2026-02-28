@@ -1,0 +1,92 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Centered",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320
+            }
+          ],
+          "row_props": {
+            "alignment": "center",
+            "left_indent": 720
+          }
+        },
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Right",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320
+            }
+          ],
+          "row_props": {
+            "alignment": "right"
+          }
+        },
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Left-indent",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320
+            }
+          ],
+          "row_props": {
+            "alignment": "left",
+            "left_indent": 360
+          }
+        }
+      ]
+    }
+  ]
+}

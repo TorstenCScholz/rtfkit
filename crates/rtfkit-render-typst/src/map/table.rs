@@ -32,9 +32,9 @@
 
 use rtfkit_core::{
     Border as IrBorder, BorderSet as IrBorderSet, BorderStyle as IrBorderStyle, CellMerge, Color,
-    ShadingPattern, ShadingRenderPolicy, TableBlock as IrTableBlock, TableCell as IrTableCell,
-    TableRow as IrTableRow, percent_pattern_density, resolve_effective_cell_borders,
-    resolve_shading_fill_color,
+    RowAlignment, RowHeightRule, ShadingPattern, ShadingRenderPolicy, TableBlock as IrTableBlock,
+    TableCell as IrTableCell, TableRow as IrTableRow, WidthUnit, percent_pattern_density,
+    resolve_effective_cell_borders, resolve_shading_fill_color,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -64,6 +64,8 @@ struct CellInfo {
     fill_color: Option<Color>,
     /// Cell border set (from borders IR field).
     borders: Option<IrBorderSet>,
+    /// Cell padding per side (top, right, bottom, left) in twips.
+    padding: Option<[Option<i32>; 4]>,
 }
 
 type RowspanMap = HashMap<(usize, usize), u32>;
@@ -117,13 +119,88 @@ pub(crate) fn map_table_with_assets(
     let column_count = calculate_column_count(&rows);
     let column_widths = calculate_column_widths(&rows, column_count, &mut warnings);
 
+    // Collect row heights
+    let row_heights: Vec<Option<(i32, RowHeightRule)>> = table
+        .rows
+        .iter()
+        .map(|r| {
+            r.row_props
+                .as_ref()
+                .and_then(|rp| rp.height_twips.zip(rp.height_rule))
+        })
+        .collect();
+
+    // Preferred table width from TableProps
+    let preferred_table_width = table.table_props.as_ref().and_then(|tp| tp.preferred_width);
+
+    // Layout properties from first row
+    let first_row_props = table.rows.first().and_then(|r| r.row_props.as_ref());
+    let alignment = first_row_props.and_then(|rp| rp.alignment);
+    let left_indent = first_row_props.and_then(|rp| rp.left_indent);
+    let cell_gap = first_row_props.and_then(|rp| rp.cell_gap_twips);
+
+    // Warn about Exact row height (best-effort only)
+    if row_heights
+        .iter()
+        .any(|h| matches!(h, Some((_, RowHeightRule::Exact))))
+    {
+        warnings.push(MappingWarning::PartialSupport {
+            feature: "exact row height".to_string(),
+            reason: "Typst rows are at-least by default; exact height not representable"
+                .to_string(),
+        });
+    }
+
     // Generate Typst source
-    let typst_source = generate_table_source(&rows, &column_widths, column_count);
+    let table_source = generate_table_source(
+        &rows,
+        &column_widths,
+        column_count,
+        &row_heights,
+        cell_gap,
+        preferred_table_width,
+    );
+
+    // Wrap with alignment/indent
+    let typst_source = wrap_table_with_layout(table_source, alignment, left_indent, &mut warnings);
 
     TableOutput {
         typst_source,
         warnings,
     }
+}
+
+/// Wrap the table source with alignment and indent wrappers as needed.
+fn wrap_table_with_layout(
+    table_source: String,
+    alignment: Option<RowAlignment>,
+    left_indent: Option<i32>,
+    _warnings: &mut Vec<MappingWarning>,
+) -> String {
+    if table_source.is_empty() {
+        return table_source;
+    }
+    let mut result = table_source;
+
+    // Apply indent (left_indent in twips)
+    if let Some(indent) = left_indent
+        && indent != 0
+    {
+        let pt = indent as f32 / 20.0;
+        result = format!("#pad(left: {:.1}pt)[\n{}\n]", pt, result);
+    }
+
+    // Apply alignment wrapper
+    let align_str = match alignment {
+        Some(RowAlignment::Center) => Some("center"),
+        Some(RowAlignment::Right) => Some("right"),
+        Some(RowAlignment::Left) | None => None,
+    };
+    if let Some(align) = align_str {
+        result = format!("#align({})[\n{}\n]", align, result);
+    }
+
+    result
 }
 
 /// Compute rowspan values for vertical merges.
@@ -341,6 +418,12 @@ fn map_cell(
         content_parts.join(" \\\n")
     };
 
+    // Capture cell padding
+    let padding = cell
+        .padding
+        .as_ref()
+        .map(|p| [p.top, p.right, p.bottom, p.left]);
+
     CellInfo {
         content,
         colspan,
@@ -348,6 +431,7 @@ fn map_cell(
         width_twips: cell.width_twips,
         fill_color,
         borders: effective_borders,
+        padding,
     }
 }
 
@@ -404,6 +488,9 @@ fn generate_table_source(
     rows: &[Vec<CellInfo>],
     column_widths: &[Option<f32>],
     column_count: usize,
+    row_heights: &[Option<(i32, RowHeightRule)>],
+    cell_gap: Option<i32>,
+    preferred_width: Option<WidthUnit>,
 ) -> String {
     if column_count == 0 {
         return String::new();
@@ -435,7 +522,42 @@ fn generate_table_source(
 
     lines.push("#table(".to_string());
     lines.push(format!("  {},", columns_spec));
-    lines.push("  rows: auto,".to_string());
+
+    // Row heights specification
+    let has_heights = row_heights.iter().any(|h| h.is_some());
+    if has_heights {
+        let height_specs: Vec<String> = row_heights
+            .iter()
+            .map(|h| match h {
+                Some((twips, _)) => format!("{:.1}pt", *twips as f32 / 20.0),
+                None => "auto".to_string(),
+            })
+            .collect();
+        lines.push(format!("  rows: ({}),", height_specs.join(", ")));
+    } else {
+        lines.push("  rows: auto,".to_string());
+    }
+
+    // Cell gap / gutter
+    if let Some(gap) = cell_gap
+        && gap > 0
+    {
+        let gap_pt = gap as f32 / 20.0;
+        lines.push(format!("  gutter: {:.1}pt,", gap_pt));
+    }
+
+    // Preferred table width (wrap in block)
+    let width_prefix = preferred_width.and_then(|pw| match pw {
+        WidthUnit::Auto => None,
+        WidthUnit::Twips(t) => {
+            let pt = t as f32 / 20.0;
+            Some(format!("#block(width: {:.1}pt)[", pt))
+        }
+        WidthUnit::Percent(bp) => {
+            let pct = bp as f32 / 100.0;
+            Some(format!("#block(width: {:.1}%)[", pct))
+        }
+    });
 
     // Generate cells
     let mut cell_entries = Vec::new();
@@ -473,6 +595,26 @@ fn generate_table_source(
                 }
             }
 
+            // Add inset parameter for cell padding
+            if let Some([top, right, bottom, left]) = cell.padding {
+                let mut inset_parts = Vec::new();
+                let sides = [
+                    ("top", top),
+                    ("right", right),
+                    ("bottom", bottom),
+                    ("left", left),
+                ];
+                for (side, maybe_val) in sides {
+                    if let Some(v) = maybe_val {
+                        let pt = v as f32 / 20.0;
+                        inset_parts.push(format!("{}: {:.1}pt", side, pt));
+                    }
+                }
+                if !inset_parts.is_empty() {
+                    params.push(format!("inset: ({})", inset_parts.join(", ")));
+                }
+            }
+
             let cell_spec = if !params.is_empty() {
                 format!("table.cell({}, [{}])", params.join(", "), cell.content)
             } else {
@@ -494,7 +636,23 @@ fn generate_table_source(
 
     lines.push(")".to_string());
 
-    lines.join("\n")
+    let table_str = lines.join("\n");
+
+    // Wrap in block if preferred width requested
+    if let Some(prefix) = width_prefix {
+        format!("{}\n{}\n]", prefix, table_str)
+    } else {
+        table_str
+    }
+}
+
+/// Convert an IR `MappingWarning::PartialSupport` helper.
+#[allow(dead_code)]
+fn partial_support_warning(feature: &str, reason: &str) -> MappingWarning {
+    MappingWarning::PartialSupport {
+        feature: feature.to_string(),
+        reason: reason.to_string(),
+    }
 }
 
 #[cfg(test)]

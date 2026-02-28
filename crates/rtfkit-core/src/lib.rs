@@ -519,9 +519,64 @@ pub enum RowAlignment {
     Right,
 }
 
+/// Preferred width unit for table or cell width.
+///
+/// RTF `\trftsWidth` / `\clftsWidth` selects the interpretation of the accompanying
+/// `\trwWidth` / `\clwWidth` value.
+///
+/// Serialized as an adjacently-tagged enum: `{"type": "twips", "value": 1440}`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+pub enum WidthUnit {
+    /// Width is automatic (writer determines best fit).
+    Auto,
+    /// Absolute width in twips (1/1440 inch).
+    Twips(i32),
+    /// Width as basis points (0–10000, where 10000 = 100%).
+    Percent(u16),
+}
+
+/// Rule for interpreting a row height value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RowHeightRule {
+    /// Row is at least `height_twips` tall (content can expand it).
+    AtLeast,
+    /// Row is exactly `height_twips` tall (content is clipped).
+    Exact,
+}
+
+/// Per-side spacing in twips (padding or margin).
+///
+/// Each side is independent and optional; absent sides fall through to writer defaults.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct BoxSpacingTwips {
+    /// Top spacing in twips.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top: Option<i32>,
+    /// Right spacing in twips.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub right: Option<i32>,
+    /// Bottom spacing in twips.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bottom: Option<i32>,
+    /// Left spacing in twips.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub left: Option<i32>,
+}
+
+impl BoxSpacingTwips {
+    /// Returns `true` if all sides are `None`.
+    pub fn is_empty(&self) -> bool {
+        self.top.is_none() && self.right.is_none() && self.bottom.is_none() && self.left.is_none()
+    }
+}
+
 /// Table row properties.
 ///
-/// Captures row-level formatting from RTF controls like `\trql`, `\trqr`, `\trqc`, `\trleft`.
+/// Captures row-level formatting from RTF controls like `\trql`, `\trqr`, `\trqc`, `\trleft`,
+/// `\trgaph`, `\trrh`, `\trpadd*`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct RowProps {
@@ -531,6 +586,18 @@ pub struct RowProps {
     /// Left indent in twips (from `\trleft`)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub left_indent: Option<i32>,
+    /// Inter-cell gap in twips (full gap, normalized from `\trgaphN` half-gap * 2).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cell_gap_twips: Option<i32>,
+    /// Row height rule (from `\trrhN` sign).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height_rule: Option<RowHeightRule>,
+    /// Row height in twips (absolute value of `\trrhN`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height_twips: Option<i32>,
+    /// Row-default cell padding (from `\trpadd*`); cells may override per-side.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_padding: Option<BoxSpacingTwips>,
     /// Row-level shading (default for cells in this row)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shading: Option<Shading>,
@@ -549,6 +616,9 @@ pub struct TableProps {
     /// Table-level border defaults.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub borders: Option<BorderSet>,
+    /// Preferred table width (from `\trftsWidth` + `\trwWidth`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preferred_width: Option<WidthUnit>,
 }
 
 /// A contiguous run of text with uniform formatting.
@@ -810,6 +880,8 @@ impl ListBlock {
 ///                     v_align: None,
 ///                     shading: None,
 ///                     borders: None,
+///                     preferred_width: None,
+///                     padding: None,
 ///                 },
 ///             ],
 ///             row_props: None,
@@ -935,6 +1007,12 @@ pub struct TableCell {
     /// Per-side cell borders.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub borders: Option<BorderSet>,
+    /// Preferred cell width (from `\clftsWidth` + `\clwWidth`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preferred_width: Option<WidthUnit>,
+    /// Explicit cell padding overriding row default (from `\clpad*`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub padding: Option<BoxSpacingTwips>,
 }
 
 impl TableCell {
@@ -952,6 +1030,8 @@ impl TableCell {
             v_align: None,
             shading: None,
             borders: None,
+            preferred_width: None,
+            padding: None,
         }
     }
 
@@ -964,6 +1044,8 @@ impl TableCell {
             v_align: None,
             shading: None,
             borders: None,
+            preferred_width: None,
+            padding: None,
         }
     }
 
@@ -976,6 +1058,8 @@ impl TableCell {
             v_align: None,
             shading: None,
             borders: None,
+            preferred_width: None,
+            padding: None,
         }
     }
 

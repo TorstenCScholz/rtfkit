@@ -1,0 +1,166 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Abs1",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320,
+              "preferred_width": {
+                "type": "twips",
+                "value": 4320
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Abs2",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320,
+              "preferred_width": {
+                "type": "twips",
+                "value": 4320
+              }
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Pct1",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320,
+              "preferred_width": {
+                "type": "percent",
+                "value": 2500
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Pct2",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320,
+              "preferred_width": {
+                "type": "percent",
+                "value": 2500
+              }
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Auto1",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320,
+              "preferred_width": {
+                "type": "auto"
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Auto2",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320
+            }
+          ]
+        }
+      ],
+      "table_props": {
+        "preferred_width": {
+          "type": "twips",
+          "value": 8640
+        }
+      }
+    }
+  ]
+}

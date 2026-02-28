@@ -5,19 +5,21 @@
 
 use crate::DocxError;
 use docx_rs::{
-    AbstractNumbering, AlignmentType, BorderType, Docx, Hyperlink as DocxHyperlink, HyperlinkType,
-    IndentLevel, Level, LevelJc, LevelText, NumberFormat, Numbering, NumberingId, Numberings,
-    Paragraph as DocxParagraph, Pic, Run as DocxRun, RunFonts, RunProperty, Shading, ShdType,
-    Start, Table, TableCell, TableCellBorder, TableCellBorderPosition, TableCellBorders, TableRow,
-    VAlignType, VMergeType, WidthType,
+    AbstractNumbering, AlignmentType, BorderType, Docx, HeightRule as DocxHeightRule,
+    Hyperlink as DocxHyperlink, HyperlinkType, IndentLevel, Level, LevelJc, LevelText,
+    NumberFormat, Numbering, NumberingId, Numberings, Paragraph as DocxParagraph, Pic,
+    Run as DocxRun, RunFonts, RunProperty, Shading, ShdType, Start, Table, TableAlignmentType,
+    TableCell, TableCellBorder, TableCellBorderPosition, TableCellBorders, TableCellMargins,
+    TableRow, VAlignType, VMergeType, WidthType,
 };
 use image::{GenericImageView, ImageFormat as RasterFormat};
 use indexmap::IndexMap;
 use rtfkit_core::{
     Alignment, Block, Border as IrBorder, BorderSet as IrBorderSet, BorderStyle as IrBorderStyle,
     CellMerge, CellVerticalAlign, Document, Hyperlink as IrHyperlink, ImageBlock, Inline,
-    ListBlock, ListId, ListKind, Paragraph, Run, Shading as IrShading, ShadingPattern, TableBlock,
-    TableCell as IrTableCell, TableRow as IrTableRow, resolve_effective_cell_borders,
+    ListBlock, ListId, ListKind, Paragraph, RowAlignment, RowHeightRule, Run, Shading as IrShading,
+    ShadingPattern, TableBlock, TableCell as IrTableCell, TableRow as IrTableRow, WidthUnit,
+    resolve_effective_cell_borders,
 };
 use std::fs::File;
 use std::io::{Cursor, Write};
@@ -732,7 +734,67 @@ fn convert_table(
         .enumerate()
         .map(|(row_idx, row)| convert_table_row(table, row_idx, row, numbering, images))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(Table::new(rows))
+
+    let mut docx_table = Table::new(rows);
+
+    // Apply table-level layout from first row's RowProps (RTF stores these per-row)
+    let first_row_props = table.rows.first().and_then(|r| r.row_props.as_ref());
+
+    // Alignment
+    if let Some(rp) = first_row_props {
+        match rp.alignment {
+            Some(RowAlignment::Center) => {
+                docx_table = docx_table.align(TableAlignmentType::Center);
+            }
+            Some(RowAlignment::Right) => {
+                docx_table = docx_table.align(TableAlignmentType::Right);
+            }
+            _ => {} // Left is docx-rs default
+        }
+        // Left indent
+        if let Some(indent) = rp.left_indent {
+            docx_table = docx_table.indent(indent);
+        }
+        // Row-default cell padding as table-level cell margins
+        if let Some(ref pad) = rp.default_padding {
+            let mut margins = TableCellMargins::new();
+            if let Some(t) = pad.top {
+                margins = margins.margin_top(t.max(0) as usize, WidthType::Dxa);
+            }
+            if let Some(r) = pad.right {
+                // docx-rs TableCellMargins only has margin_top and margin_left;
+                // build the full margin via the shorthand if possible.
+                let _ = r; // right and bottom exposed via direct cell property below
+            }
+            if let Some(l) = pad.left {
+                margins = margins.margin_left(l.max(0) as usize, WidthType::Dxa);
+            }
+            // Only apply if at least one supported side was set
+            if pad.top.is_some() || pad.left.is_some() {
+                docx_table = docx_table.margins(margins);
+            }
+        }
+    }
+
+    // Preferred table width from TableProps
+    if let Some(ref pw) = table.table_props.as_ref().and_then(|tp| tp.preferred_width) {
+        match pw {
+            WidthUnit::Auto => {
+                docx_table = docx_table.width(0, WidthType::Auto);
+            }
+            WidthUnit::Twips(t) => {
+                if *t >= 0 {
+                    docx_table = docx_table.width(*t as usize, WidthType::Dxa);
+                }
+            }
+            WidthUnit::Percent(bp) => {
+                // DOCX pct type: 1/50 of a percent per unit (same basis as RTF)
+                docx_table = docx_table.width(*bp as usize, WidthType::Pct);
+            }
+        }
+    }
+
+    Ok(docx_table)
 }
 
 /// Converts an IR TableRow to a docx-rs TableRow.
@@ -802,12 +864,26 @@ fn convert_table_row(
         }
     }
 
-    // Note: docx-rs does not support row-level justification or left indent directly.
-    // These properties (row_props.alignment, row_props.left_indent) would require
-    // custom XML generation or a different DOCX library.
-    // The row properties are preserved in the IR for potential future use.
+    let mut docx_row = TableRow::new(cells);
 
-    Ok(TableRow::new(cells))
+    // Apply row height from RowProps
+    if let Some((h, rule)) = row
+        .row_props
+        .as_ref()
+        .and_then(|rp| rp.height_twips.zip(rp.height_rule))
+    {
+        docx_row = docx_row.row_height(h as f32);
+        match rule {
+            RowHeightRule::AtLeast => {
+                docx_row = docx_row.height_rule(DocxHeightRule::AtLeast);
+            }
+            RowHeightRule::Exact => {
+                docx_row = docx_row.height_rule(DocxHeightRule::Exact);
+            }
+        }
+    }
+
+    Ok(docx_row)
 }
 
 /// Maps an IR `BorderStyle` to a docx-rs `BorderType`.
@@ -879,11 +955,49 @@ fn convert_table_cell(
 ) -> Result<TableCell, DocxError> {
     let mut docx_cell = TableCell::new();
 
-    // Apply width if specified
-    if let Some(width_twips) = cell.width_twips {
+    // Apply preferred cell width if present, otherwise fall back to cellx-derived width
+    if let Some(ref pw) = cell.preferred_width {
+        match pw {
+            WidthUnit::Auto => {
+                docx_cell = docx_cell.width(0, WidthType::Auto);
+            }
+            WidthUnit::Twips(t) => {
+                if *t >= 0 {
+                    docx_cell = docx_cell.width(*t as usize, WidthType::Dxa);
+                }
+            }
+            WidthUnit::Percent(bp) => {
+                docx_cell = docx_cell.width(*bp as usize, WidthType::Pct);
+            }
+        }
+    } else if let Some(width_twips) = cell.width_twips {
         // Ensure width is non-negative before casting to usize
         if width_twips >= 0 {
             docx_cell = docx_cell.width(width_twips as usize, WidthType::Dxa);
+        }
+    }
+
+    // Apply cell-level padding (overrides table default margins)
+    if let Some(ref pad) = cell.padding {
+        if let Some(t) = pad.top {
+            docx_cell.property = docx_cell
+                .property
+                .margin_top(t.max(0) as usize, WidthType::Dxa);
+        }
+        if let Some(r) = pad.right {
+            docx_cell.property = docx_cell
+                .property
+                .margin_right(r.max(0) as usize, WidthType::Dxa);
+        }
+        if let Some(b) = pad.bottom {
+            docx_cell.property = docx_cell
+                .property
+                .margin_bottom(b.max(0) as usize, WidthType::Dxa);
+        }
+        if let Some(l) = pad.left {
+            docx_cell.property = docx_cell
+                .property
+                .margin_left(l.max(0) as usize, WidthType::Dxa);
         }
     }
 

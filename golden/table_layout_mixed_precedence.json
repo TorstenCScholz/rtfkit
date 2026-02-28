@@ -1,0 +1,92 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Cell with explicit padding",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320,
+              "preferred_width": {
+                "type": "twips",
+                "value": 4320
+              },
+              "padding": {
+                "top": 144,
+                "right": 144,
+                "bottom": 144,
+                "left": 144
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Row default padding",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320,
+              "preferred_width": {
+                "type": "twips",
+                "value": 4320
+              },
+              "padding": {
+                "top": 72,
+                "right": 72,
+                "bottom": 72,
+                "left": 72
+              }
+            }
+          ],
+          "row_props": {
+            "alignment": "center",
+            "left_indent": 360,
+            "cell_gap_twips": 144,
+            "height_rule": "at_least",
+            "height_twips": 400,
+            "default_padding": {
+              "top": 72,
+              "right": 72,
+              "bottom": 72,
+              "left": 72
+            }
+          }
+        }
+      ],
+      "table_props": {
+        "preferred_width": {
+          "type": "twips",
+          "value": 8640
+        }
+      }
+    }
+  ]
+}

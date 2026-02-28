@@ -2,7 +2,49 @@
 
 use super::super::state::RuntimeState;
 use crate::error::ParseError;
-use crate::{Block, CellMerge, TableProps, TableRow};
+use crate::{Block, BoxSpacingTwips, CellMerge, RowHeightRule, TableProps, TableRow, WidthUnit};
+
+/// Resolve an (fts, w) pair into a `WidthUnit`.
+///
+/// RTF ftsWidth values:
+/// - 0 or 1: auto
+/// - 2: percent (units are 0.02% each, i.e. 5000 = 100%)
+/// - 3: twips/dxa (absolute)
+fn resolve_width_unit(
+    fts: Option<i32>,
+    w: Option<i32>,
+    word: &str,
+    state: &mut RuntimeState,
+) -> Option<WidthUnit> {
+    let fts_val = fts?; // if no fts, no preferred width
+    match fts_val {
+        0 | 1 => Some(WidthUnit::Auto),
+        2 => {
+            // Percent: RTF stores in units where 10000 = 100%
+            let pct = w.unwrap_or(0).clamp(0, 10000) as u16;
+            Some(WidthUnit::Percent(pct))
+        }
+        3 => {
+            let twips = w.unwrap_or(0);
+            Some(WidthUnit::Twips(twips))
+        }
+        _ => {
+            state.report_builder.unsupported_table_control(word);
+            None
+        }
+    }
+}
+
+/// Apply row-default padding precedence to a side value.
+///
+/// Returns `Some(v)` if the unit is dxa (3) or unset (treat as dxa).
+/// Returns `None` if unit is set to a non-dxa value (already warned at parse time).
+fn apply_padding_side(value: Option<i32>, fmt: Option<i32>) -> Option<i32> {
+    match fmt {
+        None | Some(3) => value,
+        _ => None, // unsupported unit, already warned
+    }
+}
 
 /// Finalize the current cell and attach it to the current row.
 pub fn finalize_current_cell(state: &mut RuntimeState) {
@@ -118,6 +160,57 @@ pub fn finalize_current_cell(state: &mut RuntimeState) {
             cell_with_props.borders = Some(borders);
         }
 
+        // Apply preferred cell width from per-cellx capture
+        let cell_fts = state
+            .tables
+            .pending_cell_fts_widths
+            .get(cell_index)
+            .copied()
+            .flatten();
+        let cell_w = state
+            .tables
+            .pending_cell_w_widths
+            .get(cell_index)
+            .copied()
+            .flatten();
+        if let Some(wu) = resolve_width_unit(cell_fts, cell_w, "clftswidth", state) {
+            cell_with_props.preferred_width = Some(wu);
+        }
+
+        // Apply cell padding (cell override of row default), per side
+        let row_padding = state.tables.pending_row_padding.clone();
+        let row_fmt = state.tables.pending_row_padding_fmt;
+        let cell_padding_capture = state
+            .tables
+            .pending_cell_padding_captures
+            .get(cell_index)
+            .cloned()
+            .unwrap_or_default();
+        let cell_padding_fmt = state
+            .tables
+            .pending_cell_padding_fmt_captures
+            .get(cell_index)
+            .copied()
+            .unwrap_or([None; 4]);
+        // Build effective padding: cell value overrides row default per side
+        let eff_top = apply_padding_side(cell_padding_capture.top, cell_padding_fmt[1])
+            .or_else(|| apply_padding_side(row_padding.top, row_fmt[1]));
+        let eff_right = apply_padding_side(cell_padding_capture.right, cell_padding_fmt[2])
+            .or_else(|| apply_padding_side(row_padding.right, row_fmt[2]));
+        let eff_bottom = apply_padding_side(cell_padding_capture.bottom, cell_padding_fmt[3])
+            .or_else(|| apply_padding_side(row_padding.bottom, row_fmt[3]));
+        let eff_left = apply_padding_side(cell_padding_capture.left, cell_padding_fmt[0])
+            .or_else(|| apply_padding_side(row_padding.left, row_fmt[0]));
+        let eff_padding = BoxSpacingTwips {
+            top: eff_top,
+            right: eff_right,
+            bottom: eff_bottom,
+            left: eff_left,
+        };
+        if !eff_padding.is_empty() {
+            cell_with_props.padding = Some(eff_padding);
+        }
+
         if let Some(ref mut row) = state.tables.current_row {
             row.cells.push(cell_with_props);
         }
@@ -160,6 +253,33 @@ pub fn finalize_current_row(state: &mut RuntimeState) {
         if let Some(borders) = super::borders::build_border_set_from_row(&row_border_capture, state)
         {
             state.tables.pending_row_props.borders = Some(borders);
+        }
+
+        // Apply row height from \trrh (positive = AtLeast, negative = Exact, 0 = unset)
+        if let Some(raw) = state.tables.pending_row_height_raw {
+            if raw > 0 {
+                state.tables.pending_row_props.height_rule = Some(RowHeightRule::AtLeast);
+                state.tables.pending_row_props.height_twips = Some(raw);
+            } else if raw < 0 {
+                state.tables.pending_row_props.height_rule = Some(RowHeightRule::Exact);
+                state.tables.pending_row_props.height_twips = Some(-raw);
+            }
+            // raw == 0 → unset
+        }
+
+        // Apply row-default padding to RowProps if any side is set
+        {
+            let fmt = state.tables.pending_row_padding_fmt;
+            let raw = state.tables.pending_row_padding.clone();
+            let eff = BoxSpacingTwips {
+                top: apply_padding_side(raw.top, fmt[1]),
+                right: apply_padding_side(raw.right, fmt[2]),
+                bottom: apply_padding_side(raw.bottom, fmt[3]),
+                left: apply_padding_side(raw.left, fmt[0]),
+            };
+            if !eff.is_empty() {
+                state.tables.pending_row_props.default_padding = Some(eff);
+            }
         }
 
         // Apply pending row properties
@@ -367,16 +487,27 @@ pub fn finalize_current_table(state: &mut RuntimeState) {
     if let Some(mut table) = state.tables.current_table.take()
         && !table.is_empty()
     {
-        // Apply table-level shading to TableProps if present
-        if let Some(shading) = super::shading::build_shading(
+        // Resolve table-level preferred width from first-row \trftsWidth/\trwWidth
+        let table_preferred_width = resolve_width_unit(
+            state.tables.pending_table_fts_width,
+            state.tables.pending_table_w_width,
+            "trftswidth",
+            state,
+        );
+
+        // Apply table-level shading and preferred width to TableProps
+        let table_shading = super::shading::build_shading(
             state,
             state.tables.pending_table_cbpat,
             state.tables.pending_table_cfpat,
             state.tables.pending_table_shading,
-        ) {
+        );
+        if table_shading.is_some() || table_preferred_width.is_some() {
+            let existing = table.table_props.take().unwrap_or_default();
             table.table_props = Some(TableProps {
-                shading: Some(shading),
-                borders: None,
+                shading: table_shading.or(existing.shading),
+                borders: existing.borders,
+                preferred_width: table_preferred_width.or(existing.preferred_width),
             });
         }
         state.document.blocks.push(Block::TableBlock(table));

@@ -1,0 +1,56 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "A",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "B",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2880
+            }
+          ],
+          "row_props": {
+            "cell_gap_twips": 216
+          }
+        }
+      ]
+    }
+  ]
+}

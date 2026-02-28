@@ -59,9 +59,137 @@ pub fn handle_table_control_word(
             }
             true
         }
-        // Row formatting controls - recognized but not fully supported
+        // \trgaphN — inter-cell half-gap; normalize to full gap (2 * N)
         "trgaph" => {
-            state.report_builder.unsupported_table_control(word);
+            if let Some(n) = parameter {
+                state.tables.pending_row_props.cell_gap_twips = Some(n.max(0) * 2);
+            }
+            true
+        }
+
+        // Row height: positive = AtLeast, negative = Exact, zero = unset
+        "trrh" => {
+            state.tables.pending_row_height_raw = parameter;
+            true
+        }
+
+        // Table preferred width controls (first-row wins for table-level)
+        "trftswidth" => {
+            state.tables.pending_row_fts_width = parameter;
+            if state.tables.pending_table_fts_width.is_none() {
+                state.tables.pending_table_fts_width = parameter;
+            }
+            true
+        }
+        "trwwidth" => {
+            state.tables.pending_row_w_width = parameter;
+            if state.tables.pending_table_w_width.is_none() {
+                state.tables.pending_table_w_width = parameter;
+            }
+            true
+        }
+
+        // Cell preferred width controls
+        "clftswidth" => {
+            state.tables.pending_cell_fts_width = parameter;
+            true
+        }
+        "clwwidth" => {
+            state.tables.pending_cell_w_width = parameter;
+            true
+        }
+
+        // Row-default padding (sides: l=0, t=1, r=2, b=3)
+        "trpaddl" => {
+            state.tables.pending_row_padding.left = parameter;
+            true
+        }
+        "trpaddt" => {
+            state.tables.pending_row_padding.top = parameter;
+            true
+        }
+        "trpaddr" => {
+            state.tables.pending_row_padding.right = parameter;
+            true
+        }
+        "trpaddb" => {
+            state.tables.pending_row_padding.bottom = parameter;
+            true
+        }
+        // Row padding unit selectors — only dxa (3) supported; others warn and ignore
+        "trpaddfl" => {
+            if parameter != Some(3) {
+                state.report_builder.unsupported_table_control(word);
+            }
+            state.tables.pending_row_padding_fmt[0] = parameter;
+            true
+        }
+        "trpaddfr" => {
+            if parameter != Some(3) {
+                state.report_builder.unsupported_table_control(word);
+            }
+            state.tables.pending_row_padding_fmt[2] = parameter;
+            true
+        }
+        "trpaddft" => {
+            if parameter != Some(3) {
+                state.report_builder.unsupported_table_control(word);
+            }
+            state.tables.pending_row_padding_fmt[1] = parameter;
+            true
+        }
+        "trpaddfb" => {
+            if parameter != Some(3) {
+                state.report_builder.unsupported_table_control(word);
+            }
+            state.tables.pending_row_padding_fmt[3] = parameter;
+            true
+        }
+
+        // Cell padding
+        "clpadl" => {
+            state.tables.pending_cell_padding.left = parameter;
+            true
+        }
+        "clpadt" => {
+            state.tables.pending_cell_padding.top = parameter;
+            true
+        }
+        "clpadr" => {
+            state.tables.pending_cell_padding.right = parameter;
+            true
+        }
+        "clpadb" => {
+            state.tables.pending_cell_padding.bottom = parameter;
+            true
+        }
+        // Cell padding unit selectors — only dxa (3) supported; others warn and ignore
+        "clpadfl" => {
+            if parameter != Some(3) {
+                state.report_builder.unsupported_table_control(word);
+            }
+            state.tables.pending_cell_padding_fmt[0] = parameter;
+            true
+        }
+        "clpadfr" => {
+            if parameter != Some(3) {
+                state.report_builder.unsupported_table_control(word);
+            }
+            state.tables.pending_cell_padding_fmt[2] = parameter;
+            true
+        }
+        "clpadft" => {
+            if parameter != Some(3) {
+                state.report_builder.unsupported_table_control(word);
+            }
+            state.tables.pending_cell_padding_fmt[1] = parameter;
+            true
+        }
+        "clpadfb" => {
+            if parameter != Some(3) {
+                state.report_builder.unsupported_table_control(word);
+            }
+            state.tables.pending_cell_padding_fmt[3] = parameter;
             true
         }
 
@@ -293,6 +421,10 @@ pub fn handle_row_event(state: &mut RuntimeState) -> Result<(), ConversionError>
     state.tables.pending_cellx.clear();
     state.tables.pending_cell_merges.clear();
     state.tables.pending_cell_v_aligns.clear();
+    state.tables.pending_cell_fts_widths.clear();
+    state.tables.pending_cell_w_widths.clear();
+    state.tables.pending_cell_padding_captures.clear();
+    state.tables.pending_cell_padding_fmt_captures.clear();
     state.tables.seen_intbl_in_paragraph = false;
 
     Ok(())

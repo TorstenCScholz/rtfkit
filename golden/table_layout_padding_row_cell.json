@@ -1,0 +1,137 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Row default",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320,
+              "padding": {
+                "top": 72,
+                "right": 108,
+                "bottom": 72,
+                "left": 108
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Also default",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320,
+              "padding": {
+                "top": 72,
+                "right": 108,
+                "bottom": 72,
+                "left": 108
+              }
+            }
+          ],
+          "row_props": {
+            "default_padding": {
+              "top": 72,
+              "right": 108,
+              "bottom": 72,
+              "left": 108
+            }
+          }
+        },
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Cell override",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320,
+              "padding": {
+                "top": 144,
+                "right": 216,
+                "bottom": 144,
+                "left": 216
+              }
+            },
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Row default",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "font_family": "Times New Roman",
+                      "font_size": 12.0
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4320,
+              "padding": {
+                "top": 72,
+                "right": 108,
+                "bottom": 72,
+                "left": 108
+              }
+            }
+          ],
+          "row_props": {
+            "default_padding": {
+              "top": 72,
+              "right": 108,
+              "bottom": 72,
+              "left": 108
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
