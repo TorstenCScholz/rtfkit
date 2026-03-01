@@ -56,6 +56,8 @@ pub struct StructureState {
     pub sink: StructureSink,
     /// RTF group depth at which the current sink was entered.
     pub sink_group_depth: usize,
+    /// Stack of outer sinks for nested structure destinations.
+    pub sink_stack: Vec<(StructureSink, usize)>,
 
     // Header channel buffers
     pub header_default_blocks: Vec<Block>,
@@ -69,6 +71,8 @@ pub struct StructureState {
 
     /// Accumulates blocks for the note currently being parsed.
     pub note_blocks: Vec<Block>,
+    /// Saved note block buffers for nested note destinations.
+    pub note_blocks_stack: Vec<Vec<Block>>,
     /// Completed notes (footnotes and endnotes), in document order.
     pub completed_notes: Vec<Note>,
 
@@ -91,6 +95,7 @@ impl Default for StructureState {
         Self {
             sink: StructureSink::Body,
             sink_group_depth: 0,
+            sink_stack: Vec::new(),
             header_default_blocks: Vec::new(),
             header_first_blocks: Vec::new(),
             header_even_blocks: Vec::new(),
@@ -98,6 +103,7 @@ impl Default for StructureState {
             footer_first_blocks: Vec::new(),
             footer_even_blocks: Vec::new(),
             note_blocks: Vec::new(),
+            note_blocks_stack: Vec::new(),
             completed_notes: Vec::new(),
             next_note_id: 1,
             saved_paragraph_stack: Vec::new(),
@@ -108,6 +114,14 @@ impl Default for StructureState {
 impl StructureState {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Enter a new sink, preserving the current sink on the stack.
+    fn enter_sink(&mut self, sink: StructureSink, depth: usize) {
+        self.sink_stack
+            .push((self.sink.clone(), self.sink_group_depth));
+        self.sink = sink;
+        self.sink_group_depth = depth;
     }
 
     // =========================================================================
@@ -125,14 +139,12 @@ impl StructureState {
 
     /// Switch the sink to a header channel and record the group depth.
     pub fn enter_header(&mut self, kind: HeaderKind, depth: usize) {
-        self.sink = StructureSink::Header(kind);
-        self.sink_group_depth = depth;
+        self.enter_sink(StructureSink::Header(kind), depth);
     }
 
     /// Switch the sink to a footer channel and record the group depth.
     pub fn enter_footer(&mut self, kind: FooterKind, depth: usize) {
-        self.sink = StructureSink::Footer(kind);
-        self.sink_group_depth = depth;
+        self.enter_sink(StructureSink::Footer(kind), depth);
     }
 
     /// Switch the sink to a note channel, allocate an ID, and record the depth.
@@ -141,8 +153,15 @@ impl StructureState {
     pub fn enter_note(&mut self, kind: NoteKind, depth: usize) -> u32 {
         let id = self.next_note_id;
         self.next_note_id += 1;
-        self.sink = StructureSink::Note { id, kind };
-        self.sink_group_depth = depth;
+
+        if matches!(self.sink, StructureSink::Note { .. }) {
+            self.note_blocks_stack
+                .push(std::mem::take(&mut self.note_blocks));
+        } else {
+            self.note_blocks.clear();
+        }
+
+        self.enter_sink(StructureSink::Note { id, kind }, depth);
         id
     }
 
@@ -162,7 +181,20 @@ impl StructureState {
                     self.completed_notes.push(Note { id, kind, blocks });
                 }
             }
-            self.sink_group_depth = 0;
+
+            if let Some((previous_sink, previous_depth)) = self.sink_stack.pop() {
+                self.sink = previous_sink;
+                self.sink_group_depth = previous_depth;
+            } else {
+                self.sink = StructureSink::Body;
+                self.sink_group_depth = 0;
+            }
+
+            if matches!(self.sink, StructureSink::Note { .. }) {
+                self.note_blocks = self.note_blocks_stack.pop().unwrap_or_default();
+            } else {
+                self.note_blocks.clear();
+            }
             true
         } else {
             false

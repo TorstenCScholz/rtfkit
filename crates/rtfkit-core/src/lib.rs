@@ -1574,7 +1574,10 @@ impl Document {
 
     /// Creates a document from a vector of blocks.
     pub fn from_blocks(blocks: Vec<Block>) -> Self {
-        Self { blocks, structure: None }
+        Self {
+            blocks,
+            structure: None,
+        }
     }
 }
 

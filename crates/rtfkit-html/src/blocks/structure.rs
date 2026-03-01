@@ -38,9 +38,27 @@ fn emit_header_set(
     buf: &mut HtmlBuffer,
     dropped_content_reasons: &mut Vec<String>,
 ) {
-    emit_header_footer_channel(&set.default, "header", "rtf-header-default", buf, dropped_content_reasons);
-    emit_header_footer_channel(&set.first, "header", "rtf-header-first", buf, dropped_content_reasons);
-    emit_header_footer_channel(&set.even, "header", "rtf-header-even", buf, dropped_content_reasons);
+    emit_header_footer_channel(
+        &set.default,
+        "header",
+        "rtf-header-default",
+        buf,
+        dropped_content_reasons,
+    );
+    emit_header_footer_channel(
+        &set.first,
+        "header",
+        "rtf-header-first",
+        buf,
+        dropped_content_reasons,
+    );
+    emit_header_footer_channel(
+        &set.even,
+        "header",
+        "rtf-header-even",
+        buf,
+        dropped_content_reasons,
+    );
 }
 
 /// Emits a `HeaderFooterSet` as `<footer>` elements.
@@ -49,9 +67,27 @@ fn emit_footer_set(
     buf: &mut HtmlBuffer,
     dropped_content_reasons: &mut Vec<String>,
 ) {
-    emit_header_footer_channel(&set.default, "footer", "rtf-footer-default", buf, dropped_content_reasons);
-    emit_header_footer_channel(&set.first, "footer", "rtf-footer-first", buf, dropped_content_reasons);
-    emit_header_footer_channel(&set.even, "footer", "rtf-footer-even", buf, dropped_content_reasons);
+    emit_header_footer_channel(
+        &set.default,
+        "footer",
+        "rtf-footer-default",
+        buf,
+        dropped_content_reasons,
+    );
+    emit_header_footer_channel(
+        &set.first,
+        "footer",
+        "rtf-footer-first",
+        buf,
+        dropped_content_reasons,
+    );
+    emit_header_footer_channel(
+        &set.even,
+        "footer",
+        "rtf-footer-even",
+        buf,
+        dropped_content_reasons,
+    );
 }
 
 /// Emits a single header/footer channel as an HTML landmark element.
@@ -78,11 +114,7 @@ fn emit_header_footer_channel(
 /// Emits a `<section class="rtf-notes">` containing all note bodies.
 ///
 /// Skips emission when `notes` is empty.
-pub fn emit_notes(
-    notes: &[Note],
-    buf: &mut HtmlBuffer,
-    dropped_content_reasons: &mut Vec<String>,
-) {
+pub fn emit_notes(notes: &[Note], buf: &mut HtmlBuffer, dropped_content_reasons: &mut Vec<String>) {
     if notes.is_empty() {
         return;
     }

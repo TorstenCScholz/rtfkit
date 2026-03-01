@@ -136,9 +136,9 @@ pub fn handle_control_word(state: &mut RuntimeState, word: &str, parameter: Opti
         // =============================================================================
         "rtf" | "ansi" | "ansicpg" | "deflang" | "deflangfe" | "adeflang" | "result" | "hwid"
         | "emdash" | "endash" | "emspace" | "enspace" | "qmspace" | "bullet" | "lquote"
-        | "rquote" | "ldblquote" | "rdblquote" | "tab" | "sub" | "super"
-        | "nosupersub" | "outl" | "shad" | "expnd" | "expndtw" | "kerning"
-        | "charscalex" | "lang" | "langfe" | "langnp" | "langfenp" => {
+        | "rquote" | "ldblquote" | "rdblquote" | "tab" | "sub" | "super" | "nosupersub"
+        | "outl" | "shad" | "expnd" | "expndtw" | "kerning" | "charscalex" | "lang" | "langfe"
+        | "langnp" | "langfenp" => {
             // Silently ignore these structural/formatting control words
         }
 

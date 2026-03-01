@@ -6,21 +6,24 @@
 use crate::DocxError;
 use docx_rs::{
     AbstractNumbering, AlignmentType, BorderType, Docx, Footer as DocxFooter,
-    Header as DocxHeader, HeightRule as DocxHeightRule, Hyperlink as DocxHyperlink, HyperlinkType,
-    IndentLevel, Level, LevelJc, LevelText, NumberFormat, Numbering, NumberingId, Numberings,
-    Paragraph as DocxParagraph, Pic, Run as DocxRun, RunFonts, RunProperty, Shading, ShdType,
-    Start, Table, TableAlignmentType, TableCell, TableCellBorder, TableCellBorderPosition,
-    TableCellBorders, TableCellMargins, TableRow, VAlignType, VMergeType, VertAlignType, WidthType,
+    Footnote as DocxFootnote, Header as DocxHeader, HeightRule as DocxHeightRule,
+    Hyperlink as DocxHyperlink, HyperlinkType, IndentLevel, Level, LevelJc, LevelText,
+    NumberFormat, Numbering, NumberingId, Numberings, Paragraph as DocxParagraph, Pic,
+    Run as DocxRun, RunFonts, RunProperty, Shading, ShdType, Start, Table, TableAlignmentType,
+    TableCell, TableCellBorder, TableCellBorderPosition, TableCellBorders, TableCellMargins,
+    TableRow, VAlignType, VMergeType, VertAlignType, WidthType,
 };
 use image::{GenericImageView, ImageFormat as RasterFormat};
 use indexmap::IndexMap;
 use rtfkit_core::{
     Alignment, Block, Border as IrBorder, BorderSet as IrBorderSet, BorderStyle as IrBorderStyle,
-    CellMerge, CellVerticalAlign, Document, DocumentStructure, HeaderFooterSet, Hyperlink as IrHyperlink,
-    HyperlinkTarget, ImageBlock, Inline, ListBlock, ListId, ListKind, Note, NoteRef as IrNoteRef,
-    Paragraph, RowAlignment, RowHeightRule, Run, Shading as IrShading, ShadingPattern, TableBlock,
-    TableCell as IrTableCell, TableRow as IrTableRow, WidthUnit, resolve_effective_cell_borders,
+    CellMerge, CellVerticalAlign, Document, DocumentStructure, HeaderFooterSet,
+    Hyperlink as IrHyperlink, HyperlinkTarget, ImageBlock, Inline, ListBlock, ListId, ListKind,
+    Note, NoteRef as IrNoteRef, Paragraph, RowAlignment, RowHeightRule, Run, Shading as IrShading,
+    ShadingPattern, TableBlock, TableCell as IrTableCell, TableRow as IrTableRow, WidthUnit,
+    resolve_effective_cell_borders,
 };
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{Cursor, Write};
 use std::path::Path;
@@ -220,6 +223,8 @@ impl Default for ImageAllocator {
     }
 }
 
+type NoteLookup = BTreeMap<u32, Note>;
+
 // =============================================================================
 // Unit Conversion Utilities
 // =============================================================================
@@ -307,6 +312,8 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
     let mut doc = Docx::new();
     let mut numbering = NumberingAllocator::new();
     let mut images = ImageAllocator::new();
+    let note_lookup = build_note_lookup(document.structure.as_ref());
+    let note_lookup = (!note_lookup.is_empty()).then_some(&note_lookup);
 
     // First pass: collect all list blocks (including nested table-cell lists)
     // and register them for deterministic numbering allocation.
@@ -326,7 +333,12 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
     for block in &document.blocks {
         match block {
             Block::Paragraph(para) => {
-                doc = doc.add_paragraph(convert_paragraph(para, &mut bookmark_id));
+                doc = doc.add_paragraph(convert_paragraph(
+                    para,
+                    &mut bookmark_id,
+                    &numbering,
+                    note_lookup,
+                ));
             }
             Block::ListBlock(list) => {
                 let num_id = numbering.register_list(list);
@@ -339,6 +351,8 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
                                     num_id,
                                     item.level,
                                     &mut bookmark_id,
+                                    &numbering,
+                                    note_lookup,
                                 );
                                 doc = doc.add_paragraph(paragraph);
                             }
@@ -355,6 +369,7 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
                                     &numbering,
                                     &mut images,
                                     &mut bookmark_id,
+                                    note_lookup,
                                 )?;
                                 doc = doc.add_table(table);
                             }
@@ -364,8 +379,13 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
                 }
             }
             Block::TableBlock(table) => {
-                let docx_table =
-                    convert_table(table, &numbering, &mut images, &mut bookmark_id)?;
+                let docx_table = convert_table(
+                    table,
+                    &numbering,
+                    &mut images,
+                    &mut bookmark_id,
+                    note_lookup,
+                )?;
                 doc = doc.add_table(docx_table);
             }
             Block::ImageBlock(image) => {
@@ -378,7 +398,7 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
 
     // Apply document structure (headers, footers)
     if let Some(ref s) = document.structure {
-        doc = apply_document_structure(doc, s, &numbering, &mut images)?;
+        doc = apply_document_structure(doc, s, &numbering, &mut images, note_lookup)?;
     }
 
     // Add numbering part if needed
@@ -415,9 +435,24 @@ fn register_lists_in_block(block: &Block, numbering: &mut NumberingAllocator) {
     }
 }
 
+fn build_note_lookup(structure: Option<&DocumentStructure>) -> NoteLookup {
+    let mut lookup = NoteLookup::new();
+    if let Some(structure) = structure {
+        for note in &structure.notes {
+            lookup.insert(note.id, note.clone());
+        }
+    }
+    lookup
+}
+
 /// Converts an IR paragraph to a docx-rs paragraph without numbering.
-fn convert_paragraph(para: &Paragraph, bookmark_id: &mut usize) -> DocxParagraph {
-    convert_paragraph_with_numbering(para, 0, 0, bookmark_id)
+fn convert_paragraph(
+    para: &Paragraph,
+    bookmark_id: &mut usize,
+    numbering: &NumberingAllocator,
+    note_lookup: Option<&NoteLookup>,
+) -> DocxParagraph {
+    convert_paragraph_with_numbering(para, 0, 0, bookmark_id, numbering, note_lookup)
 }
 
 /// Converts an IR paragraph to a docx-rs paragraph with optional numbering.
@@ -426,6 +461,8 @@ fn convert_paragraph_with_numbering(
     num_id: u32,
     level: u8,
     bookmark_id: &mut usize,
+    numbering: &NumberingAllocator,
+    note_lookup: Option<&NoteLookup>,
 ) -> DocxParagraph {
     let mut p = DocxParagraph::new();
 
@@ -466,7 +503,7 @@ fn convert_paragraph_with_numbering(
                 p = p.add_bookmark_end(id);
             }
             Inline::NoteRef(note_ref) => {
-                p = p.add_run(note_ref_to_docx_run(note_ref));
+                p = p.add_run(note_ref_to_docx_run(note_ref, numbering, note_lookup));
             }
         }
     }
@@ -474,15 +511,103 @@ fn convert_paragraph_with_numbering(
     p
 }
 
-/// Converts a NoteRef inline to a superscript docx-rs Run.
+/// Converts a NoteRef inline to a docx-rs footnote reference run.
 ///
-/// docx-rs does not expose a native footnote-reference element, so we render
-/// the note number as a superscript text run.  Endnotes are treated the same.
-fn note_ref_to_docx_run(note_ref: &IrNoteRef) -> DocxRun {
-    let _ = note_ref.kind; // both Footnote and Endnote get the same treatment
+/// Falls back to a superscript text run when the corresponding note body
+/// is unavailable.
+fn note_ref_to_docx_run(
+    note_ref: &IrNoteRef,
+    numbering: &NumberingAllocator,
+    note_lookup: Option<&NoteLookup>,
+) -> DocxRun {
+    if let Some(notes) = note_lookup
+        && let Some(note) = notes.get(&note_ref.id)
+    {
+        // docx-rs does not currently expose endnotes, so both kinds are emitted
+        // as footnote references to preserve note body content.
+        let footnote = note_to_docx_footnote(note, numbering);
+        return DocxRun::new().add_footnote_reference(footnote);
+    }
+
     let mut run = DocxRun::new().add_text(&note_ref.id.to_string());
     run.run_property = RunProperty::new().vert_align(VertAlignType::SuperScript);
     run
+}
+
+fn note_to_docx_footnote(note: &Note, numbering: &NumberingAllocator) -> DocxFootnote {
+    let mut footnote = DocxFootnote {
+        id: note.id as usize,
+        content: Vec::new(),
+    };
+    let mut bookmark_id = 0usize;
+    append_note_blocks_as_paragraphs(
+        &note.blocks,
+        numbering,
+        &mut bookmark_id,
+        &mut footnote.content,
+    );
+    footnote
+}
+
+fn append_note_blocks_as_paragraphs(
+    blocks: &[Block],
+    numbering: &NumberingAllocator,
+    bookmark_id: &mut usize,
+    out: &mut Vec<DocxParagraph>,
+) {
+    for block in blocks {
+        match block {
+            Block::Paragraph(para) => {
+                out.push(convert_paragraph(para, bookmark_id, numbering, None));
+            }
+            Block::ListBlock(list) => {
+                let num_id = numbering.num_id_for(list.list_id).unwrap_or(0);
+                for item in &list.items {
+                    for item_block in &item.blocks {
+                        match item_block {
+                            Block::Paragraph(para) => out.push(convert_paragraph_with_numbering(
+                                para,
+                                num_id,
+                                item.level,
+                                bookmark_id,
+                                numbering,
+                                None,
+                            )),
+                            Block::ListBlock(nested) => {
+                                append_note_blocks_as_paragraphs(
+                                    &[Block::ListBlock(nested.clone())],
+                                    numbering,
+                                    bookmark_id,
+                                    out,
+                                );
+                            }
+                            Block::TableBlock(table) => {
+                                for row in &table.rows {
+                                    for cell in &row.cells {
+                                        append_note_blocks_as_paragraphs(
+                                            &cell.blocks,
+                                            numbering,
+                                            bookmark_id,
+                                            out,
+                                        );
+                                    }
+                                }
+                            }
+                            Block::ImageBlock(_) => {}
+                        }
+                    }
+                }
+            }
+            Block::TableBlock(table) => {
+                for row in &table.rows {
+                    for cell in &row.cells {
+                        append_note_blocks_as_paragraphs(&cell.blocks, numbering, bookmark_id, out);
+                    }
+                }
+            }
+            Block::ImageBlock(_) => {}
+        }
+    }
 }
 
 // =============================================================================
@@ -497,16 +622,28 @@ fn blocks_to_docx_header(
     blocks: &[Block],
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
+    note_lookup: Option<&NoteLookup>,
 ) -> Result<DocxHeader, DocxError> {
     let mut header = DocxHeader::new();
     let mut bookmark_id: usize = 0;
     for block in blocks {
         match block {
             Block::Paragraph(para) => {
-                header = header.add_paragraph(convert_paragraph(para, &mut bookmark_id));
+                header = header.add_paragraph(convert_paragraph(
+                    para,
+                    &mut bookmark_id,
+                    numbering,
+                    note_lookup,
+                ));
             }
             Block::TableBlock(table) => {
-                header = header.add_table(convert_table(table, numbering, images, &mut bookmark_id)?);
+                header = header.add_table(convert_table(
+                    table,
+                    numbering,
+                    images,
+                    &mut bookmark_id,
+                    note_lookup,
+                )?);
             }
             Block::ListBlock(list) => {
                 let num_id = numbering.num_id_for(list.list_id).unwrap_or(0);
@@ -518,13 +655,17 @@ fn blocks_to_docx_header(
                                 num_id,
                                 item.level,
                                 &mut bookmark_id,
+                                numbering,
+                                note_lookup,
                             );
                             header = header.add_paragraph(p);
                         }
                     }
                 }
             }
-            Block::ImageBlock(_) => {} // Images in headers are rare; skip for now
+            Block::ImageBlock(image) => {
+                header = header.add_paragraph(convert_image_block(image, images)?);
+            }
         }
     }
     Ok(header)
@@ -535,16 +676,28 @@ fn blocks_to_docx_footer(
     blocks: &[Block],
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
+    note_lookup: Option<&NoteLookup>,
 ) -> Result<DocxFooter, DocxError> {
     let mut footer = DocxFooter::new();
     let mut bookmark_id: usize = 0;
     for block in blocks {
         match block {
             Block::Paragraph(para) => {
-                footer = footer.add_paragraph(convert_paragraph(para, &mut bookmark_id));
+                footer = footer.add_paragraph(convert_paragraph(
+                    para,
+                    &mut bookmark_id,
+                    numbering,
+                    note_lookup,
+                ));
             }
             Block::TableBlock(table) => {
-                footer = footer.add_table(convert_table(table, numbering, images, &mut bookmark_id)?);
+                footer = footer.add_table(convert_table(
+                    table,
+                    numbering,
+                    images,
+                    &mut bookmark_id,
+                    note_lookup,
+                )?);
             }
             Block::ListBlock(list) => {
                 let num_id = numbering.num_id_for(list.list_id).unwrap_or(0);
@@ -556,13 +709,17 @@ fn blocks_to_docx_footer(
                                 num_id,
                                 item.level,
                                 &mut bookmark_id,
+                                numbering,
+                                note_lookup,
                             );
                             footer = footer.add_paragraph(p);
                         }
                     }
                 }
             }
-            Block::ImageBlock(_) => {}
+            Block::ImageBlock(image) => {
+                footer = footer.add_paragraph(convert_image_block(image, images)?);
+            }
         }
     }
     Ok(footer)
@@ -592,26 +749,57 @@ fn apply_document_structure(
     structure: &DocumentStructure,
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
+    note_lookup: Option<&NoteLookup>,
 ) -> Result<Docx, DocxError> {
     // Default headers
     if !structure.headers.default.is_empty() {
-        doc = doc.header(blocks_to_docx_header(&structure.headers.default, numbering, images)?);
+        doc = doc.header(blocks_to_docx_header(
+            &structure.headers.default,
+            numbering,
+            images,
+            note_lookup,
+        )?);
     }
     if !structure.headers.first.is_empty() {
-        doc = doc.first_header(blocks_to_docx_header(&structure.headers.first, numbering, images)?);
+        doc = doc.first_header(blocks_to_docx_header(
+            &structure.headers.first,
+            numbering,
+            images,
+            note_lookup,
+        )?);
     }
     if !structure.headers.even.is_empty() {
-        doc = doc.even_header(blocks_to_docx_header(&structure.headers.even, numbering, images)?);
+        doc = doc.even_header(blocks_to_docx_header(
+            &structure.headers.even,
+            numbering,
+            images,
+            note_lookup,
+        )?);
     }
     // Default footers
     if !structure.footers.default.is_empty() {
-        doc = doc.footer(blocks_to_docx_footer(&structure.footers.default, numbering, images)?);
+        doc = doc.footer(blocks_to_docx_footer(
+            &structure.footers.default,
+            numbering,
+            images,
+            note_lookup,
+        )?);
     }
     if !structure.footers.first.is_empty() {
-        doc = doc.first_footer(blocks_to_docx_footer(&structure.footers.first, numbering, images)?);
+        doc = doc.first_footer(blocks_to_docx_footer(
+            &structure.footers.first,
+            numbering,
+            images,
+            note_lookup,
+        )?);
     }
     if !structure.footers.even.is_empty() {
-        doc = doc.even_footer(blocks_to_docx_footer(&structure.footers.even, numbering, images)?);
+        doc = doc.even_footer(blocks_to_docx_footer(
+            &structure.footers.even,
+            numbering,
+            images,
+            note_lookup,
+        )?);
     }
     Ok(doc)
 }
@@ -918,13 +1106,22 @@ fn convert_table(
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
     bookmark_id: &mut usize,
+    note_lookup: Option<&NoteLookup>,
 ) -> Result<Table, DocxError> {
     let rows: Vec<TableRow> = table
         .rows
         .iter()
         .enumerate()
         .map(|(row_idx, row)| {
-            convert_table_row(table, row_idx, row, numbering, images, bookmark_id)
+            convert_table_row(
+                table,
+                row_idx,
+                row,
+                numbering,
+                images,
+                bookmark_id,
+                note_lookup,
+            )
         })
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -1004,6 +1201,7 @@ fn convert_table_row(
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
     bookmark_id: &mut usize,
+    note_lookup: Option<&NoteLookup>,
 ) -> Result<TableRow, DocxError> {
     let mut cells = Vec::with_capacity(row.cells.len());
     let mut expected_continuations = 0usize;
@@ -1018,6 +1216,7 @@ fn convert_table_row(
                     numbering,
                     images,
                     bookmark_id,
+                    note_lookup,
                 )?);
                 expected_continuations = span.saturating_sub(1) as usize;
             }
@@ -1032,6 +1231,7 @@ fn convert_table_row(
                     numbering,
                     images,
                     bookmark_id,
+                    note_lookup,
                 )?);
             }
             Some(CellMerge::HorizontalContinue) if expected_continuations > 0 => {
@@ -1047,6 +1247,7 @@ fn convert_table_row(
                     numbering,
                     images,
                     bookmark_id,
+                    note_lookup,
                 )?);
             }
             _ => {
@@ -1057,6 +1258,7 @@ fn convert_table_row(
                     numbering,
                     images,
                     bookmark_id,
+                    note_lookup,
                 )?);
             }
         }
@@ -1151,6 +1353,7 @@ fn convert_table_cell(
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
     bookmark_id: &mut usize,
+    note_lookup: Option<&NoteLookup>,
 ) -> Result<TableCell, DocxError> {
     let mut docx_cell = TableCell::new();
 
@@ -1254,7 +1457,12 @@ fn convert_table_cell(
     for block in &cell.blocks {
         match block {
             Block::Paragraph(para) => {
-                docx_cell = docx_cell.add_paragraph(convert_paragraph(para, bookmark_id));
+                docx_cell = docx_cell.add_paragraph(convert_paragraph(
+                    para,
+                    bookmark_id,
+                    numbering,
+                    note_lookup,
+                ));
             }
             Block::ListBlock(list) => {
                 if let Some(num_id) = numbering.num_id_for(list.list_id) {
@@ -1267,6 +1475,8 @@ fn convert_table_cell(
                                         num_id,
                                         item.level,
                                         bookmark_id,
+                                        numbering,
+                                        note_lookup,
                                     );
                                     docx_cell = docx_cell.add_paragraph(paragraph);
                                 }
@@ -1283,6 +1493,7 @@ fn convert_table_cell(
                                         numbering,
                                         images,
                                         bookmark_id,
+                                        note_lookup,
                                     )?);
                                 }
                                 Block::ListBlock(_) => {}
@@ -1295,8 +1506,12 @@ fn convert_table_cell(
                         for item_block in &item.blocks {
                             match item_block {
                                 Block::Paragraph(para) => {
-                                    docx_cell = docx_cell
-                                        .add_paragraph(convert_paragraph(para, bookmark_id));
+                                    docx_cell = docx_cell.add_paragraph(convert_paragraph(
+                                        para,
+                                        bookmark_id,
+                                        numbering,
+                                        note_lookup,
+                                    ));
                                 }
                                 Block::ImageBlock(image) => {
                                     docx_cell = docx_cell
@@ -1308,6 +1523,7 @@ fn convert_table_cell(
                                         numbering,
                                         images,
                                         bookmark_id,
+                                        note_lookup,
                                     )?);
                                 }
                                 Block::ListBlock(_) => {}
@@ -1323,6 +1539,7 @@ fn convert_table_cell(
                     numbering,
                     images,
                     bookmark_id,
+                    note_lookup,
                 )?);
             }
             Block::ImageBlock(image) => {
@@ -1337,7 +1554,10 @@ fn convert_table_cell(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rtfkit_core::{ListItem, ListKind};
+    use rtfkit_core::{
+        Block, Document, DocumentStructure, HeaderFooterSet, ImageBlock, ImageFormat, Inline,
+        ListItem, ListKind, Note, NoteKind, NoteRef, Paragraph, Run,
+    };
     use std::io::Read;
 
     fn zip_entry_string(bytes: &[u8], entry_name: &str) -> String {
@@ -1351,6 +1571,16 @@ mod tests {
             .read_to_string(&mut xml)
             .expect("Failed to read ZIP entry as UTF-8 string");
         xml
+    }
+
+    fn tiny_png_bytes() -> Vec<u8> {
+        vec![
+            0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, b'I', b'H',
+            b'D', b'R', 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00,
+            0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, b'I', b'D', b'A', b'T', 0x78,
+            0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+            0x00, 0x00, 0x00, b'I', b'E', b'N', b'D', 0xAE, 0x42, 0x60, 0x82,
+        ]
     }
 
     // =========================================================================
@@ -3132,5 +3362,61 @@ mod tests {
         assert!(document_xml.contains("w:top"));
         assert!(document_xml.contains("w:bottom"));
         assert!(document_xml.contains("w:sz=\"16\""));
+    }
+
+    #[test]
+    fn note_ref_emits_docx_footnote_reference_and_body() {
+        let body_para = Paragraph::from_inlines(vec![
+            Inline::Run(Run::new("Body")),
+            Inline::NoteRef(NoteRef {
+                id: 1,
+                kind: NoteKind::Footnote,
+            }),
+        ]);
+        let note = Note {
+            id: 1,
+            kind: NoteKind::Footnote,
+            blocks: vec![Block::Paragraph(Paragraph::from_runs(vec![Run::new(
+                "Footnote body",
+            )]))],
+        };
+        let doc = Document {
+            blocks: vec![Block::Paragraph(body_para)],
+            structure: Some(DocumentStructure {
+                headers: HeaderFooterSet::default(),
+                footers: HeaderFooterSet::default(),
+                notes: vec![note],
+            }),
+        };
+
+        let bytes = super::write_docx_to_bytes(&doc).unwrap();
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        let footnotes_xml = zip_entry_string(&bytes, "word/footnotes.xml");
+
+        assert!(document_xml.contains("<w:footnoteReference w:id=\"1\""));
+        assert!(footnotes_xml.contains("Footnote body"));
+    }
+
+    #[test]
+    fn header_image_is_emitted_to_docx_header_xml() {
+        let image = ImageBlock::new(ImageFormat::Png, tiny_png_bytes());
+        let doc = Document {
+            blocks: vec![Block::Paragraph(Paragraph::from_runs(vec![Run::new(
+                "Body",
+            )]))],
+            structure: Some(DocumentStructure {
+                headers: HeaderFooterSet {
+                    default: vec![Block::ImageBlock(image)],
+                    first: Vec::new(),
+                    even: Vec::new(),
+                },
+                footers: HeaderFooterSet::default(),
+                notes: Vec::new(),
+            }),
+        };
+
+        let bytes = super::write_docx_to_bytes(&doc).unwrap();
+        let header_xml = zip_entry_string(&bytes, "word/header1.xml");
+        assert!(header_xml.contains("<w:drawing>"));
     }
 }

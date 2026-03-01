@@ -1,6 +1,6 @@
 {
   "fixture": "policy_doc_15p.rtf",
-  "description": "Policy handbook style fixture with heavy narrative, page breaks, tables, links, and footnotes.",
+  "description": "Policy handbook style fixture with heavy narrative, page breaks, tables, links, footnotes, and an endnote.",
   "expected_non_strict_exit": 0,
   "expected_strict_exit": 4,
   "required_warning_types": ["dropped_content"],

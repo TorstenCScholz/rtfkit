@@ -46,11 +46,23 @@ fn no_structure_when_absent() {
 fn header_default_captured() {
     let doc = parse_ok(r#"{\rtf1\ansi{\header Header text}Body}"#);
     let s = doc.structure.as_ref().expect("structure must be Some");
-    assert_eq!(s.headers.default.len(), 1, "default header should have one block");
+    assert_eq!(
+        s.headers.default.len(),
+        1,
+        "default header should have one block"
+    );
     if let Block::Paragraph(para) = &s.headers.default[0] {
-        let text: String = para.inlines.iter().filter_map(|i| {
-            if let Inline::Run(r) = i { Some(r.text.as_str()) } else { None }
-        }).collect();
+        let text: String = para
+            .inlines
+            .iter()
+            .filter_map(|i| {
+                if let Inline::Run(r) = i {
+                    Some(r.text.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
         assert_eq!(text, "Header text");
     } else {
         panic!("expected Paragraph block in header");
@@ -83,9 +95,17 @@ fn footer_default_captured() {
     let s = doc.structure.as_ref().expect("structure must be Some");
     assert_eq!(s.footers.default.len(), 1);
     if let Block::Paragraph(para) = &s.footers.default[0] {
-        let text: String = para.inlines.iter().filter_map(|i| {
-            if let Inline::Run(r) = i { Some(r.text.as_str()) } else { None }
-        }).collect();
+        let text: String = para
+            .inlines
+            .iter()
+            .filter_map(|i| {
+                if let Inline::Run(r) = i {
+                    Some(r.text.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
         assert_eq!(text, "Footer text");
     } else {
         panic!("expected Paragraph in footer");
@@ -129,11 +149,22 @@ fn footnote_inserts_note_ref_inline() {
     assert_eq!(s.notes.len(), 1);
     assert_eq!(s.notes[0].id, 1);
     assert_eq!(s.notes[0].kind, NoteKind::Footnote);
-    assert!(!s.notes[0].blocks.is_empty(), "note must have content blocks");
+    assert!(
+        !s.notes[0].blocks.is_empty(),
+        "note must have content blocks"
+    );
     if let Block::Paragraph(p) = &s.notes[0].blocks[0] {
-        let text: String = p.inlines.iter().filter_map(|i| {
-            if let Inline::Run(r) = i { Some(r.text.as_str()) } else { None }
-        }).collect();
+        let text: String = p
+            .inlines
+            .iter()
+            .filter_map(|i| {
+                if let Inline::Run(r) = i {
+                    Some(r.text.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
         assert_eq!(text, "Note body");
     }
 }
@@ -221,4 +252,40 @@ fn header_and_footnote_combined() {
         }
     }
     assert!(has_note_ref);
+}
+
+#[test]
+fn footnote_inside_header_keeps_header_routing() {
+    let doc = parse_ok(r#"{\rtf1\ansi{\header H1{\footnote FN}H2}Body}"#);
+    let s = doc.structure.as_ref().expect("structure must be Some");
+
+    // Header content before/after note remains in header sink
+    assert_eq!(
+        s.headers.default.len(),
+        1,
+        "header paragraph should be captured"
+    );
+    if let Block::Paragraph(para) = &s.headers.default[0] {
+        let text: String = para
+            .inlines
+            .iter()
+            .filter_map(|i| {
+                if let Inline::Run(r) = i {
+                    Some(r.text.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(text, "H1H2");
+    } else {
+        panic!("expected paragraph in header default");
+    }
+
+    // Body remains separate
+    assert_eq!(body_text(&doc), "Body");
+
+    // Note body is still captured
+    assert_eq!(s.notes.len(), 1);
+    assert_eq!(s.notes[0].kind, NoteKind::Footnote);
 }

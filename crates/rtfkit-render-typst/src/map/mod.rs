@@ -265,7 +265,11 @@ pub(crate) fn map_block(block: &IrBlock, assets: &mut TypstAssetAllocator) -> Bl
 }
 
 /// Generate the complete Typst document source.
-fn generate_document_source(block_sources: &[String], options: &RenderOptions, structure_page_setup: &str) -> String {
+fn generate_document_source(
+    block_sources: &[String],
+    options: &RenderOptions,
+    structure_page_setup: &str,
+) -> String {
     let mut lines = Vec::new();
 
     // Add style preamble from profile

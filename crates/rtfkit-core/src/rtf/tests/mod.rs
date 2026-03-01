@@ -15,8 +15,6 @@
 #[cfg(test)]
 mod destinations;
 #[cfg(test)]
-mod structure;
-#[cfg(test)]
 mod fields;
 #[cfg(test)]
 mod font_color;
@@ -30,6 +28,8 @@ mod lists;
 mod regression;
 #[cfg(test)]
 mod shading;
+#[cfg(test)]
+mod structure;
 #[cfg(test)]
 mod tables;
 #[cfg(test)]
