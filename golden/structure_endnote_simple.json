@@ -1,0 +1,63 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Body text",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        },
+        {
+          "type": "note_ref",
+          "id": 1,
+          "kind": "endnote"
+        },
+        {
+          "type": "run",
+          "text": ".",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        }
+      ]
+    }
+  ],
+  "structure": {
+    "headers": {},
+    "footers": {},
+    "notes": [
+      {
+        "id": 1,
+        "kind": "endnote",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "alignment": "left",
+            "inlines": [
+              {
+                "type": "run",
+                "text": "Endnote content",
+                "bold": false,
+                "italic": false,
+                "underline": false,
+                "strikethrough": false,
+                "small_caps": false,
+                "all_caps": false
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

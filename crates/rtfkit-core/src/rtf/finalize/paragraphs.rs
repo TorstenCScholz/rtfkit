@@ -55,11 +55,9 @@ pub fn finalize_paragraph(state: &mut RuntimeState) {
                 state.current_paragraph.clone(),
             );
         } else {
-            // Regular paragraph
-            state
-                .document
-                .blocks
-                .push(Block::Paragraph(state.current_paragraph.clone()));
+            // Regular paragraph — route to body or current structure sink.
+            let block = Block::Paragraph(state.current_paragraph.clone());
+            state.push_block_to_current_sink(block);
         }
 
         // Track stats

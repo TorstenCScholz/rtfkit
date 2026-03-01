@@ -5,21 +5,21 @@
 
 use crate::DocxError;
 use docx_rs::{
-    AbstractNumbering, AlignmentType, BorderType, Docx, HeightRule as DocxHeightRule,
-    Hyperlink as DocxHyperlink, HyperlinkType, IndentLevel, Level, LevelJc, LevelText,
-    NumberFormat, Numbering, NumberingId, Numberings, Paragraph as DocxParagraph, Pic,
-    Run as DocxRun, RunFonts, RunProperty, Shading, ShdType, Start, Table, TableAlignmentType,
-    TableCell, TableCellBorder, TableCellBorderPosition, TableCellBorders, TableCellMargins,
-    TableRow, VAlignType, VMergeType, WidthType,
+    AbstractNumbering, AlignmentType, BorderType, Docx, Footer as DocxFooter,
+    Header as DocxHeader, HeightRule as DocxHeightRule, Hyperlink as DocxHyperlink, HyperlinkType,
+    IndentLevel, Level, LevelJc, LevelText, NumberFormat, Numbering, NumberingId, Numberings,
+    Paragraph as DocxParagraph, Pic, Run as DocxRun, RunFonts, RunProperty, Shading, ShdType,
+    Start, Table, TableAlignmentType, TableCell, TableCellBorder, TableCellBorderPosition,
+    TableCellBorders, TableCellMargins, TableRow, VAlignType, VMergeType, VertAlignType, WidthType,
 };
 use image::{GenericImageView, ImageFormat as RasterFormat};
 use indexmap::IndexMap;
 use rtfkit_core::{
     Alignment, Block, Border as IrBorder, BorderSet as IrBorderSet, BorderStyle as IrBorderStyle,
-    CellMerge, CellVerticalAlign, Document, Hyperlink as IrHyperlink, HyperlinkTarget, ImageBlock,
-    Inline, ListBlock, ListId, ListKind, Paragraph, RowAlignment, RowHeightRule, Run,
-    Shading as IrShading, ShadingPattern, TableBlock, TableCell as IrTableCell,
-    TableRow as IrTableRow, WidthUnit, resolve_effective_cell_borders,
+    CellMerge, CellVerticalAlign, Document, DocumentStructure, HeaderFooterSet, Hyperlink as IrHyperlink,
+    HyperlinkTarget, ImageBlock, Inline, ListBlock, ListId, ListKind, Note, NoteRef as IrNoteRef,
+    Paragraph, RowAlignment, RowHeightRule, Run, Shading as IrShading, ShadingPattern, TableBlock,
+    TableCell as IrTableCell, TableRow as IrTableRow, WidthUnit, resolve_effective_cell_borders,
 };
 use std::fs::File;
 use std::io::{Cursor, Write};
@@ -313,6 +313,12 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
     for block in &document.blocks {
         register_lists_in_block(block, &mut numbering);
     }
+    // Also pre-register lists from structure (headers, footers, notes)
+    if let Some(ref s) = document.structure {
+        register_lists_in_header_footer_set(&s.headers, &mut numbering);
+        register_lists_in_header_footer_set(&s.footers, &mut numbering);
+        register_lists_in_notes(&s.notes, &mut numbering);
+    }
 
     // Second pass: convert blocks
     // Note: docx-rs handles hyperlink relationships internally
@@ -368,6 +374,11 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
                 doc = doc.add_paragraph(para);
             }
         }
+    }
+
+    // Apply document structure (headers, footers)
+    if let Some(ref s) = document.structure {
+        doc = apply_document_structure(doc, s, &numbering, &mut images)?;
     }
 
     // Add numbering part if needed
@@ -454,10 +465,155 @@ fn convert_paragraph_with_numbering(
                 p = p.add_bookmark_start(id, &anchor.name);
                 p = p.add_bookmark_end(id);
             }
+            Inline::NoteRef(note_ref) => {
+                p = p.add_run(note_ref_to_docx_run(note_ref));
+            }
         }
     }
 
     p
+}
+
+/// Converts a NoteRef inline to a superscript docx-rs Run.
+///
+/// docx-rs does not expose a native footnote-reference element, so we render
+/// the note number as a superscript text run.  Endnotes are treated the same.
+fn note_ref_to_docx_run(note_ref: &IrNoteRef) -> DocxRun {
+    let _ = note_ref.kind; // both Footnote and Endnote get the same treatment
+    let mut run = DocxRun::new().add_text(&note_ref.id.to_string());
+    run.run_property = RunProperty::new().vert_align(VertAlignType::SuperScript);
+    run
+}
+
+// =============================================================================
+// Document Structure (Headers / Footers / Footnotes)
+// =============================================================================
+
+/// Converts a slice of IR blocks to a DOCX `Header`.
+///
+/// Lists inside headers are registered with a temporary allocator and numbered
+/// independently from the body, which is acceptable for header content.
+fn blocks_to_docx_header(
+    blocks: &[Block],
+    numbering: &NumberingAllocator,
+    images: &mut ImageAllocator,
+) -> Result<DocxHeader, DocxError> {
+    let mut header = DocxHeader::new();
+    let mut bookmark_id: usize = 0;
+    for block in blocks {
+        match block {
+            Block::Paragraph(para) => {
+                header = header.add_paragraph(convert_paragraph(para, &mut bookmark_id));
+            }
+            Block::TableBlock(table) => {
+                header = header.add_table(convert_table(table, numbering, images, &mut bookmark_id)?);
+            }
+            Block::ListBlock(list) => {
+                let num_id = numbering.num_id_for(list.list_id).unwrap_or(0);
+                for item in &list.items {
+                    for item_block in &item.blocks {
+                        if let Block::Paragraph(para) = item_block {
+                            let p = convert_paragraph_with_numbering(
+                                para,
+                                num_id,
+                                item.level,
+                                &mut bookmark_id,
+                            );
+                            header = header.add_paragraph(p);
+                        }
+                    }
+                }
+            }
+            Block::ImageBlock(_) => {} // Images in headers are rare; skip for now
+        }
+    }
+    Ok(header)
+}
+
+/// Converts a slice of IR blocks to a DOCX `Footer`.
+fn blocks_to_docx_footer(
+    blocks: &[Block],
+    numbering: &NumberingAllocator,
+    images: &mut ImageAllocator,
+) -> Result<DocxFooter, DocxError> {
+    let mut footer = DocxFooter::new();
+    let mut bookmark_id: usize = 0;
+    for block in blocks {
+        match block {
+            Block::Paragraph(para) => {
+                footer = footer.add_paragraph(convert_paragraph(para, &mut bookmark_id));
+            }
+            Block::TableBlock(table) => {
+                footer = footer.add_table(convert_table(table, numbering, images, &mut bookmark_id)?);
+            }
+            Block::ListBlock(list) => {
+                let num_id = numbering.num_id_for(list.list_id).unwrap_or(0);
+                for item in &list.items {
+                    for item_block in &item.blocks {
+                        if let Block::Paragraph(para) = item_block {
+                            let p = convert_paragraph_with_numbering(
+                                para,
+                                num_id,
+                                item.level,
+                                &mut bookmark_id,
+                            );
+                            footer = footer.add_paragraph(p);
+                        }
+                    }
+                }
+            }
+            Block::ImageBlock(_) => {}
+        }
+    }
+    Ok(footer)
+}
+
+/// Registers lists from a `HeaderFooterSet` for numbering pre-allocation.
+fn register_lists_in_header_footer_set(set: &HeaderFooterSet, numbering: &mut NumberingAllocator) {
+    for blocks in [&set.default, &set.first, &set.even] {
+        for block in blocks {
+            register_lists_in_block(block, numbering);
+        }
+    }
+}
+
+/// Registers lists from structure notes for numbering pre-allocation.
+fn register_lists_in_notes(notes: &[Note], numbering: &mut NumberingAllocator) {
+    for note in notes {
+        for block in &note.blocks {
+            register_lists_in_block(block, numbering);
+        }
+    }
+}
+
+/// Applies all structure headers/footers to the Docx builder.
+fn apply_document_structure(
+    mut doc: Docx,
+    structure: &DocumentStructure,
+    numbering: &NumberingAllocator,
+    images: &mut ImageAllocator,
+) -> Result<Docx, DocxError> {
+    // Default headers
+    if !structure.headers.default.is_empty() {
+        doc = doc.header(blocks_to_docx_header(&structure.headers.default, numbering, images)?);
+    }
+    if !structure.headers.first.is_empty() {
+        doc = doc.first_header(blocks_to_docx_header(&structure.headers.first, numbering, images)?);
+    }
+    if !structure.headers.even.is_empty() {
+        doc = doc.even_header(blocks_to_docx_header(&structure.headers.even, numbering, images)?);
+    }
+    // Default footers
+    if !structure.footers.default.is_empty() {
+        doc = doc.footer(blocks_to_docx_footer(&structure.footers.default, numbering, images)?);
+    }
+    if !structure.footers.first.is_empty() {
+        doc = doc.first_footer(blocks_to_docx_footer(&structure.footers.first, numbering, images)?);
+    }
+    if !structure.footers.even.is_empty() {
+        doc = doc.even_footer(blocks_to_docx_footer(&structure.footers.even, numbering, images)?);
+    }
+    Ok(doc)
 }
 
 /// Converts an IR Hyperlink to a docx-rs Hyperlink.
@@ -2928,6 +3084,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
         let doc = rtfkit_core::Document {
             blocks: vec![rtfkit_core::Block::TableBlock(table)],
+            structure: None,
         };
 
         // Should not panic
@@ -2966,6 +3123,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![row]);
         let doc = rtfkit_core::Document {
             blocks: vec![rtfkit_core::Block::TableBlock(table)],
+            structure: None,
         };
         let bytes = super::write_docx_to_bytes(&doc).unwrap();
         let document_xml = zip_entry_string(&bytes, "word/document.xml");

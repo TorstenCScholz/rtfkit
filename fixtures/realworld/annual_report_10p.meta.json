@@ -4,7 +4,7 @@
   "expected_non_strict_exit": 0,
   "expected_strict_exit": 4,
   "required_warning_types": ["dropped_content"],
-  "required_dropped_reasons": ["Dropped unsupported RTF destination content"],
+  "required_dropped_reasons": ["Dropped unknown destination group \\generator"],
   "min_docx_bytes": 18000,
   "min_html_bytes": 7000
 }

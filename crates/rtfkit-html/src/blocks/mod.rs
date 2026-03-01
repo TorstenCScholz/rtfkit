@@ -6,6 +6,7 @@
 pub mod image;
 pub mod list;
 pub mod paragraph;
+pub mod structure;
 pub mod table;
 
 // Re-export public functions for convenience

@@ -5,7 +5,9 @@
 
 use super::events::RtfEvent;
 use super::state::RuntimeState;
+use super::state_structure::{FooterKind, HeaderKind};
 use crate::error::{ConversionError, ParseError};
+use crate::{Inline, NoteKind, NoteRef};
 
 // =============================================================================
 // Destination Behavior Classification
@@ -42,6 +44,14 @@ pub enum DestinationBehavior {
     BkmkStart,
     /// Bookmark end destination - silently skip (no visible content)
     BkmkEnd,
+    /// Header destination — redirect blocks to a header channel
+    Header(HeaderKind),
+    /// Footer destination — redirect blocks to a footer channel
+    Footer(FooterKind),
+    /// Footnote destination — emit NoteRef inline, redirect note body
+    Footnote,
+    /// Endnote destination — emit NoteRef inline, redirect note body
+    Endnote,
 }
 
 // =============================================================================
@@ -76,9 +86,19 @@ pub fn destination_behavior(word: &str) -> Option<DestinationBehavior> {
         // Bookmark destinations - need special handling to emit BookmarkAnchor inlines
         "bkmkstart" => Some(DestinationBehavior::BkmkStart),
         "bkmkend" => Some(DestinationBehavior::BkmkEnd),
+        // Header destinations — redirect blocks to header channels
+        "header" | "headerr" => Some(DestinationBehavior::Header(HeaderKind::Default)),
+        "headerl" => Some(DestinationBehavior::Header(HeaderKind::Even)),
+        "headerf" => Some(DestinationBehavior::Header(HeaderKind::First)),
+        // Footer destinations — redirect blocks to footer channels
+        "footer" | "footerr" => Some(DestinationBehavior::Footer(FooterKind::Default)),
+        "footerl" => Some(DestinationBehavior::Footer(FooterKind::Even)),
+        "footerf" => Some(DestinationBehavior::Footer(FooterKind::First)),
+        // Note destinations — emit NoteRef inline, redirect note body
+        "footnote" => Some(DestinationBehavior::Footnote),
+        "endnote" => Some(DestinationBehavior::Endnote),
         // Destinations that represent currently unsupported visible content.
-        "obj" | "objclass" | "objdata" | "picprop" | "datafield" | "header" | "headerl"
-        | "headerr" | "footer" | "footerl" | "footerr" | "footnote" | "annotation" | "pn"
+        "obj" | "objclass" | "objdata" | "picprop" | "datafield" | "annotation" | "pn"
         | "pntext" | "pntxtb" | "pntxta" | "pnseclvl" => Some(DestinationBehavior::Dropped(
             "Dropped unsupported RTF destination content",
         )),
@@ -182,6 +202,55 @@ pub fn maybe_start_destination(state: &mut RuntimeState, word: &str) -> bool {
             DestinationBehavior::BkmkEnd => {
                 // No visible content in bkmkend; silently skip
                 state.destinations.enter_destination();
+            }
+            DestinationBehavior::Header(kind) => {
+                // Save body paragraph state so content before this group stays
+                // in the body, and content after the group resumes correctly.
+                super::handlers_text::flush_current_text_as_run(state);
+                let saved_para = std::mem::replace(&mut state.current_paragraph, crate::Paragraph::new());
+                let saved_text = std::mem::take(&mut state.current_text);
+                let saved_alignment = state.paragraph_alignment;
+                state.structure.saved_paragraph_stack.push((saved_para, saved_text, saved_alignment));
+                state.structure.enter_header(kind, state.current_depth);
+            }
+            DestinationBehavior::Footer(kind) => {
+                // Same save/restore as headers.
+                super::handlers_text::flush_current_text_as_run(state);
+                let saved_para = std::mem::replace(&mut state.current_paragraph, crate::Paragraph::new());
+                let saved_text = std::mem::take(&mut state.current_text);
+                let saved_alignment = state.paragraph_alignment;
+                state.structure.saved_paragraph_stack.push((saved_para, saved_text, saved_alignment));
+                state.structure.enter_footer(kind, state.current_depth);
+            }
+            DestinationBehavior::Footnote => {
+                // 1. Flush pending text so it stays in the body paragraph.
+                super::handlers_text::flush_current_text_as_run(state);
+                // 2. Allocate a note ID and redirect content to the note sink.
+                let id = state.structure.enter_note(NoteKind::Footnote, state.current_depth);
+                // 3. Emit a NoteRef inline into the current body paragraph.
+                state.capture_paragraph_alignment_if_start();
+                state
+                    .current_paragraph
+                    .inlines
+                    .push(Inline::NoteRef(NoteRef { id, kind: NoteKind::Footnote }));
+                // 4. Save body paragraph state so it can be restored after the note group.
+                let saved_para = std::mem::replace(&mut state.current_paragraph, crate::Paragraph::new());
+                let saved_text = std::mem::take(&mut state.current_text);
+                let saved_alignment = state.paragraph_alignment;
+                state.structure.saved_paragraph_stack.push((saved_para, saved_text, saved_alignment));
+            }
+            DestinationBehavior::Endnote => {
+                super::handlers_text::flush_current_text_as_run(state);
+                let id = state.structure.enter_note(NoteKind::Endnote, state.current_depth);
+                state.capture_paragraph_alignment_if_start();
+                state
+                    .current_paragraph
+                    .inlines
+                    .push(Inline::NoteRef(NoteRef { id, kind: NoteKind::Endnote }));
+                let saved_para = std::mem::replace(&mut state.current_paragraph, crate::Paragraph::new());
+                let saved_text = std::mem::take(&mut state.current_text);
+                let saved_alignment = state.paragraph_alignment;
+                state.structure.saved_paragraph_stack.push((saved_para, saved_text, saved_alignment));
             }
         }
         state.destinations.destination_marker = false;

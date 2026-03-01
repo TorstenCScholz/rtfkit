@@ -8,12 +8,13 @@ use super::state_fields::FieldState;
 use super::state_images::ImageParsingState;
 use super::state_lists::ListState;
 use super::state_resources::ResourceState;
+use super::state_structure::StructureState;
 use super::state_style::StyleState;
 use super::state_tables::TableState;
 use crate::error::ParseError;
 use crate::limits::ParserLimits;
 use crate::report::ReportBuilder;
-use crate::{Alignment, Document, Paragraph};
+use crate::{Alignment, Block, Document, Paragraph};
 
 /// Top-level runtime state for RTF parsing.
 ///
@@ -37,6 +38,8 @@ pub struct RuntimeState {
     pub resources: ResourceState,
     /// Image state (embedded pictures)
     pub image: ImageParsingState,
+    /// Structure state (headers, footers, notes sink routing)
+    pub structure: StructureState,
 
     // =============================================================================
     // Core Parsing State
@@ -106,6 +109,7 @@ impl RuntimeState {
             fields: FieldState::new(),
             resources: ResourceState::new(),
             image: ImageParsingState::new(),
+            structure: StructureState::new(),
 
             // Core parsing state
             group_stack: Vec::new(),
@@ -200,6 +204,20 @@ impl RuntimeState {
     pub fn capture_paragraph_alignment_if_start(&mut self) {
         if self.current_paragraph.inlines.is_empty() && self.current_text.is_empty() {
             self.paragraph_alignment = self.style.alignment;
+        }
+    }
+
+    // =============================================================================
+    // Block Routing
+    // =============================================================================
+
+    /// Push a finished block to the appropriate destination: the document body
+    /// or the current structure sink (header / footer / note channel).
+    pub fn push_block_to_current_sink(&mut self, block: Block) {
+        if self.structure.in_body() {
+            self.document.blocks.push(block);
+        } else {
+            self.structure.push_block_to_sink(block);
         }
     }
 

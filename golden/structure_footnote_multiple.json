@@ -1,0 +1,100 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "First",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        },
+        {
+          "type": "note_ref",
+          "id": 1,
+          "kind": "footnote"
+        },
+        {
+          "type": "run",
+          "text": " and second",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        },
+        {
+          "type": "note_ref",
+          "id": 2,
+          "kind": "footnote"
+        },
+        {
+          "type": "run",
+          "text": ".",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        }
+      ]
+    }
+  ],
+  "structure": {
+    "headers": {},
+    "footers": {},
+    "notes": [
+      {
+        "id": 1,
+        "kind": "footnote",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "alignment": "left",
+            "inlines": [
+              {
+                "type": "run",
+                "text": "First note",
+                "bold": false,
+                "italic": false,
+                "underline": false,
+                "strikethrough": false,
+                "small_caps": false,
+                "all_caps": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "kind": "footnote",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "alignment": "left",
+            "inlines": [
+              {
+                "type": "run",
+                "text": "Second note",
+                "bold": false,
+                "italic": false,
+                "underline": false,
+                "strikethrough": false,
+                "small_caps": false,
+                "all_caps": false
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

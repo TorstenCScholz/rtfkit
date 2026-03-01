@@ -1,0 +1,43 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Body text",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        }
+      ]
+    }
+  ],
+  "structure": {
+    "headers": {
+      "default": [
+        {
+          "type": "paragraph",
+          "alignment": "left",
+          "inlines": [
+            {
+              "type": "run",
+              "text": "Header text",
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "strikethrough": false,
+              "small_caps": false,
+              "all_caps": false
+            }
+          ]
+        }
+      ]
+    },
+    "footers": {}
+  }
+}

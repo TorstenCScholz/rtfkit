@@ -601,6 +601,7 @@ fn test_bookmark_name_in_field_result_is_not_rendered_as_text() {
             Inline::Run(run) => vec![run.text.as_str()],
             Inline::Hyperlink(link) => link.runs.iter().map(|r| r.text.as_str()).collect(),
             Inline::BookmarkAnchor(_) => Vec::new(),
+            Inline::NoteRef(_) => Vec::new(),
         })
         .collect();
     assert!(

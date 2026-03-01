@@ -58,8 +58,28 @@ pub fn document_to_html_with_warnings(
         emit_document_start(&mut buf, options);
     }
 
+    // Emit headers before body content
+    if let Some(ref structure) = doc.structure {
+        crate::blocks::structure::structure_to_html(
+            structure,
+            &mut buf,
+            true, // emit_headers = true
+            &mut dropped_content_reasons,
+        );
+    }
+
     // Emit body content
     emit_blocks(&doc.blocks, &mut buf, &mut dropped_content_reasons)?;
+
+    // Emit footers and notes after body content
+    if let Some(ref structure) = doc.structure {
+        crate::blocks::structure::structure_to_html(
+            structure,
+            &mut buf,
+            false, // emit_headers = false → footers + notes
+            &mut dropped_content_reasons,
+        );
+    }
 
     // Close document wrapper if requested
     if options.emit_document_wrapper {
@@ -125,7 +145,10 @@ fn emit_blocks(
 }
 
 /// Emits a single block.
-fn emit_block(
+///
+/// `pub(crate)` so that the `blocks::structure` module can reuse it when
+/// rendering header/footer/note body blocks.
+pub(crate) fn emit_block(
     block: &Block,
     buf: &mut HtmlBuffer,
     dropped_content_reasons: &mut Vec<String>,

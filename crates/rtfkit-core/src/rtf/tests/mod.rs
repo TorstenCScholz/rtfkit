@@ -15,6 +15,8 @@
 #[cfg(test)]
 mod destinations;
 #[cfg(test)]
+mod structure;
+#[cfg(test)]
 mod fields;
 #[cfg(test)]
 mod font_color;

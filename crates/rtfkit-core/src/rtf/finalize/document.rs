@@ -11,4 +11,9 @@ pub fn finalize_document(state: &mut RuntimeState) {
     if state.tables.in_table() {
         super::tables::finalize_current_table(state);
     }
+
+    // Assemble DocumentStructure from accumulated header/footer/note buffers.
+    if let Some(structure) = state.structure.take_structure() {
+        state.document.structure = Some(structure);
+    }
 }

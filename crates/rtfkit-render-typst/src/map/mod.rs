@@ -19,6 +19,7 @@
 mod image;
 mod list;
 mod paragraph;
+mod structure;
 mod table;
 
 use std::collections::BTreeMap;
@@ -201,6 +202,13 @@ pub fn map_document(doc: &Document, options: &RenderOptions) -> DocumentOutput {
     let mut block_sources = Vec::new();
     let mut assets = TypstAssetAllocator::new();
 
+    // Map document structure (headers/footers) to a page setup override
+    let structure_page_setup = if let Some(ref s) = doc.structure {
+        structure::map_structure_page_setup(s, &mut assets, &mut warnings)
+    } else {
+        String::new()
+    };
+
     // Map each block
     for block in &doc.blocks {
         let block_output = map_block(block, &mut assets);
@@ -211,7 +219,7 @@ pub fn map_document(doc: &Document, options: &RenderOptions) -> DocumentOutput {
     }
 
     // Generate document structure
-    let typst_source = generate_document_source(&block_sources, options);
+    let typst_source = generate_document_source(&block_sources, options, &structure_page_setup);
 
     DocumentOutput {
         typst_source,
@@ -257,7 +265,7 @@ pub(crate) fn map_block(block: &IrBlock, assets: &mut TypstAssetAllocator) -> Bl
 }
 
 /// Generate the complete Typst document source.
-fn generate_document_source(block_sources: &[String], options: &RenderOptions) -> String {
+fn generate_document_source(block_sources: &[String], options: &RenderOptions, structure_page_setup: &str) -> String {
     let mut lines = Vec::new();
 
     // Add style preamble from profile
@@ -268,6 +276,12 @@ fn generate_document_source(block_sources: &[String], options: &RenderOptions) -
     // Apply page geometry in one place to avoid option/profile drift.
     let margins = effective_margins(options, &profile);
     lines.push(generate_page_setup(options, &margins));
+
+    // Append header/footer page setup override if present
+    if !structure_page_setup.is_empty() {
+        lines.push(structure_page_setup.to_string());
+    }
+
     lines.push(String::new()); // Empty line after setup
 
     // Add content blocks

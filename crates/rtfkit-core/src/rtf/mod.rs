@@ -47,6 +47,7 @@ mod state_fields;
 mod state_images;
 mod state_lists;
 mod state_resources;
+mod state_structure;
 mod state_style;
 mod state_tables;
 
@@ -61,6 +62,7 @@ mod handlers_destinations;
 mod handlers_fields;
 mod handlers_lists;
 mod handlers_resources;
+mod handlers_structure;
 mod handlers_tables;
 mod handlers_text;
 

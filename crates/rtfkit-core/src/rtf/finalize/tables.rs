@@ -510,7 +510,7 @@ pub fn finalize_current_table(state: &mut RuntimeState) {
                 preferred_width: table_preferred_width.or(existing.preferred_width),
             });
         }
-        state.document.blocks.push(Block::TableBlock(table));
+        state.push_block_to_current_sink(Block::TableBlock(table));
     }
 
     // Reset table state

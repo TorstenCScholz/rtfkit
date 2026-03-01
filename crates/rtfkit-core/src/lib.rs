@@ -704,6 +704,72 @@ impl Run {
     }
 }
 
+// =============================================================================
+// Document Structure Types (Headers, Footers, Footnotes, Endnotes)
+// =============================================================================
+
+/// The kind of note (footnote or endnote).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NoteKind {
+    /// A footnote (appears at the bottom of the page).
+    Footnote,
+    /// An endnote (appears at the end of the document).
+    Endnote,
+}
+
+/// An inline reference to a footnote or endnote.
+///
+/// Emitted at the body position where `\footnote` or `\endnote` appears.
+/// The note body is stored in `DocumentStructure::notes`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NoteRef {
+    /// Unique 1-based note identifier.
+    pub id: u32,
+    /// Whether this is a footnote or endnote.
+    pub kind: NoteKind,
+}
+
+/// A complete note (footnote or endnote) with body content.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Note {
+    /// Unique 1-based note identifier (matches `NoteRef::id`).
+    pub id: u32,
+    /// Whether this is a footnote or endnote.
+    pub kind: NoteKind,
+    /// Body content of the note.
+    pub blocks: Vec<Block>,
+}
+
+/// Set of header or footer blocks for the three page-type variants.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct HeaderFooterSet {
+    /// Default (odd-page / all-page) header or footer content.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub default: Vec<Block>,
+    /// First-page header or footer content (`\headerf` / `\footerf`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub first: Vec<Block>,
+    /// Even-page header or footer content (`\headerl` / `\footerl`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub even: Vec<Block>,
+}
+
+/// Document structure: headers, footers, and notes.
+///
+/// Present on `Document::structure` when the RTF source contains
+/// `\header`, `\footer`, `\footnote`, or `\endnote` destinations.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct DocumentStructure {
+    /// Page headers.
+    pub headers: HeaderFooterSet,
+    /// Page footers.
+    pub footers: HeaderFooterSet,
+    /// Footnotes and endnotes, in document order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<Note>,
+}
+
 /// An inline element within a paragraph.
 ///
 /// `Inline` represents content that flows within a paragraph.
@@ -718,6 +784,8 @@ pub enum Inline {
     Hyperlink(Hyperlink),
     /// A zero-width bookmark anchor marking a named position in the document.
     BookmarkAnchor(BookmarkAnchor),
+    /// An inline reference to a footnote or endnote.
+    NoteRef(NoteRef),
 }
 
 /// The target of a hyperlink — either an external URL or an internal bookmark.
@@ -1485,12 +1553,17 @@ pub enum Block {
 ///     blocks: vec![
 ///         Block::Paragraph(Paragraph::from_runs(vec![Run::new("Hello")])),
 ///     ],
+///     structure: None,
 /// };
 /// ```
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Document {
     /// The block-level elements that make up the document
     pub blocks: Vec<Block>,
+    /// Optional document structure (headers, footers, notes).
+    /// `None` when the document has no structure destinations.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structure: Option<DocumentStructure>,
 }
 
 impl Document {
@@ -1501,7 +1574,7 @@ impl Document {
 
     /// Creates a document from a vector of blocks.
     pub fn from_blocks(blocks: Vec<Block>) -> Self {
-        Self { blocks }
+        Self { blocks, structure: None }
     }
 }
 

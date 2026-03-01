@@ -46,19 +46,29 @@ pub fn add_list_item(
     kind: ListKind,
     paragraph: Paragraph,
 ) {
-    // Check if we can append to the last block if it's a list with the same ID
-    if let Some(Block::ListBlock(last_list)) = state.document.blocks.last_mut()
-        && last_list.list_id == list_id
-        && last_list.kind == kind
-    {
-        last_list.add_item(ListItem::from_paragraph(level, paragraph));
-        return;
-    }
+    if state.structure.in_body() {
+        // Check if we can append to the last block if it's a list with the same ID
+        if let Some(Block::ListBlock(last_list)) = state.document.blocks.last_mut()
+            && last_list.list_id == list_id
+            && last_list.kind == kind
+        {
+            last_list.add_item(ListItem::from_paragraph(level, paragraph));
+            return;
+        }
 
-    // Create a new list block
-    let mut list_block = ListBlock::new(list_id, kind);
-    list_block.add_item(ListItem::from_paragraph(level, paragraph));
-    state.document.blocks.push(Block::ListBlock(list_block));
+        // Create a new list block
+        let mut list_block = ListBlock::new(list_id, kind);
+        list_block.add_item(ListItem::from_paragraph(level, paragraph));
+        state.document.blocks.push(Block::ListBlock(list_block));
+    } else {
+        // Inside a structure sink — push a fresh list block (no merging with
+        // preceding blocks, which is acceptable for header/footer/note content).
+        let mut list_block = ListBlock::new(list_id, kind);
+        list_block.add_item(ListItem::from_paragraph(level, paragraph));
+        state
+            .structure
+            .push_block_to_sink(Block::ListBlock(list_block));
+    }
 }
 
 /// Add a list item to the current table cell.

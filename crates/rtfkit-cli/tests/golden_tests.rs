@@ -80,6 +80,7 @@ fn extract_runs(para: &rtfkit_core::Paragraph) -> Vec<&rtfkit_core::Run> {
                 runs.extend(hyperlink.runs.iter());
             }
             rtfkit_core::Inline::BookmarkAnchor(_) => {}
+            rtfkit_core::Inline::NoteRef(_) => {}
         }
     }
     runs

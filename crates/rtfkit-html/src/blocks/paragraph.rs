@@ -4,7 +4,7 @@
 //! semantic tags and run merging.
 
 use rtfkit_core::{
-    BookmarkAnchor, Color, Hyperlink, HyperlinkTarget, Inline, Paragraph, Run, Shading,
+    BookmarkAnchor, Color, Hyperlink, HyperlinkTarget, Inline, NoteRef, Paragraph, Run, Shading,
     ShadingRenderPolicy, resolve_shading_fill_color,
 };
 
@@ -196,10 +196,28 @@ pub fn paragraph_to_html(para: &Paragraph, buf: &mut HtmlBuffer) {
             Inline::BookmarkAnchor(anchor) => {
                 bookmark_anchor_to_html(anchor, buf);
             }
+            Inline::NoteRef(note_ref) => {
+                note_ref_to_html(note_ref, buf);
+            }
         }
     }
 
     buf.push_close_tag("p");
+}
+
+/// Converts a note reference to an HTML superscript link.
+///
+/// Emits `<a href="#note-{id}" class="rtf-note-ref rtf-{kind}-ref"><sup>{id}</sup></a>`.
+fn note_ref_to_html(note_ref: &NoteRef, buf: &mut HtmlBuffer) {
+    use rtfkit_core::NoteKind;
+    let kind_class = match note_ref.kind {
+        NoteKind::Footnote => "rtf-footnote-ref",
+        NoteKind::Endnote => "rtf-endnote-ref",
+    };
+    buf.push_raw(&format!(
+        "<a href=\"#note-{}\" class=\"rtf-note-ref {kind_class}\"><sup>{}</sup></a>",
+        note_ref.id, note_ref.id
+    ));
 }
 
 /// Converts a bookmark anchor to an empty HTML `<a id="...">` element.

@@ -97,6 +97,7 @@ fn handle_group_end(state: &mut RuntimeState) {
 
     super::handlers_fields::process_bookmark_group_end(state);
     super::handlers_fields::process_field_group_end(state);
+    super::handlers_structure::process_structure_group_end(state);
 
     // Check if we're ending a pict group
     if state.image.is_pict_ended(state.current_depth) {
@@ -160,7 +161,7 @@ fn insert_block_in_current_context(state: &mut RuntimeState, block: Block) {
         super::finalize::finalize_current_table(state);
     }
 
-    state.document.blocks.push(block);
+    state.push_block_to_current_sink(block);
 }
 
 fn handle_control_word_event(

@@ -32,8 +32,9 @@
 //! - `~` - Typst non-breaking space
 
 use rtfkit_core::{
-    Alignment, BookmarkAnchor, Color, Hyperlink, HyperlinkTarget, Inline, Paragraph, Run, Shading,
-    ShadingPattern, ShadingRenderPolicy, percent_pattern_density, resolve_shading_fill_color,
+    Alignment, BookmarkAnchor, Color, Hyperlink, HyperlinkTarget, Inline, NoteKind, NoteRef,
+    Paragraph, Run, Shading, ShadingPattern, ShadingRenderPolicy, percent_pattern_density,
+    resolve_shading_fill_color,
 };
 
 use super::MappingWarning;
@@ -171,6 +172,14 @@ fn map_inlines(inlines: &[Inline], warnings: &mut Vec<MappingWarning>) -> String
                 }
                 result.push_str(&map_bookmark_anchor(anchor, warnings));
             }
+            Inline::NoteRef(note_ref) => {
+                // Flush any pending runs before the note reference
+                if !pending_runs.is_empty() {
+                    result.push_str(&map_runs(&pending_runs, warnings));
+                    pending_runs.clear();
+                }
+                result.push_str(&map_note_ref(note_ref, warnings));
+            }
         }
     }
 
@@ -222,6 +231,27 @@ fn map_bookmark_anchor(anchor: &BookmarkAnchor, warnings: &mut Vec<MappingWarnin
         reason: "Typst labels are placed inline; exact cross-reference semantics may differ".into(),
     });
     format!("#box(width: 0pt, height: 0pt)[] <{label}>")
+}
+
+/// Map a note reference to Typst superscript notation.
+///
+/// Typst has native `#footnote[body]` syntax, but that requires the full note body
+/// to be inlined. Since the note body is in a separate `Note` struct (not threaded here),
+/// we emit a plain superscript number with a partial-support warning.
+///
+/// Endnotes have no Typst equivalent at all — same degradation applies.
+fn map_note_ref(note_ref: &NoteRef, warnings: &mut Vec<MappingWarning>) -> String {
+    let kind_str = match note_ref.kind {
+        NoteKind::Footnote => "footnote",
+        NoteKind::Endnote => "endnote",
+    };
+    warnings.push(MappingWarning::PartialSupport {
+        feature: format!("{kind_str}_ref"),
+        reason: format!(
+            "Typst {kind_str} body inlining is not yet supported; rendered as superscript number"
+        ),
+    });
+    format!("#super[{}]", note_ref.id)
 }
 
 /// Sanitize a bookmark name to a valid Typst label identifier.

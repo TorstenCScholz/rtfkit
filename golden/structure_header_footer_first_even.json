@@ -1,0 +1,98 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Body text",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        }
+      ]
+    }
+  ],
+  "structure": {
+    "headers": {
+      "first": [
+        {
+          "type": "paragraph",
+          "alignment": "left",
+          "inlines": [
+            {
+              "type": "run",
+              "text": "First page header",
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "strikethrough": false,
+              "small_caps": false,
+              "all_caps": false
+            }
+          ]
+        }
+      ],
+      "even": [
+        {
+          "type": "paragraph",
+          "alignment": "left",
+          "inlines": [
+            {
+              "type": "run",
+              "text": "Even page header",
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "strikethrough": false,
+              "small_caps": false,
+              "all_caps": false
+            }
+          ]
+        }
+      ]
+    },
+    "footers": {
+      "first": [
+        {
+          "type": "paragraph",
+          "alignment": "left",
+          "inlines": [
+            {
+              "type": "run",
+              "text": "First page footer",
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "strikethrough": false,
+              "small_caps": false,
+              "all_caps": false
+            }
+          ]
+        }
+      ],
+      "even": [
+        {
+          "type": "paragraph",
+          "alignment": "left",
+          "inlines": [
+            {
+              "type": "run",
+              "text": "Even page footer",
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "strikethrough": false,
+              "small_caps": false,
+              "all_caps": false
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
