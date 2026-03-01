@@ -16,7 +16,10 @@
                       "text": "Orphan",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -34,7 +37,10 @@
                       "text": "Normal",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }

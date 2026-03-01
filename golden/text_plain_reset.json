@@ -10,6 +10,9 @@
           "bold": true,
           "italic": true,
           "underline": true,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "font_family": "Arial",
           "font_size": 16.0,
           "color": {
@@ -23,14 +26,20 @@
           "text": "Back to default formatting (not bold, italic, underlined, or red).",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         },
         {
           "type": "run",
           "text": "Bold again after plain.",
           "bold": true,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ]
     }

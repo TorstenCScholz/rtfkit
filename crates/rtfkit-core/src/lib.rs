@@ -634,6 +634,9 @@ pub struct TableProps {
 ///     bold: true,
 ///     italic: false,
 ///     underline: false,
+///     strikethrough: false,
+///     small_caps: false,
+///     all_caps: false,
 ///     font_family: Some("Arial".to_string()),
 ///     font_size: Some(12.0),
 ///     color: None,
@@ -653,6 +656,15 @@ pub struct Run {
     /// Whether the text is underlined
     #[serde(default)]
     pub underline: bool,
+    /// Whether the text has strikethrough
+    #[serde(default)]
+    pub strikethrough: bool,
+    /// Whether the text uses small caps
+    #[serde(default)]
+    pub small_caps: bool,
+    /// Whether the text is all caps
+    #[serde(default)]
+    pub all_caps: bool,
     /// Font family name (if specified)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub font_family: Option<String>,
@@ -681,6 +693,9 @@ impl Run {
             bold: false,
             italic: false,
             underline: false,
+            strikethrough: false,
+            small_caps: false,
+            all_caps: false,
             font_family: None,
             font_size: None,
             color: None,

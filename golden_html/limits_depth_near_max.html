@@ -82,7 +82,7 @@ h3{font-family:var(--rtfkit-font-heading);font-size:var(--rtfkit-size-h3);line-h
 .rtf-align-center{text-align:center}
 .rtf-align-right{text-align:right}
 .rtf-align-justify{text-align:justify}
-.rtf-u{text-decoration:underline}
+.rtf-u{text-decoration:underline}.rtf-s{text-decoration:line-through}.rtf-sc{font-variant:small-caps}.rtf-ac{text-transform:uppercase}
 .rtf-valign-top{vertical-align:top}
 .rtf-valign-middle{vertical-align:middle}
 .rtf-valign-bottom{vertical-align:bottom}
@@ -99,7 +99,7 @@ h1,h2,h3{break-after:avoid}}
 <body>
 <div class="rtf-doc">
 <div class="rtf-content">
-<p class="rtf-p"><span style="font-family: &quot;Times New Roman&quot;; font-size: 12pt;">% Limits test: Group nesting near max_group_depth (256)% This fixture has 10 nested groups as a representative test (actual near-limit would be 255)% Tests that the parser handles deep nesting correctly</span><span style="font-family: &quot;Times New Roman&quot;; font-size: 12pt;"><strong><em><span class="rtf-u">Deeply nested text</span></em></strong></span></p></div>
+<p class="rtf-p"><span style="font-family: &quot;Times New Roman&quot;; font-size: 12pt;">% Limits test: Group nesting near max_group_depth (256)% This fixture has 10 nested groups as a representative test (actual near-limit would be 255)% Tests that the parser handles deep nesting correctly</span><span style="font-family: &quot;Times New Roman&quot;; font-size: 12pt;"><strong><em><span class="rtf-u"><span class="rtf-s"><span class="rtf-sc"><span class="rtf-ac">Deeply nested text</span></span></span></span></em></strong></span></p></div>
 </div>
 </body>
 </html>

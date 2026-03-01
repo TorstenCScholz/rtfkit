@@ -9,7 +9,10 @@
           "text": "Paragraph with red background.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ],
       "shading": {
@@ -29,7 +32,10 @@
           "text": "Paragraph with green background.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ],
       "shading": {
@@ -49,7 +55,10 @@
           "text": "Paragraph with blue background.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ],
       "shading": {
@@ -69,7 +78,10 @@
           "text": "Paragraph with default background.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ]
     }

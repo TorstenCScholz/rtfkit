@@ -9,7 +9,10 @@
           "text": "First paragraph with some text.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ]
     },
@@ -22,7 +25,10 @@
           "text": "Second paragraph with more content.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ]
     },
@@ -35,7 +41,10 @@
           "text": "Third paragraph to test multiple breaks.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ]
     },
@@ -48,7 +57,10 @@
           "text": "Fourth and final paragraph.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ]
     }

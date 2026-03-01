@@ -10,6 +10,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "font_family": "Times New Roman",
           "font_size": 12.0
         },
@@ -19,6 +22,9 @@
           "bold": true,
           "italic": true,
           "underline": true,
+          "strikethrough": true,
+          "small_caps": true,
+          "all_caps": true,
           "font_family": "Times New Roman",
           "font_size": 12.0
         }

@@ -10,6 +10,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "font_family": "Arial"
         },
         {
@@ -18,6 +21,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "font_family": "Helvetica"
         },
         {
@@ -26,6 +32,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "font_family": "Times New Roman"
         },
         {
@@ -34,6 +43,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "font_family": "Arial"
         }
       ]

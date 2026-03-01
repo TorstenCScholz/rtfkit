@@ -9,7 +9,10 @@
           "text": "Before table",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ]
     },
@@ -29,7 +32,10 @@
                       "text": "Cell 1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -47,7 +53,10 @@
                       "text": "Cell 2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -67,7 +76,10 @@
           "text": "After table",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ]
     }

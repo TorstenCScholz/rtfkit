@@ -16,7 +16,10 @@
                       "text": "R1C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -34,7 +37,10 @@
                       "text": "R1C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -52,7 +58,10 @@
                       "text": "R1C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -70,7 +79,10 @@
                       "text": "R1C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -88,7 +100,10 @@
                       "text": "R1C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -110,7 +125,10 @@
                       "text": "R2C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -128,7 +146,10 @@
                       "text": "R2C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -146,7 +167,10 @@
                       "text": "R2C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -164,7 +188,10 @@
                       "text": "R2C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -182,7 +209,10 @@
                       "text": "R2C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -204,7 +234,10 @@
                       "text": "R3C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -222,7 +255,10 @@
                       "text": "R3C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -240,7 +276,10 @@
                       "text": "R3C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -258,7 +297,10 @@
                       "text": "R3C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -276,7 +318,10 @@
                       "text": "R3C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -298,7 +343,10 @@
                       "text": "R4C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -316,7 +364,10 @@
                       "text": "R4C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -334,7 +385,10 @@
                       "text": "R4C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -352,7 +406,10 @@
                       "text": "R4C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -370,7 +427,10 @@
                       "text": "R4C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -392,7 +452,10 @@
                       "text": "R5C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -410,7 +473,10 @@
                       "text": "R5C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -428,7 +494,10 @@
                       "text": "R5C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -446,7 +515,10 @@
                       "text": "R5C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -464,7 +536,10 @@
                       "text": "R5C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -486,7 +561,10 @@
                       "text": "R6C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -504,7 +582,10 @@
                       "text": "R6C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -522,7 +603,10 @@
                       "text": "R6C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -540,7 +624,10 @@
                       "text": "R6C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -558,7 +645,10 @@
                       "text": "R6C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -580,7 +670,10 @@
                       "text": "R7C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -598,7 +691,10 @@
                       "text": "R7C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -616,7 +712,10 @@
                       "text": "R7C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -634,7 +733,10 @@
                       "text": "R7C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -652,7 +754,10 @@
                       "text": "R7C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -674,7 +779,10 @@
                       "text": "R8C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -692,7 +800,10 @@
                       "text": "R8C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -710,7 +821,10 @@
                       "text": "R8C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -728,7 +842,10 @@
                       "text": "R8C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -746,7 +863,10 @@
                       "text": "R8C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -768,7 +888,10 @@
                       "text": "R9C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -786,7 +909,10 @@
                       "text": "R9C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -804,7 +930,10 @@
                       "text": "R9C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -822,7 +951,10 @@
                       "text": "R9C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -840,7 +972,10 @@
                       "text": "R9C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -862,7 +997,10 @@
                       "text": "R10C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -880,7 +1018,10 @@
                       "text": "R10C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -898,7 +1039,10 @@
                       "text": "R10C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -916,7 +1060,10 @@
                       "text": "R10C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -934,7 +1081,10 @@
                       "text": "R10C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -956,7 +1106,10 @@
                       "text": "R11C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -974,7 +1127,10 @@
                       "text": "R11C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -992,7 +1148,10 @@
                       "text": "R11C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1010,7 +1169,10 @@
                       "text": "R11C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1028,7 +1190,10 @@
                       "text": "R11C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1050,7 +1215,10 @@
                       "text": "R12C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1068,7 +1236,10 @@
                       "text": "R12C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1086,7 +1257,10 @@
                       "text": "R12C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1104,7 +1278,10 @@
                       "text": "R12C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1122,7 +1299,10 @@
                       "text": "R12C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1144,7 +1324,10 @@
                       "text": "R13C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1162,7 +1345,10 @@
                       "text": "R13C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1180,7 +1366,10 @@
                       "text": "R13C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1198,7 +1387,10 @@
                       "text": "R13C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1216,7 +1408,10 @@
                       "text": "R13C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1238,7 +1433,10 @@
                       "text": "R14C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1256,7 +1454,10 @@
                       "text": "R14C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1274,7 +1475,10 @@
                       "text": "R14C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1292,7 +1496,10 @@
                       "text": "R14C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1310,7 +1517,10 @@
                       "text": "R14C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1332,7 +1542,10 @@
                       "text": "R15C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1350,7 +1563,10 @@
                       "text": "R15C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1368,7 +1584,10 @@
                       "text": "R15C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1386,7 +1605,10 @@
                       "text": "R15C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1404,7 +1626,10 @@
                       "text": "R15C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1426,7 +1651,10 @@
                       "text": "R16C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1444,7 +1672,10 @@
                       "text": "R16C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1462,7 +1693,10 @@
                       "text": "R16C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1480,7 +1714,10 @@
                       "text": "R16C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1498,7 +1735,10 @@
                       "text": "R16C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1520,7 +1760,10 @@
                       "text": "R17C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1538,7 +1781,10 @@
                       "text": "R17C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1556,7 +1802,10 @@
                       "text": "R17C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1574,7 +1823,10 @@
                       "text": "R17C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1592,7 +1844,10 @@
                       "text": "R17C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1614,7 +1869,10 @@
                       "text": "R18C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1632,7 +1890,10 @@
                       "text": "R18C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1650,7 +1911,10 @@
                       "text": "R18C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1668,7 +1932,10 @@
                       "text": "R18C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1686,7 +1953,10 @@
                       "text": "R18C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1708,7 +1978,10 @@
                       "text": "R19C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1726,7 +1999,10 @@
                       "text": "R19C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1744,7 +2020,10 @@
                       "text": "R19C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1762,7 +2041,10 @@
                       "text": "R19C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1780,7 +2062,10 @@
                       "text": "R19C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1802,7 +2087,10 @@
                       "text": "R20C1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1820,7 +2108,10 @@
                       "text": "R20C2",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1838,7 +2129,10 @@
                       "text": "R20C3",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1856,7 +2150,10 @@
                       "text": "R20C4",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -1874,7 +2171,10 @@
                       "text": "R20C5",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }

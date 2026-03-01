@@ -10,6 +10,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "font_family": "Arial",
           "font_size": 12.0
         },
@@ -25,6 +28,9 @@
               "bold": true,
               "italic": false,
               "underline": false,
+              "strikethrough": false,
+              "small_caps": false,
+              "all_caps": false,
               "font_family": "Arial",
               "font_size": 12.0
             },
@@ -33,6 +39,9 @@
               "bold": false,
               "italic": false,
               "underline": false,
+              "strikethrough": false,
+              "small_caps": false,
+              "all_caps": false,
               "font_family": "Arial",
               "font_size": 12.0
             },
@@ -41,6 +50,9 @@
               "bold": false,
               "italic": true,
               "underline": false,
+              "strikethrough": false,
+              "small_caps": false,
+              "all_caps": false,
               "font_family": "Arial",
               "font_size": 12.0
             }
@@ -52,6 +64,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "font_family": "Arial",
           "font_size": 12.0
         }

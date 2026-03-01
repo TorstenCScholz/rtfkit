@@ -17,6 +17,9 @@
                       "bold": false,
                       "italic": false,
                       "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false,
                       "font_size": 12.0
                     }
                   ]
@@ -43,6 +46,9 @@
                       "bold": false,
                       "italic": false,
                       "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false,
                       "font_size": 12.0
                     }
                   ]
@@ -69,6 +75,9 @@
                       "bold": false,
                       "italic": false,
                       "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false,
                       "font_size": 12.0
                     }
                   ]
@@ -99,6 +108,9 @@
                       "bold": false,
                       "italic": false,
                       "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false,
                       "font_size": 12.0
                     }
                   ]
@@ -118,6 +130,9 @@
                       "bold": false,
                       "italic": false,
                       "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false,
                       "font_size": 12.0
                     }
                   ]
@@ -137,6 +152,9 @@
                       "bold": false,
                       "italic": false,
                       "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false,
                       "font_size": 12.0
                     }
                   ]

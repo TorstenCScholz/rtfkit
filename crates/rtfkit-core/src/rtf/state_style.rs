@@ -20,6 +20,12 @@ pub struct StyleState {
     pub italic: bool,
     /// Whether text is underlined
     pub underline: bool,
+    /// Whether text has strikethrough
+    pub strikethrough: bool,
+    /// Whether text uses small caps
+    pub small_caps: bool,
+    /// Whether text is all caps
+    pub all_caps: bool,
     /// Current font index (from \fN)
     pub font_index: Option<i32>,
     /// Font size in half-points (from \fsN)
@@ -66,6 +72,9 @@ pub fn character_style_changed(current: &StyleState, run: &StyleState) -> bool {
     current.bold != run.bold
         || current.italic != run.italic
         || current.underline != run.underline
+        || current.strikethrough != run.strikethrough
+        || current.small_caps != run.small_caps
+        || current.all_caps != run.all_caps
         || current.font_index != run.font_index
         || current.font_size_half_points != run.font_size_half_points
         || current.color_index != run.color_index
@@ -89,6 +98,9 @@ pub fn reset_character_formatting(style: &mut StyleState, default_font: Option<i
     style.bold = false;
     style.italic = false;
     style.underline = false;
+    style.strikethrough = false;
+    style.small_caps = false;
+    style.all_caps = false;
     // Reset font to default font index if available
     style.font_index = default_font;
     style.font_size_half_points = None;

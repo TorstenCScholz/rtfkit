@@ -47,6 +47,19 @@ pub fn handle_control_word(state: &mut RuntimeState, word: &str, parameter: Opti
         "ulnone" => {
             state.style.underline = false;
         }
+        // Strikethrough: \strike, \strikeN, \striked, or \strikedN
+        // We degrade \striked (double strikethrough) to regular strikethrough.
+        "strike" | "striked" => {
+            state.style.strikethrough = parameter.map(|p| p != 0).unwrap_or(true);
+        }
+        // Small caps: \scaps or \scapsN
+        "scaps" => {
+            state.style.small_caps = parameter.map(|p| p != 0).unwrap_or(true);
+        }
+        // All caps: \caps or \capsN
+        "caps" => {
+            state.style.all_caps = parameter.map(|p| p != 0).unwrap_or(true);
+        }
 
         // =============================================================================
         // Paragraph Breaks and Resets
@@ -123,8 +136,8 @@ pub fn handle_control_word(state: &mut RuntimeState, word: &str, parameter: Opti
         // =============================================================================
         "rtf" | "ansi" | "ansicpg" | "deflang" | "deflangfe" | "adeflang" | "result" | "hwid"
         | "emdash" | "endash" | "emspace" | "enspace" | "qmspace" | "bullet" | "lquote"
-        | "rquote" | "ldblquote" | "rdblquote" | "tab" | "strike" | "striked" | "sub" | "super"
-        | "nosupersub" | "caps" | "scaps" | "outl" | "shad" | "expnd" | "expndtw" | "kerning"
+        | "rquote" | "ldblquote" | "rdblquote" | "tab" | "sub" | "super"
+        | "nosupersub" | "outl" | "shad" | "expnd" | "expndtw" | "kerning"
         | "charscalex" | "lang" | "langfe" | "langnp" | "langfenp" => {
             // Silently ignore these structural/formatting control words
         }
@@ -351,6 +364,40 @@ mod tests {
     }
 
     #[test]
+    fn test_handle_control_word_strikethrough_variants() {
+        let mut state = RuntimeState::new(ParserLimits::default());
+
+        handle_control_word(&mut state, "strike", None);
+        assert!(state.style.strikethrough);
+
+        handle_control_word(&mut state, "strike", Some(0));
+        assert!(!state.style.strikethrough);
+
+        handle_control_word(&mut state, "striked", None);
+        assert!(state.style.strikethrough);
+
+        handle_control_word(&mut state, "striked", Some(0));
+        assert!(!state.style.strikethrough);
+    }
+
+    #[test]
+    fn test_handle_control_word_caps_variants() {
+        let mut state = RuntimeState::new(ParserLimits::default());
+
+        handle_control_word(&mut state, "scaps", None);
+        assert!(state.style.small_caps);
+
+        handle_control_word(&mut state, "scaps", Some(0));
+        assert!(!state.style.small_caps);
+
+        handle_control_word(&mut state, "caps", None);
+        assert!(state.style.all_caps);
+
+        handle_control_word(&mut state, "caps", Some(0));
+        assert!(!state.style.all_caps);
+    }
+
+    #[test]
     fn test_handle_control_word_alignment() {
         let mut state = RuntimeState::new(ParserLimits::default());
 
@@ -399,6 +446,9 @@ mod tests {
         state.style.bold = true;
         state.style.italic = true;
         state.style.underline = true;
+        state.style.strikethrough = true;
+        state.style.small_caps = true;
+        state.style.all_caps = true;
         state.style.font_index = Some(5);
         state.style.color_index = Some(3);
 
@@ -407,6 +457,9 @@ mod tests {
         assert!(!state.style.bold);
         assert!(!state.style.italic);
         assert!(!state.style.underline);
+        assert!(!state.style.strikethrough);
+        assert!(!state.style.small_caps);
+        assert!(!state.style.all_caps);
         assert!(state.style.font_index.is_none());
         assert!(state.style.color_index.is_none());
     }

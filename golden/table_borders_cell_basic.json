@@ -16,7 +16,10 @@
                       "text": "Cell A",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -52,7 +55,10 @@
                       "text": "Cell B",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }

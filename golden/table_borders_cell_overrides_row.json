@@ -16,7 +16,10 @@
                       "text": "Explicit",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }
@@ -44,7 +47,10 @@
                       "text": "Default",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ]
                 }

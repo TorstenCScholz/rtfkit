@@ -10,6 +10,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "background_color": {
             "r": 200,
             "g": 200,
@@ -22,6 +25,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "background_color": {
             "r": 255,
             "g": 255,
@@ -34,6 +40,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "background_color": {
             "r": 255,
             "g": 255,
@@ -46,6 +55,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "background_color": {
             "r": 0,
             "g": 255,

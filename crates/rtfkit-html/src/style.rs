@@ -159,7 +159,7 @@ h3{font-family:var(--rtfkit-font-heading);font-size:var(--rtfkit-size-h3);line-h
 .rtf-align-center{text-align:center}
 .rtf-align-right{text-align:right}
 .rtf-align-justify{text-align:justify}
-.rtf-u{text-decoration:underline}
+.rtf-u{text-decoration:underline}.rtf-s{text-decoration:line-through}.rtf-sc{font-variant:small-caps}.rtf-ac{text-transform:uppercase}
 .rtf-valign-top{vertical-align:top}
 .rtf-valign-middle{vertical-align:middle}
 .rtf-valign-bottom{vertical-align:bottom}
@@ -236,6 +236,9 @@ mod tests {
         // Check for existing classes still present
         assert!(css.contains(".rtf-align-center"));
         assert!(css.contains(".rtf-u"));
+        assert!(css.contains(".rtf-s"));
+        assert!(css.contains(".rtf-sc"));
+        assert!(css.contains(".rtf-ac"));
         assert!(css.contains(".rtf-table"));
         assert!(css.contains(".rtf-valign-top"));
     }

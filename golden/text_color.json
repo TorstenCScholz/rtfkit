@@ -10,6 +10,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "color": {
             "r": 255,
             "g": 0,
@@ -22,6 +25,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "color": {
             "r": 0,
             "g": 128,
@@ -34,6 +40,9 @@
           "bold": false,
           "italic": false,
           "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false,
           "color": {
             "r": 0,
             "g": 0,
@@ -45,7 +54,10 @@
           "text": "Auto color (default).",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ]
     }

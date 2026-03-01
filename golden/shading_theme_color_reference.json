@@ -9,7 +9,10 @@
           "text": "Paragraph with Accent1 theme color shading.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ],
       "shading": {
@@ -29,7 +32,10 @@
           "text": "Paragraph with Accent2+50%tint theme color shading.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ],
       "shading": {
@@ -49,7 +55,10 @@
           "text": "Paragraph with Hyperlink theme color shading.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ],
       "shading": {
@@ -76,7 +85,10 @@
                       "text": "Accent1",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ],
                   "shading": {
@@ -108,7 +120,10 @@
                       "text": "Accent2+tint",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ],
                   "shading": {
@@ -140,7 +155,10 @@
                       "text": "Hyperlink",
                       "bold": false,
                       "italic": false,
-                      "underline": false
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
                     }
                   ],
                   "shading": {

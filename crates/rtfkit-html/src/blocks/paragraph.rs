@@ -249,12 +249,16 @@ fn hyperlink_to_html(hyperlink: &Hyperlink, buf: &mut HtmlBuffer) {
 
 /// Converts a run to HTML with semantic tags.
 ///
-/// Uses the stable nesting order: `span[style] -> strong -> em -> span.rtf-u`
+/// Uses the stable nesting order:
+/// `span[style] -> strong -> em -> span.rtf-u -> span.rtf-s -> span.rtf-sc -> span.rtf-ac`
 /// Per the spec:
 /// - font/color/size -> `<span style="...">`
 /// - bold -> `<strong>`
 /// - italic -> `<em>`
 /// - underline -> `<span class="rtf-u">`
+/// - strikethrough -> `<span class="rtf-s">`
+/// - small caps -> `<span class="rtf-sc">`
+/// - all caps -> `<span class="rtf-ac">`
 pub fn run_to_html(run: &Run, buf: &mut HtmlBuffer) {
     // Handle empty runs
     if run.text.is_empty() {
@@ -265,7 +269,7 @@ pub fn run_to_html(run: &Run, buf: &mut HtmlBuffer) {
     let style = build_run_style(run);
     let has_style = !style.is_empty();
 
-    // Open tags in stable order: span[style] -> strong -> em -> span.rtf-u
+    // Open tags in stable order: span[style] -> strong -> em -> span.rtf-u -> span.rtf-s -> span.rtf-sc -> span.rtf-ac
     if has_style {
         buf.push_open_tag("span", &[("style", style.as_str())]);
     }
@@ -278,11 +282,29 @@ pub fn run_to_html(run: &Run, buf: &mut HtmlBuffer) {
     if run.underline {
         buf.push_raw("<span class=\"rtf-u\">");
     }
+    if run.strikethrough {
+        buf.push_raw("<span class=\"rtf-s\">");
+    }
+    if run.small_caps {
+        buf.push_raw("<span class=\"rtf-sc\">");
+    }
+    if run.all_caps {
+        buf.push_raw("<span class=\"rtf-ac\">");
+    }
 
     // Emit escaped text content
     buf.push_text(&run.text);
 
-    // Close tags in reverse order: span.rtf-u -> em -> strong -> span[style]
+    // Close tags in reverse order: span.rtf-ac -> span.rtf-sc -> span.rtf-s -> span.rtf-u -> em -> strong -> span[style]
+    if run.all_caps {
+        buf.push_raw("</span>");
+    }
+    if run.small_caps {
+        buf.push_raw("</span>");
+    }
+    if run.strikethrough {
+        buf.push_raw("</span>");
+    }
     if run.underline {
         buf.push_raw("</span>");
     }
@@ -354,6 +376,45 @@ mod tests {
     }
 
     #[test]
+    fn paragraph_with_strikethrough() {
+        let mut run = Run::new("strike");
+        run.strikethrough = true;
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><span class="rtf-s">strike</span></p>"#
+        );
+    }
+
+    #[test]
+    fn paragraph_with_small_caps() {
+        let mut run = Run::new("small caps");
+        run.small_caps = true;
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><span class="rtf-sc">small caps</span></p>"#
+        );
+    }
+
+    #[test]
+    fn paragraph_with_all_caps() {
+        let mut run = Run::new("all caps");
+        run.all_caps = true;
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><span class="rtf-ac">all caps</span></p>"#
+        );
+    }
+
+    #[test]
     fn paragraph_with_nested_formatting() {
         let mut run = Run::new("bold italic underline");
         run.bold = true;
@@ -366,6 +427,24 @@ mod tests {
         assert_eq!(
             buf.as_str(),
             r#"<p class="rtf-p"><strong><em><span class="rtf-u">bold italic underline</span></em></strong></p>"#
+        );
+    }
+
+    #[test]
+    fn paragraph_with_extended_nested_formatting() {
+        let mut run = Run::new("all text styles");
+        run.bold = true;
+        run.italic = true;
+        run.underline = true;
+        run.strikethrough = true;
+        run.small_caps = true;
+        run.all_caps = true;
+        let para = Paragraph::from_runs(vec![run]);
+        let mut buf = HtmlBuffer::new();
+        paragraph_to_html(&para, &mut buf);
+        assert_eq!(
+            buf.as_str(),
+            r#"<p class="rtf-p"><strong><em><span class="rtf-u"><span class="rtf-s"><span class="rtf-sc"><span class="rtf-ac">all text styles</span></span></span></span></em></strong></p>"#
         );
     }
 

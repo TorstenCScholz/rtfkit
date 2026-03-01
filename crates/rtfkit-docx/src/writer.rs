@@ -615,6 +615,17 @@ fn convert_run(run: &Run) -> DocxRun {
         r = r.underline("single");
     }
 
+    // Apply strikethrough (w:strike)
+    if run.strikethrough {
+        r = r.strike();
+    }
+
+    // Apply caps (w:caps).
+    // docx-rs does not currently expose w:smallCaps, so small caps degrades to caps.
+    if run.all_caps || run.small_caps {
+        r.run_property = r.run_property.caps();
+    }
+
     // Apply background color (w:shd)
     // Use w:shd with w:val="clear" and w:fill for arbitrary RGB background
     if let Some(ref background_color) = run.background_color {
@@ -2210,6 +2221,42 @@ mod tests {
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         assert!(document_xml.contains(r#"<w:color w:val="FF0000" />"#));
+    }
+
+    #[test]
+    fn test_run_with_strikethrough_emits_w_strike() {
+        let mut run = Run::new("Struck text");
+        run.strikethrough = true;
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        assert!(document_xml.contains("<w:strike"));
+    }
+
+    #[test]
+    fn test_run_with_all_caps_emits_w_caps() {
+        let mut run = Run::new("All caps");
+        run.all_caps = true;
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        assert!(document_xml.contains("<w:caps"));
+    }
+
+    #[test]
+    fn test_run_with_small_caps_falls_back_to_w_caps() {
+        let mut run = Run::new("Small caps");
+        run.small_caps = true;
+
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
+        let bytes = write_docx_to_bytes(&doc).unwrap();
+
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        assert!(document_xml.contains("<w:caps"));
     }
 
     #[test]

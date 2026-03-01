@@ -9,21 +9,30 @@
           "text": "Bold",
           "bold": true,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         },
         {
           "type": "run",
           "text": "Italic",
           "bold": false,
           "italic": true,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         },
         {
           "type": "run",
           "text": "Normal",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ]
     }

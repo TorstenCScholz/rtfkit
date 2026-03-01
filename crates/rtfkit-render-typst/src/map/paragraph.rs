@@ -267,6 +267,9 @@ struct RunStyle {
     bold: bool,
     italic: bool,
     underline: bool,
+    strikethrough: bool,
+    small_caps: bool,
+    all_caps: bool,
     font_family: Option<String>,
     // Canonicalized to half-points for stable equality and output.
     font_size_half_points: Option<i32>,
@@ -299,6 +302,9 @@ impl RunStyle {
             bold: run.bold,
             italic: run.italic,
             underline: run.underline,
+            strikethrough: run.strikethrough,
+            small_caps: run.small_caps,
+            all_caps: run.all_caps,
             font_family: run.font_family.clone(),
             font_size_half_points: run.font_size.and_then(points_to_half_points),
             color: run.color.as_ref().map(ColorKey::from),
@@ -379,7 +385,9 @@ fn map_runs(runs: &[Run], _warnings: &mut Vec<MappingWarning>) -> String {
 
 /// Format a single run with the given formatting.
 ///
-/// Applies formatting in order: #text(...) wrapper, then #highlight(...), then underline, italic, bold.
+/// Applies formatting in order:
+/// #text(...) wrapper, #highlight(...), underline, strikethrough, small caps,
+/// all caps, italic, bold.
 /// This ensures proper nesting in Typst.
 fn format_run(text: &str, style: &RunStyle) -> String {
     if text.is_empty() {
@@ -401,6 +409,21 @@ fn format_run(text: &str, style: &RunStyle) -> String {
     // Apply underline (Typst function call)
     if style.underline {
         result = format!("#underline[{}]", result);
+    }
+
+    // Apply strikethrough
+    if style.strikethrough {
+        result = format!("#strike[{}]", result);
+    }
+
+    // Apply small caps
+    if style.small_caps {
+        result = format!("#smallcaps[{}]", result);
+    }
+
+    // Apply all caps
+    if style.all_caps {
+        result = format!("#upper[{}]", result);
     }
 
     // Apply italic (Typst emphasis)
@@ -542,6 +565,39 @@ mod tests {
     }
 
     #[test]
+    fn test_map_strikethrough_run() {
+        let mut run = Run::new("struck");
+        run.strikethrough = true;
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        assert_eq!(output.typst_source, "#strike[struck]");
+    }
+
+    #[test]
+    fn test_map_small_caps_run() {
+        let mut run = Run::new("small caps");
+        run.small_caps = true;
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        assert_eq!(output.typst_source, "#smallcaps[small caps]");
+    }
+
+    #[test]
+    fn test_map_all_caps_run() {
+        let mut run = Run::new("all caps");
+        run.all_caps = true;
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        assert_eq!(output.typst_source, "#upper[all caps]");
+    }
+
+    #[test]
     fn test_map_bold_italic_run() {
         let mut run = Run::new("bold italic");
         run.bold = true;
@@ -576,6 +632,25 @@ mod tests {
         let output = map_paragraph(&paragraph);
 
         assert_eq!(output.typst_source, "*_#underline[all formats]_*");
+    }
+
+    #[test]
+    fn test_map_all_extended_formatting() {
+        let mut run = Run::new("all formats");
+        run.bold = true;
+        run.italic = true;
+        run.underline = true;
+        run.strikethrough = true;
+        run.small_caps = true;
+        run.all_caps = true;
+
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let output = map_paragraph(&paragraph);
+
+        assert_eq!(
+            output.typst_source,
+            "*_#upper[#smallcaps[#strike[#underline[all formats]]]]_*"
+        );
     }
 
     #[test]

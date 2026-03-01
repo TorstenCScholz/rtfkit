@@ -9,7 +9,10 @@
           "text": "Paragraph 25%.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ],
       "shading": {
@@ -35,7 +38,10 @@
           "text": "Paragraph 50%.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ],
       "shading": {
@@ -61,7 +67,10 @@
           "text": "Paragraph 75%.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ],
       "shading": {

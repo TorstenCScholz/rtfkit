@@ -9,49 +9,70 @@
           "text": "This is ",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         },
         {
           "type": "run",
           "text": "bold",
           "bold": true,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         },
         {
           "type": "run",
           "text": ", ",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         },
         {
           "type": "run",
           "text": "italic",
           "bold": false,
           "italic": true,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         },
         {
           "type": "run",
           "text": ", and ",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         },
         {
           "type": "run",
           "text": "underlined",
           "bold": false,
           "italic": false,
-          "underline": true
+          "underline": true,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         },
         {
           "type": "run",
           "text": "text all in one paragraph.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ]
     },
@@ -64,21 +85,30 @@
           "text": "Now ",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         },
         {
           "type": "run",
           "text": "bold italic underlined",
           "bold": true,
           "italic": true,
-          "underline": true
+          "underline": true,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         },
         {
           "type": "run",
           "text": "combined.",
           "bold": false,
           "italic": false,
-          "underline": false
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
         }
       ]
     }
