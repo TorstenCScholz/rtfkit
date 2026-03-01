@@ -771,6 +771,18 @@ fn print_report_text(report: &Report) {
                 Warning::UnsupportedField { reason, .. } => {
                     println!("  - Unsupported field (result preserved): {}", reason);
                 }
+                Warning::UnsupportedPageField { reason, .. } => {
+                    println!("  - Unsupported page field: {}", reason);
+                }
+                Warning::UnsupportedTocSwitch { switch, .. } => {
+                    println!("  - Unsupported TOC switch: \\{}", switch);
+                }
+                Warning::UnresolvedPageReference { target, .. } => {
+                    println!("  - Unresolved page reference: {}", target);
+                }
+                Warning::SectionNumberingFallback { reason, .. } => {
+                    println!("  - Section numbering fallback: {}", reason);
+                }
             }
         }
     }

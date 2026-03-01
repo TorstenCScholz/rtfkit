@@ -94,5 +94,22 @@
         }
       ]
     }
+  },
+  "page_management": {
+    "sections": [
+      {
+        "index": 0,
+        "restart_page_numbering": false,
+        "number_format": "arabic"
+      }
+    ],
+    "running_content": {
+      "header_default": false,
+      "header_first": true,
+      "header_even": true,
+      "footer_default": false,
+      "footer_first": true,
+      "footer_even": true
+    }
   }
 }

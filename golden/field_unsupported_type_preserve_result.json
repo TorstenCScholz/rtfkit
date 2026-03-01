@@ -59,16 +59,9 @@
           "font_size": 12.0
         },
         {
-          "type": "run",
-          "text": "5",
-          "bold": false,
-          "italic": false,
-          "underline": false,
-          "strikethrough": false,
-          "small_caps": false,
-          "all_caps": false,
-          "font_family": "Arial",
-          "font_size": 12.0
+          "type": "page_field",
+          "type": "total_pages",
+          "format": "arabic"
         },
         {
           "type": "run",
@@ -84,5 +77,22 @@
         }
       ]
     }
-  ]
+  ],
+  "page_management": {
+    "sections": [
+      {
+        "index": 0,
+        "restart_page_numbering": false,
+        "number_format": "arabic"
+      }
+    ],
+    "running_content": {
+      "header_default": false,
+      "header_first": false,
+      "header_even": false,
+      "footer_default": false,
+      "footer_first": false,
+      "footer_even": false
+    }
+  }
 }

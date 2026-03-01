@@ -6,6 +6,7 @@ mod borders;
 mod document;
 mod images;
 mod lists;
+mod page_management;
 mod paragraphs;
 pub(crate) mod runs;
 mod shading;

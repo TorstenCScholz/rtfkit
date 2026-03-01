@@ -81,6 +81,8 @@ fn extract_runs(para: &rtfkit_core::Paragraph) -> Vec<&rtfkit_core::Run> {
             }
             rtfkit_core::Inline::BookmarkAnchor(_) => {}
             rtfkit_core::Inline::NoteRef(_) => {}
+            rtfkit_core::Inline::PageField(_) => {}
+            rtfkit_core::Inline::GeneratedBlockMarker(_) => {}
         }
     }
     runs

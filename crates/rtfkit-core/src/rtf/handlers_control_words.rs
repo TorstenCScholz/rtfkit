@@ -5,6 +5,7 @@
 use super::state::RuntimeState;
 use crate::Alignment;
 use crate::ImageFormat;
+use crate::PageNumberFormat;
 
 // =============================================================================
 // Main Control Word Handler
@@ -129,6 +130,42 @@ pub fn handle_control_word(state: &mut RuntimeState, word: &str, parameter: Opti
         // Unicode skip count: \ucN (number of fallback characters after \u)
         "uc" => {
             state.unicode_skip_count = parameter.and_then(|p| usize::try_from(p).ok()).unwrap_or(1);
+        }
+
+        // =============================================================================
+        // Section / Page Numbering
+        // =============================================================================
+        // Section break
+        "sect" => {
+            // Keep paragraph boundaries stable at section transitions.
+            super::finalize::finalize_paragraph(state);
+            state.start_new_section();
+        }
+        // Section defaults group marker (tracked by section controls below).
+        "sectd" => {}
+        // Restart page numbering in current section.
+        "pgnrestart" => {
+            state.set_current_section_restart(true);
+        }
+        // Explicit section page start.
+        "pgnstarts" => {
+            let start = parameter.and_then(|p| u32::try_from(p).ok()).filter(|p| *p > 0);
+            state.set_current_section_start_page(start);
+            if start.is_none() && parameter.is_some() {
+                state
+                    .report_builder
+                    .section_numbering_fallback("Invalid \\pgnstarts value; ignored");
+            }
+        }
+        // Page-number format controls.
+        "pgndec" => {
+            state.set_current_section_number_format(PageNumberFormat::Arabic);
+        }
+        "pgnlcrm" => {
+            state.set_current_section_number_format(PageNumberFormat::RomanLower);
+        }
+        "pgnucrm" => {
+            state.set_current_section_number_format(PageNumberFormat::RomanUpper);
         }
 
         // =============================================================================

@@ -59,6 +59,8 @@ pub fn inline_run_count(inlines: &[Inline]) -> usize {
             Inline::Hyperlink(link) => link.runs.len(),
             Inline::BookmarkAnchor(_) => 0,
             Inline::NoteRef(_) => 0,
+            Inline::PageField(_) => 0,
+            Inline::GeneratedBlockMarker(_) => 0,
         })
         .sum()
 }

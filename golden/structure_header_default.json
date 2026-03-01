@@ -39,5 +39,22 @@
       ]
     },
     "footers": {}
+  },
+  "page_management": {
+    "sections": [
+      {
+        "index": 0,
+        "restart_page_numbering": false,
+        "number_format": "arabic"
+      }
+    ],
+    "running_content": {
+      "header_default": true,
+      "header_first": false,
+      "header_even": false,
+      "footer_default": false,
+      "footer_first": false,
+      "footer_even": false
+    }
   }
 }

@@ -741,6 +741,142 @@ pub struct Note {
     pub blocks: Vec<Block>,
 }
 
+/// Page number display format used by page-management fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PageNumberFormat {
+    /// Arabic numerals (1, 2, 3, ...).
+    #[default]
+    Arabic,
+    /// Lowercase Roman numerals (i, ii, iii, ...).
+    RomanLower,
+    /// Uppercase Roman numerals (I, II, III, ...).
+    RomanUpper,
+}
+
+/// Normalized page field references parsed from RTF field instructions.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PageFieldRef {
+    /// Current page number (`PAGE`).
+    CurrentPage {
+        /// Preferred display format.
+        #[serde(default)]
+        format: PageNumberFormat,
+    },
+    /// Total document pages (`NUMPAGES`).
+    TotalPages {
+        /// Preferred display format.
+        #[serde(default)]
+        format: PageNumberFormat,
+    },
+    /// Total pages in the current section (`SECTIONPAGES`).
+    SectionPages {
+        /// Preferred display format.
+        #[serde(default)]
+        format: PageNumberFormat,
+    },
+    /// Page number of a bookmark target (`PAGEREF <bookmark>`).
+    PageRef {
+        /// Bookmark target name.
+        target: String,
+        /// Preferred display format.
+        #[serde(default)]
+        format: PageNumberFormat,
+        /// Visible fallback text from `\\fldrslt`, if present.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fallback_text: Option<String>,
+    },
+}
+
+/// Table-of-contents generation options.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TocOptions {
+    /// Optional heading level range (inclusive), e.g. `1..=3`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub levels: Option<(u8, u8)>,
+    /// Whether hyperlinks were requested in the source TOC field (`\\h`).
+    pub hyperlinks: bool,
+}
+
+impl Default for TocOptions {
+    fn default() -> Self {
+        Self {
+            levels: Some((1, 3)),
+            hyperlinks: true,
+        }
+    }
+}
+
+/// A generated block kind requested by source semantics.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GeneratedBlockKind {
+    /// Table of contents generation.
+    TableOfContents {
+        /// TOC options extracted from source.
+        #[serde(default)]
+        options: TocOptions,
+    },
+}
+
+/// A generated block insertion request in normalized page management.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GeneratedBlock {
+    /// Insertion index in `Document.blocks` (before this block index).
+    pub insertion_index: usize,
+    /// Generated block kind.
+    pub kind: GeneratedBlockKind,
+    /// True when this came from an explicit source marker (`TOC` field).
+    pub explicit: bool,
+}
+
+/// Per-section page-numbering strategy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SectionPlan {
+    /// Zero-based section index.
+    pub index: u32,
+    /// Whether numbering restarts in this section.
+    pub restart_page_numbering: bool,
+    /// Optional starting page number override.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_page: Option<u32>,
+    /// Display format for this section.
+    #[serde(default)]
+    pub number_format: PageNumberFormat,
+}
+
+/// Running-content channels available in source structure.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct RunningContentPlan {
+    /// Default header channel present.
+    pub header_default: bool,
+    /// First-page header channel present.
+    pub header_first: bool,
+    /// Even-page header channel present.
+    pub header_even: bool,
+    /// Default footer channel present.
+    pub footer_default: bool,
+    /// First-page footer channel present.
+    pub footer_first: bool,
+    /// Even-page footer channel present.
+    pub footer_even: bool,
+}
+
+/// Document-wide page management metadata for renderers.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct PageManagement {
+    /// Section numbering plan.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sections: Vec<SectionPlan>,
+    /// Running-content channel availability.
+    #[serde(default)]
+    pub running_content: RunningContentPlan,
+    /// Generated block insertion requests.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub generated_blocks: Vec<GeneratedBlock>,
+}
+
 /// Set of header or footer blocks for the three page-type variants.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct HeaderFooterSet {
@@ -786,6 +922,10 @@ pub enum Inline {
     BookmarkAnchor(BookmarkAnchor),
     /// An inline reference to a footnote or endnote.
     NoteRef(NoteRef),
+    /// A semantic page-management field reference.
+    PageField(PageFieldRef),
+    /// Inline marker requesting generated block insertion at this location.
+    GeneratedBlockMarker(GeneratedBlockKind),
 }
 
 /// The target of a hyperlink — either an external URL or an internal bookmark.
@@ -1554,6 +1694,7 @@ pub enum Block {
 ///         Block::Paragraph(Paragraph::from_runs(vec![Run::new("Hello")])),
 ///     ],
 ///     structure: None,
+///     page_management: None,
 /// };
 /// ```
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -1564,6 +1705,9 @@ pub struct Document {
     /// `None` when the document has no structure destinations.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub structure: Option<DocumentStructure>,
+    /// Optional page-management metadata for renderers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_management: Option<PageManagement>,
 }
 
 impl Document {
@@ -1577,6 +1721,7 @@ impl Document {
         Self {
             blocks,
             structure: None,
+            page_management: None,
         }
     }
 }

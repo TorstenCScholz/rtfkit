@@ -31,10 +31,12 @@
 //! - `$` - Typst math mode marker
 //! - `~` - Typst non-breaking space
 
+use std::collections::{BTreeMap, HashSet};
+
 use rtfkit_core::{
-    Alignment, BookmarkAnchor, Color, Hyperlink, HyperlinkTarget, Inline, NoteKind, NoteRef,
-    Paragraph, Run, Shading, ShadingPattern, ShadingRenderPolicy, percent_pattern_density,
-    resolve_shading_fill_color,
+    Alignment, BookmarkAnchor, Color, GeneratedBlockKind, Hyperlink, HyperlinkTarget, Inline,
+    NoteKind, NoteRef, PageFieldRef, PageNumberFormat, Paragraph, Run, Shading, ShadingPattern,
+    ShadingRenderPolicy, TocOptions, percent_pattern_density, resolve_shading_fill_color,
 };
 
 use super::MappingWarning;
@@ -46,6 +48,17 @@ pub struct ParagraphOutput {
     pub typst_source: String,
     /// Warnings generated during mapping.
     pub warnings: Vec<MappingWarning>,
+}
+
+/// Extra context for paragraph-level mapping decisions.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ParagraphMapContext<'a> {
+    /// Optional rendered note body map (`kind:id` -> Typst source).
+    pub note_bodies: Option<&'a BTreeMap<String, String>>,
+    /// Optional set of known bookmark labels in sanitized Typst form.
+    pub known_bookmarks: Option<&'a HashSet<String>>,
+    /// Enable heading inference (for TOC fallback mode).
+    pub enable_heading_inference: bool,
 }
 
 /// Map a rtfkit-core Paragraph to Typst source code.
@@ -62,10 +75,28 @@ pub struct ParagraphOutput {
 ///
 /// This function is deterministic: the same input always produces the same output.
 pub fn map_paragraph(paragraph: &Paragraph) -> ParagraphOutput {
+    map_paragraph_with_context(paragraph, &ParagraphMapContext::default())
+}
+
+/// Map a paragraph with additional document-level context.
+pub(crate) fn map_paragraph_with_context(
+    paragraph: &Paragraph,
+    context: &ParagraphMapContext<'_>,
+) -> ParagraphOutput {
     let mut warnings = Vec::new();
 
     // Map inlines to text content
-    let content = map_inlines(&paragraph.inlines, &mut warnings);
+    let content = map_inlines(&paragraph.inlines, &mut warnings, context);
+
+    if context.enable_heading_inference
+        && let Some(level) = infer_heading_level(paragraph)
+        && !content.is_empty()
+    {
+        return ParagraphOutput {
+            typst_source: format!("#heading(level: {level})[{content}]"),
+            warnings,
+        };
+    }
 
     // Apply paragraph shading (background) if present
     let content = if let Some(ref shading) = paragraph.shading {
@@ -142,7 +173,11 @@ fn apply_paragraph_shading(
 ///
 /// Handles both runs and hyperlinks, preserving formatting.
 /// Adjacent runs with identical formatting are merged for cleaner output.
-fn map_inlines(inlines: &[Inline], warnings: &mut Vec<MappingWarning>) -> String {
+fn map_inlines(
+    inlines: &[Inline],
+    warnings: &mut Vec<MappingWarning>,
+    context: &ParagraphMapContext<'_>,
+) -> String {
     if inlines.is_empty() {
         return String::new();
     }
@@ -178,7 +213,21 @@ fn map_inlines(inlines: &[Inline], warnings: &mut Vec<MappingWarning>) -> String
                     result.push_str(&map_runs(&pending_runs, warnings));
                     pending_runs.clear();
                 }
-                result.push_str(&map_note_ref(note_ref, warnings));
+                result.push_str(&map_note_ref(note_ref, warnings, context));
+            }
+            Inline::PageField(page_field) => {
+                if !pending_runs.is_empty() {
+                    result.push_str(&map_runs(&pending_runs, warnings));
+                    pending_runs.clear();
+                }
+                result.push_str(&map_page_field_ref(page_field, warnings, context));
+            }
+            Inline::GeneratedBlockMarker(kind) => {
+                if !pending_runs.is_empty() {
+                    result.push_str(&map_runs(&pending_runs, warnings));
+                    pending_runs.clear();
+                }
+                result.push_str(&map_generated_block_marker(kind));
             }
         }
     }
@@ -240,7 +289,31 @@ fn map_bookmark_anchor(anchor: &BookmarkAnchor, warnings: &mut Vec<MappingWarnin
 /// we emit a plain superscript number with a partial-support warning.
 ///
 /// Endnotes have no Typst equivalent at all — same degradation applies.
-fn map_note_ref(note_ref: &NoteRef, warnings: &mut Vec<MappingWarning>) -> String {
+fn note_key(kind: NoteKind, id: u32) -> String {
+    let prefix = match kind {
+        NoteKind::Footnote => "footnote",
+        NoteKind::Endnote => "endnote",
+    };
+    format!("{prefix}:{id}")
+}
+
+fn map_note_ref(
+    note_ref: &NoteRef,
+    warnings: &mut Vec<MappingWarning>,
+    context: &ParagraphMapContext<'_>,
+) -> String {
+    if let Some(note_bodies) = context.note_bodies
+        && let Some(body) = note_bodies.get(&note_key(note_ref.kind, note_ref.id))
+    {
+        if matches!(note_ref.kind, NoteKind::Endnote) {
+            warnings.push(MappingWarning::PartialSupport {
+                feature: "endnote_ref".into(),
+                reason: "Typst has no native endnote primitive; mapped as footnote".into(),
+            });
+        }
+        return format!("#footnote[{body}]");
+    }
+
     let kind_str = match note_ref.kind {
         NoteKind::Footnote => "footnote",
         NoteKind::Endnote => "endnote",
@@ -252,6 +325,137 @@ fn map_note_ref(note_ref: &NoteRef, warnings: &mut Vec<MappingWarning>) -> Strin
         ),
     });
     format!("#super[{}]", note_ref.id)
+}
+
+fn map_generated_block_marker(kind: &GeneratedBlockKind) -> String {
+    match kind {
+        GeneratedBlockKind::TableOfContents { options } => map_toc_options(options),
+    }
+}
+
+fn map_toc_options(options: &TocOptions) -> String {
+    if let Some((_, end)) = options.levels {
+        format!("#outline(depth: {end})")
+    } else {
+        "#outline()".to_string()
+    }
+}
+
+fn map_page_field_ref(
+    page_field: &PageFieldRef,
+    warnings: &mut Vec<MappingWarning>,
+    context: &ParagraphMapContext<'_>,
+) -> String {
+    match page_field {
+        PageFieldRef::CurrentPage { format } => format_current_page(*format),
+        PageFieldRef::TotalPages { format } => format_total_pages(*format),
+        PageFieldRef::SectionPages { format } => {
+            warnings.push(MappingWarning::PartialSupport {
+                feature: "section_pages".into(),
+                reason: "Typst has no native section-page counter; using document total pages"
+                    .into(),
+            });
+            format_total_pages(*format)
+        }
+        PageFieldRef::PageRef {
+            target,
+            format,
+            fallback_text,
+        } => {
+            let label = sanitize_typst_label(target);
+            if let Some(known) = context.known_bookmarks
+                && known.contains(&label)
+            {
+                if !matches!(format, PageNumberFormat::Arabic) {
+                    warnings.push(MappingWarning::PartialSupport {
+                        feature: "pageref_format".into(),
+                        reason:
+                            "Typst page references use document numbering; custom PAGEREF format switch ignored"
+                                .into(),
+                    });
+                }
+                return format!("#ref(<{label}>, form: \"page\")");
+            }
+
+            warnings.push(MappingWarning::UnresolvedPageReference {
+                target: target.clone(),
+            });
+            fallback_text.clone().unwrap_or_else(|| "??".to_string())
+        }
+    }
+}
+
+fn format_current_page(format: PageNumberFormat) -> String {
+    match format {
+        PageNumberFormat::Arabic => "#context counter(page).get().at(0)".to_string(),
+        PageNumberFormat::RomanLower => {
+            "#context numbering(\"i\", counter(page).get().at(0))".to_string()
+        }
+        PageNumberFormat::RomanUpper => {
+            "#context numbering(\"I\", counter(page).get().at(0))".to_string()
+        }
+    }
+}
+
+fn format_total_pages(format: PageNumberFormat) -> String {
+    match format {
+        PageNumberFormat::Arabic => "#context counter(page).final().at(0)".to_string(),
+        PageNumberFormat::RomanLower => {
+            "#context numbering(\"i\", counter(page).final().at(0))".to_string()
+        }
+        PageNumberFormat::RomanUpper => {
+            "#context numbering(\"I\", counter(page).final().at(0))".to_string()
+        }
+    }
+}
+
+fn infer_heading_level(paragraph: &Paragraph) -> Option<u8> {
+    let mut text = String::new();
+    let mut has_bold = false;
+    let mut max_size = 0.0_f32;
+    let mut has_bookmark_anchor = false;
+
+    for inline in &paragraph.inlines {
+        match inline {
+            Inline::Run(run) => {
+                text.push_str(&run.text);
+                has_bold |= run.bold;
+                if let Some(size) = run.font_size {
+                    max_size = max_size.max(size);
+                }
+            }
+            Inline::Hyperlink(link) => {
+                for run in &link.runs {
+                    text.push_str(&run.text);
+                    has_bold |= run.bold;
+                    if let Some(size) = run.font_size {
+                        max_size = max_size.max(size);
+                    }
+                }
+            }
+            Inline::BookmarkAnchor(_) => {
+                has_bookmark_anchor = true;
+            }
+            Inline::NoteRef(_)
+            | Inline::PageField(_)
+            | Inline::GeneratedBlockMarker(_) => {}
+        }
+    }
+
+    let trimmed = text.trim();
+    if trimmed.is_empty() || trimmed.len() > 140 {
+        return None;
+    }
+    if !(has_bold && max_size >= 13.0) {
+        return None;
+    }
+    if has_bookmark_anchor {
+        // Keep bookmark anchors out of inferred headings to avoid duplicate
+        // label declarations in Typst heading/outline processing.
+        return None;
+    }
+
+    Some(1)
 }
 
 /// Sanitize a bookmark name to a valid Typst label identifier.

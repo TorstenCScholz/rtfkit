@@ -9,7 +9,7 @@
 
 use rtfkit_core::{Block as IrBlock, DocumentStructure, HeaderFooterSet};
 
-use super::{MappingWarning, TypstAssetAllocator, map_block};
+use super::{MappingWarning, TypstAssetAllocator, map_block_with_context, paragraph::ParagraphMapContext};
 
 /// Map a `DocumentStructure` to a Typst `#set page(...)` header/footer directive.
 ///
@@ -19,9 +19,12 @@ pub(crate) fn map_structure_page_setup(
     structure: &DocumentStructure,
     assets: &mut TypstAssetAllocator,
     warnings: &mut Vec<MappingWarning>,
+    paragraph_context: &ParagraphMapContext<'_>,
 ) -> String {
-    let header_typst = map_header_footer_set_default(&structure.headers, assets, warnings);
-    let footer_typst = map_header_footer_set_default(&structure.footers, assets, warnings);
+    let header_typst =
+        map_header_footer_set_default(&structure.headers, assets, warnings, paragraph_context);
+    let footer_typst =
+        map_header_footer_set_default(&structure.footers, assets, warnings, paragraph_context);
 
     // Warn about unsupported first/even channels
     if !structure.headers.first.is_empty() || !structure.headers.even.is_empty() {
@@ -59,8 +62,9 @@ fn map_header_footer_set_default(
     set: &HeaderFooterSet,
     assets: &mut TypstAssetAllocator,
     warnings: &mut Vec<MappingWarning>,
+    paragraph_context: &ParagraphMapContext<'_>,
 ) -> String {
-    map_blocks_inline(&set.default, assets, warnings)
+    map_blocks_inline(&set.default, assets, warnings, paragraph_context)
 }
 
 /// Map a slice of blocks to inline Typst content (space-joined block sources).
@@ -68,10 +72,11 @@ fn map_blocks_inline(
     blocks: &[IrBlock],
     assets: &mut TypstAssetAllocator,
     warnings: &mut Vec<MappingWarning>,
+    paragraph_context: &ParagraphMapContext<'_>,
 ) -> String {
     let mut parts = Vec::new();
     for block in blocks {
-        let output = map_block(block, assets);
+        let output = map_block_with_context(block, assets, paragraph_context);
         warnings.extend(output.warnings);
         if !output.typst_source.is_empty() {
             parts.push(output.typst_source);

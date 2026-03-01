@@ -17,11 +17,11 @@ use image::{GenericImageView, ImageFormat as RasterFormat};
 use indexmap::IndexMap;
 use rtfkit_core::{
     Alignment, Block, Border as IrBorder, BorderSet as IrBorderSet, BorderStyle as IrBorderStyle,
-    CellMerge, CellVerticalAlign, Document, DocumentStructure, HeaderFooterSet,
+    CellMerge, CellVerticalAlign, Document, DocumentStructure, GeneratedBlockKind, HeaderFooterSet,
     Hyperlink as IrHyperlink, HyperlinkTarget, ImageBlock, Inline, ListBlock, ListId, ListKind,
-    Note, NoteRef as IrNoteRef, Paragraph, RowAlignment, RowHeightRule, Run, Shading as IrShading,
-    ShadingPattern, TableBlock, TableCell as IrTableCell, TableRow as IrTableRow, WidthUnit,
-    resolve_effective_cell_borders,
+    Note, NoteRef as IrNoteRef, PageFieldRef, Paragraph, RowAlignment, RowHeightRule, Run,
+    Shading as IrShading, ShadingPattern, TableBlock, TableCell as IrTableCell,
+    TableRow as IrTableRow, WidthUnit, resolve_effective_cell_borders,
 };
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -505,10 +505,31 @@ fn convert_paragraph_with_numbering(
             Inline::NoteRef(note_ref) => {
                 p = p.add_run(note_ref_to_docx_run(note_ref, numbering, note_lookup));
             }
+            Inline::PageField(page_field) => {
+                p = p.add_run(page_field_to_docx_run(page_field));
+            }
+            Inline::GeneratedBlockMarker(kind) => {
+                if matches!(kind, GeneratedBlockKind::TableOfContents { .. }) {
+                    p = p.add_run(DocxRun::new().add_text("[TOC]"));
+                }
+            }
         }
     }
 
     p
+}
+
+fn page_field_to_docx_run(page_field: &PageFieldRef) -> DocxRun {
+    match page_field {
+        PageFieldRef::CurrentPage { .. } => DocxRun::new().add_text("1"),
+        PageFieldRef::TotalPages { .. } => DocxRun::new().add_text("1"),
+        PageFieldRef::SectionPages { .. } => DocxRun::new().add_text("1"),
+        PageFieldRef::PageRef {
+            fallback_text,
+            target,
+            ..
+        } => DocxRun::new().add_text(fallback_text.as_deref().unwrap_or(target)),
+    }
 }
 
 /// Converts a NoteRef inline to a docx-rs footnote reference run.
@@ -3315,6 +3336,7 @@ mod tests {
         let doc = rtfkit_core::Document {
             blocks: vec![rtfkit_core::Block::TableBlock(table)],
             structure: None,
+            page_management: None,
         };
 
         // Should not panic
@@ -3354,6 +3376,7 @@ mod tests {
         let doc = rtfkit_core::Document {
             blocks: vec![rtfkit_core::Block::TableBlock(table)],
             structure: None,
+            page_management: None,
         };
         let bytes = super::write_docx_to_bytes(&doc).unwrap();
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
@@ -3387,6 +3410,7 @@ mod tests {
                 footers: HeaderFooterSet::default(),
                 notes: vec![note],
             }),
+            page_management: None,
         };
 
         let bytes = super::write_docx_to_bytes(&doc).unwrap();
@@ -3413,6 +3437,7 @@ mod tests {
                 footers: HeaderFooterSet::default(),
                 notes: Vec::new(),
             }),
+            page_management: None,
         };
 
         let bytes = super::write_docx_to_bytes(&doc).unwrap();

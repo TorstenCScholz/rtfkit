@@ -6,7 +6,7 @@
 //! - Nested fields
 
 use crate::rtf::parse;
-use crate::{Block, HyperlinkTarget, Inline, Warning};
+use crate::{Block, GeneratedBlockKind, HyperlinkTarget, Inline, PageFieldRef, Warning};
 
 // =============================================================================
 // Simple Hyperlink Tests
@@ -441,8 +441,32 @@ fn test_page_field() {
     let input = r#"{\rtf1\ansi {\field{\*\fldinst PAGE}{\fldrslt 1}}}"#;
     let result = parse(input);
 
-    // Should parse, ignoring non-hyperlink field
     assert!(result.is_ok());
+    let (doc, _report) = result.unwrap();
+
+    let field = doc
+        .blocks
+        .iter()
+        .filter_map(|b| {
+            if let Block::Paragraph(p) = b {
+                Some(p)
+            } else {
+                None
+            }
+        })
+        .flat_map(|p| p.inlines.iter())
+        .find_map(|inline| {
+            if let Inline::PageField(field) = inline {
+                Some(field)
+            } else {
+                None
+            }
+        });
+
+    assert!(
+        matches!(field, Some(PageFieldRef::CurrentPage { .. })),
+        "Expected semantic PAGE field, got {field:?}"
+    );
 }
 
 #[test]
@@ -451,6 +475,88 @@ fn test_numpages_field() {
     let result = parse(input);
 
     assert!(result.is_ok());
+    let (doc, _report) = result.unwrap();
+
+    let field = doc
+        .blocks
+        .iter()
+        .filter_map(|b| {
+            if let Block::Paragraph(p) = b {
+                Some(p)
+            } else {
+                None
+            }
+        })
+        .flat_map(|p| p.inlines.iter())
+        .find_map(|inline| {
+            if let Inline::PageField(field) = inline {
+                Some(field)
+            } else {
+                None
+            }
+        });
+
+    assert!(
+        matches!(field, Some(PageFieldRef::TotalPages { .. })),
+        "Expected semantic NUMPAGES field, got {field:?}"
+    );
+}
+
+#[test]
+fn test_pageref_field_parses_with_target_and_fallback() {
+    let input = r#"{\rtf1\ansi {\field{\*\fldinst PAGEREF sec_exec_summary}{\fldrslt 7}}}"#;
+    let result = parse(input);
+    assert!(result.is_ok());
+
+    let (doc, _report) = result.unwrap();
+    let field = doc
+        .blocks
+        .iter()
+        .filter_map(|b| {
+            if let Block::Paragraph(p) = b {
+                Some(p)
+            } else {
+                None
+            }
+        })
+        .flat_map(|p| p.inlines.iter())
+        .find_map(|inline| {
+            if let Inline::PageField(field) = inline {
+                Some(field)
+            } else {
+                None
+            }
+        });
+
+    assert!(
+        matches!(
+            field,
+            Some(PageFieldRef::PageRef { target, fallback_text, .. })
+            if target == "sec_exec_summary" && fallback_text.as_deref() == Some("7")
+        ),
+        "Expected PAGEREF with target + fallback, got {field:?}"
+    );
+}
+
+#[test]
+fn test_toc_field_emits_generated_block_marker_and_page_management() {
+    let input = r#"{\rtf1\ansi {\field{\*\fldinst TOC \o "1-2" \h}{\fldrslt old toc}}}"#;
+    let result = parse(input);
+    assert!(result.is_ok());
+    let (doc, _report) = result.unwrap();
+
+    let page_management = doc
+        .page_management
+        .as_ref()
+        .expect("Expected page management metadata");
+    assert_eq!(page_management.generated_blocks.len(), 1);
+    assert!(
+        matches!(
+            page_management.generated_blocks[0].kind,
+            GeneratedBlockKind::TableOfContents { .. }
+        ),
+        "Expected generated TOC block"
+    );
 }
 
 #[test]
@@ -602,6 +708,8 @@ fn test_bookmark_name_in_field_result_is_not_rendered_as_text() {
             Inline::Hyperlink(link) => link.runs.iter().map(|r| r.text.as_str()).collect(),
             Inline::BookmarkAnchor(_) => Vec::new(),
             Inline::NoteRef(_) => Vec::new(),
+            Inline::PageField(_) => Vec::new(),
+            Inline::GeneratedBlockMarker(_) => Vec::new(),
         })
         .collect();
     assert!(

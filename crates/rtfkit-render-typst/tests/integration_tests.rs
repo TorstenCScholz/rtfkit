@@ -6,6 +6,7 @@
 //! - Various document types can be rendered
 
 use rtfkit_core::{
+    rtf::parse,
     Block, Document, ImageBlock, ImageFormat, ListBlock, ListItem, ListKind, Paragraph, Run,
     TableBlock, TableCell, TableRow,
 };
@@ -217,6 +218,17 @@ fn test_render_mixed_document_to_pdf() {
     let output = result.unwrap();
 
     assert!(output.pdf_bytes.starts_with(b"%PDF-"));
+}
+
+#[test]
+fn test_realworld_policy_fixture_uses_dynamic_page_fields() {
+    let input = include_str!("../../../fixtures/realworld/policy_doc_15p.rtf");
+    let (doc, _report) = parse(input).expect("fixture should parse");
+
+    let mapped = rtfkit_render_typst::map_document(&doc, &RenderOptions::default());
+    assert!(mapped.typst_source.contains("counter(page).get().at(0)"));
+    assert!(mapped.typst_source.contains("counter(page).final().at(0)"));
+    assert!(mapped.typst_source.contains("#outline("));
 }
 
 /// Test that deterministic output works.

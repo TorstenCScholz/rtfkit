@@ -16,4 +16,6 @@ pub fn finalize_document(state: &mut RuntimeState) {
     if let Some(structure) = state.structure.take_structure() {
         state.document.structure = Some(structure);
     }
+
+    super::page_management::finalize_page_management(state);
 }

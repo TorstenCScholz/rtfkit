@@ -14,7 +14,7 @@ use super::state_tables::TableState;
 use crate::error::ParseError;
 use crate::limits::ParserLimits;
 use crate::report::ReportBuilder;
-use crate::{Alignment, Block, Document, Paragraph};
+use crate::{Alignment, Block, Document, PageNumberFormat, Paragraph, SectionPlan};
 
 /// Top-level runtime state for RTF parsing.
 ///
@@ -66,6 +66,8 @@ pub struct RuntimeState {
     pub current_run_style: StyleState,
     /// Paragraph alignment (captured when paragraph starts)
     pub paragraph_alignment: Alignment,
+    /// Parsed section numbering plans (at least one section).
+    pub section_plans: Vec<SectionPlan>,
 
     // =============================================================================
     // Unicode Handling
@@ -123,6 +125,12 @@ impl RuntimeState {
             current_text: String::new(),
             current_run_style: StyleState::new(),
             paragraph_alignment: Alignment::default(),
+            section_plans: vec![SectionPlan {
+                index: 0,
+                restart_page_numbering: false,
+                start_page: None,
+                number_format: PageNumberFormat::Arabic,
+            }],
 
             // Unicode handling
             unicode_skip_count: 1, // Default: 1 fallback character
@@ -136,6 +144,43 @@ impl RuntimeState {
 
             // Image parsing
             image_bytes_used: 0,
+        }
+    }
+
+    /// Start a new section plan at a section break.
+    pub fn start_new_section(&mut self) {
+        let next_index = self.section_plans.len() as u32;
+        let inherited_format = self
+            .section_plans
+            .last()
+            .map(|s| s.number_format)
+            .unwrap_or(PageNumberFormat::Arabic);
+        self.section_plans.push(SectionPlan {
+            index: next_index,
+            restart_page_numbering: false,
+            start_page: None,
+            number_format: inherited_format,
+        });
+    }
+
+    /// Apply section page-number format to the current section.
+    pub fn set_current_section_number_format(&mut self, format: PageNumberFormat) {
+        if let Some(section) = self.section_plans.last_mut() {
+            section.number_format = format;
+        }
+    }
+
+    /// Mark numbering restart for the current section.
+    pub fn set_current_section_restart(&mut self, restart: bool) {
+        if let Some(section) = self.section_plans.last_mut() {
+            section.restart_page_numbering = restart;
+        }
+    }
+
+    /// Set explicit start page number for the current section.
+    pub fn set_current_section_start_page(&mut self, page: Option<u32>) {
+        if let Some(section) = self.section_plans.last_mut() {
+            section.start_page = page;
         }
     }
 

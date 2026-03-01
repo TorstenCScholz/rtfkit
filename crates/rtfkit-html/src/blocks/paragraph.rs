@@ -4,8 +4,8 @@
 //! semantic tags and run merging.
 
 use rtfkit_core::{
-    BookmarkAnchor, Color, Hyperlink, HyperlinkTarget, Inline, NoteRef, Paragraph, Run, Shading,
-    ShadingRenderPolicy, resolve_shading_fill_color,
+    BookmarkAnchor, Color, GeneratedBlockKind, Hyperlink, HyperlinkTarget, Inline, NoteRef,
+    PageFieldRef, Paragraph, Run, Shading, ShadingRenderPolicy, resolve_shading_fill_color,
 };
 
 use crate::escape::{escape_attribute, sanitize_font_family};
@@ -199,6 +199,12 @@ pub fn paragraph_to_html(para: &Paragraph, buf: &mut HtmlBuffer) {
             Inline::NoteRef(note_ref) => {
                 note_ref_to_html(note_ref, buf);
             }
+            Inline::PageField(page_field) => {
+                page_field_to_html(page_field, buf);
+            }
+            Inline::GeneratedBlockMarker(kind) => {
+                generated_block_marker_to_html(kind, buf);
+            }
         }
     }
 
@@ -218,6 +224,37 @@ fn note_ref_to_html(note_ref: &NoteRef, buf: &mut HtmlBuffer) {
         "<a href=\"#note-{}\" class=\"rtf-note-ref {kind_class}\"><sup>{}</sup></a>",
         note_ref.id, note_ref.id
     ));
+}
+
+fn page_field_to_html(page_field: &PageFieldRef, buf: &mut HtmlBuffer) {
+    match page_field {
+        PageFieldRef::CurrentPage { .. } => {
+            buf.push_raw("<span class=\"rtf-page-field\" data-field=\"page\">1</span>");
+        }
+        PageFieldRef::TotalPages { .. } => {
+            buf.push_raw("<span class=\"rtf-page-field\" data-field=\"numpages\">1</span>");
+        }
+        PageFieldRef::SectionPages { .. } => {
+            buf.push_raw("<span class=\"rtf-page-field\" data-field=\"sectionpages\">1</span>");
+        }
+        PageFieldRef::PageRef {
+            target,
+            fallback_text,
+            ..
+        } => {
+            let value = fallback_text.as_deref().unwrap_or(target);
+            let escaped = escape_attribute(value);
+            buf.push_raw(&format!(
+                "<span class=\"rtf-page-field\" data-field=\"pageref\">{escaped}</span>"
+            ));
+        }
+    }
+}
+
+fn generated_block_marker_to_html(kind: &GeneratedBlockKind, buf: &mut HtmlBuffer) {
+    if matches!(kind, GeneratedBlockKind::TableOfContents { .. }) {
+        buf.push_raw("<nav class=\"rtf-generated-toc\"></nav>");
+    }
 }
 
 /// Converts a bookmark anchor to an empty HTML `<a id="...">` element.

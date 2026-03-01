@@ -23,8 +23,9 @@ mod structure;
 mod table;
 
 use std::collections::BTreeMap;
+use std::collections::HashSet;
 
-use rtfkit_core::{Block as IrBlock, Document};
+use rtfkit_core::{Block as IrBlock, Document, GeneratedBlockKind, Inline, NoteKind};
 use rtfkit_style_tokens::{StyleProfile, StyleProfileName, builtins, serialize::to_typst_preamble};
 
 use crate::error::WarningKind;
@@ -34,6 +35,7 @@ use image::map_image_block_with_assets;
 pub use image::{ImageOutput, map_image_block};
 use list::map_list_with_assets;
 pub use list::{ListOutput, map_list};
+use paragraph::{ParagraphMapContext, map_paragraph_with_context};
 pub use paragraph::{ParagraphOutput, map_paragraph};
 use table::map_table_with_assets;
 pub use table::{TableOutput, map_table};
@@ -66,6 +68,11 @@ pub enum MappingWarning {
         /// Human-readable reason for the degradation.
         reason: String,
     },
+    /// A page reference target could not be resolved to a known label.
+    UnresolvedPageReference {
+        /// Bookmark/label target name.
+        target: String,
+    },
 }
 
 impl MappingWarning {
@@ -84,6 +91,9 @@ impl MappingWarning {
             Self::PartialSupport { feature, .. } => {
                 format!("partial_support_{}", feature.replace(' ', "_"))
             }
+            Self::UnresolvedPageReference { target } => {
+                format!("unresolved_page_reference_{}", target.replace(' ', "_"))
+            }
         }
     }
 
@@ -99,6 +109,8 @@ impl MappingWarning {
             Self::PatternDegraded { .. } => WarningKind::PartialSupport,
             // Explicit partial support variant.
             Self::PartialSupport { .. } => WarningKind::PartialSupport,
+            // Unresolved refs preserve visible fallback text.
+            Self::UnresolvedPageReference { .. } => WarningKind::PartialSupport,
             // Remaining current mapper degradations are partial support.
             _ => WarningKind::PartialSupport,
         }
@@ -201,21 +213,57 @@ pub fn map_document(doc: &Document, options: &RenderOptions) -> DocumentOutput {
     let mut warnings = Vec::new();
     let mut block_sources = Vec::new();
     let mut assets = TypstAssetAllocator::new();
+    let note_bodies = build_note_body_map(doc, &mut assets, &mut warnings);
+    let known_bookmarks = collect_bookmark_labels(doc);
+    let enable_heading_inference = doc
+        .page_management
+        .as_ref()
+        .is_some_and(|pm| !pm.generated_blocks.is_empty());
+    let body_context = ParagraphMapContext {
+        note_bodies: Some(&note_bodies),
+        known_bookmarks: Some(&known_bookmarks),
+        enable_heading_inference,
+    };
+    let running_context = ParagraphMapContext {
+        note_bodies: Some(&note_bodies),
+        known_bookmarks: Some(&known_bookmarks),
+        enable_heading_inference: false,
+    };
 
     // Map document structure (headers/footers) to a page setup override
     let structure_page_setup = if let Some(ref s) = doc.structure {
-        structure::map_structure_page_setup(s, &mut assets, &mut warnings)
+        structure::map_structure_page_setup(s, &mut assets, &mut warnings, &running_context)
     } else {
         String::new()
     };
 
-    // Map each block
-    for block in &doc.blocks {
-        let block_output = map_block(block, &mut assets);
-        if !block_output.typst_source.is_empty() {
-            block_sources.push(block_output.typst_source);
+    let mut generated_by_index: BTreeMap<usize, Vec<GeneratedBlockKind>> = BTreeMap::new();
+    if let Some(pm) = &doc.page_management {
+        for generated in &pm.generated_blocks {
+            generated_by_index
+                .entry(generated.insertion_index)
+                .or_default()
+                .push(generated.kind.clone());
         }
-        warnings.extend(block_output.warnings);
+    }
+
+    // Map generated blocks and document blocks in index order.
+    for idx in 0..=doc.blocks.len() {
+        if let Some(generated_blocks) = generated_by_index.get(&idx) {
+            for generated in generated_blocks {
+                let generated_source = map_generated_block_kind(generated, &mut warnings);
+                if !generated_source.is_empty() {
+                    block_sources.push(generated_source);
+                }
+            }
+        }
+        if let Some(block) = doc.blocks.get(idx) {
+            let block_output = map_block_with_context(block, &mut assets, &body_context);
+            if !block_output.typst_source.is_empty() {
+                block_sources.push(block_output.typst_source);
+            }
+            warnings.extend(block_output.warnings);
+        }
     }
 
     // Generate document structure
@@ -232,9 +280,17 @@ pub fn map_document(doc: &Document, options: &RenderOptions) -> DocumentOutput {
 ///
 /// Returns empty source for blocks that cannot be mapped (e.g., empty content).
 pub(crate) fn map_block(block: &IrBlock, assets: &mut TypstAssetAllocator) -> BlockOutput {
+    map_block_with_context(block, assets, &ParagraphMapContext::default())
+}
+
+pub(crate) fn map_block_with_context(
+    block: &IrBlock,
+    assets: &mut TypstAssetAllocator,
+    paragraph_context: &ParagraphMapContext<'_>,
+) -> BlockOutput {
     match block {
         IrBlock::Paragraph(para) => {
-            let output = map_paragraph(para);
+            let output = map_paragraph_with_context(para, paragraph_context);
             BlockOutput {
                 typst_source: output.typst_source,
                 warnings: output.warnings,
@@ -262,6 +318,112 @@ pub(crate) fn map_block(block: &IrBlock, assets: &mut TypstAssetAllocator) -> Bl
             }
         }
     }
+}
+
+fn map_generated_block_kind(kind: &GeneratedBlockKind, warnings: &mut Vec<MappingWarning>) -> String {
+    match kind {
+        GeneratedBlockKind::TableOfContents { options } => {
+            if !options.hyperlinks {
+                warnings.push(MappingWarning::PartialSupport {
+                    feature: "toc_hyperlinks_switch".into(),
+                    reason: "Typst outline hyperlink toggling is not configurable; default behavior used"
+                        .into(),
+                });
+            }
+            if let Some((_, end)) = options.levels {
+                format!("#outline(depth: {end})")
+            } else {
+                "#outline()".to_string()
+            }
+        }
+    }
+}
+
+fn build_note_body_map(
+    doc: &Document,
+    assets: &mut TypstAssetAllocator,
+    warnings: &mut Vec<MappingWarning>,
+) -> BTreeMap<String, String> {
+    let mut note_bodies = BTreeMap::new();
+    let Some(structure) = doc.structure.as_ref() else {
+        return note_bodies;
+    };
+
+    for note in &structure.notes {
+        let mut parts = Vec::new();
+        for block in &note.blocks {
+            let output = map_block(block, assets);
+            if !output.typst_source.is_empty() {
+                parts.push(output.typst_source);
+            }
+            warnings.extend(output.warnings);
+        }
+        if !parts.is_empty() {
+            let key = match note.kind {
+                NoteKind::Footnote => format!("footnote:{}", note.id),
+                NoteKind::Endnote => format!("endnote:{}", note.id),
+            };
+            note_bodies.insert(key, parts.join(" "));
+        }
+    }
+
+    note_bodies
+}
+
+fn collect_bookmark_labels(doc: &Document) -> HashSet<String> {
+    fn collect_from_blocks(blocks: &[IrBlock], labels: &mut HashSet<String>) {
+        for block in blocks {
+            match block {
+                IrBlock::Paragraph(paragraph) => {
+                    for inline in &paragraph.inlines {
+                        if let Inline::BookmarkAnchor(anchor) = inline {
+                            labels.insert(sanitize_label(&anchor.name));
+                        }
+                    }
+                }
+                IrBlock::ListBlock(list) => {
+                    for item in &list.items {
+                        collect_from_blocks(&item.blocks, labels);
+                    }
+                }
+                IrBlock::TableBlock(table) => {
+                    for row in &table.rows {
+                        for cell in &row.cells {
+                            collect_from_blocks(&cell.blocks, labels);
+                        }
+                    }
+                }
+                IrBlock::ImageBlock(_) => {}
+            }
+        }
+    }
+
+    fn sanitize_label(name: &str) -> String {
+        name.chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect()
+    }
+
+    let mut labels = HashSet::new();
+    collect_from_blocks(&doc.blocks, &mut labels);
+    if let Some(structure) = &doc.structure {
+        collect_from_blocks(&structure.headers.default, &mut labels);
+        collect_from_blocks(&structure.headers.first, &mut labels);
+        collect_from_blocks(&structure.headers.even, &mut labels);
+        collect_from_blocks(&structure.footers.default, &mut labels);
+        collect_from_blocks(&structure.footers.first, &mut labels);
+        collect_from_blocks(&structure.footers.even, &mut labels);
+        for note in &structure.notes {
+            collect_from_blocks(&note.blocks, &mut labels);
+        }
+    }
+    labels
 }
 
 /// Generate the complete Typst document source.
@@ -306,7 +468,7 @@ fn generate_document_source(
 fn generate_page_setup(options: &RenderOptions, margins: &Margins) -> String {
     let (width_mm, height_mm) = options.page_size.dimensions_mm();
     format!(
-        "#set page(\n  width: {}mm,\n  height: {}mm,\n  margin: (top: {}mm, bottom: {}mm, left: {}mm, right: {}mm),\n)",
+        "#set page(\n  width: {}mm,\n  height: {}mm,\n  margin: (top: {}mm, bottom: {}mm, left: {}mm, right: {}mm),\n  numbering: \"1\",\n)",
         width_mm, height_mm, margins.top, margins.bottom, margins.left, margins.right
     )
 }
@@ -340,7 +502,11 @@ fn page_size_to_typst(page_size: &crate::options::PageSize) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rtfkit_core::{Block, ListKind as IrListKind, Paragraph, Run, TableBlock as IrTableBlock};
+    use rtfkit_core::{
+        Block, BookmarkAnchor, DocumentStructure, GeneratedBlock, GeneratedBlockKind, HeaderFooterSet,
+        Inline, ListKind as IrListKind, Note, NoteKind, NoteRef, PageFieldRef, PageManagement,
+        Paragraph, RunningContentPlan, Run, SectionPlan, TableBlock as IrTableBlock, TocOptions,
+    };
 
     fn valid_png_data() -> Vec<u8> {
         let mut bytes = Vec::new();
@@ -392,6 +558,130 @@ mod tests {
         );
         assert!(output.typst_source.contains("#set page("));
         assert!(output.typst_source.contains("Hello, World!"));
+    }
+
+    #[test]
+    fn test_map_document_renders_page_fields_dynamically() {
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_inlines(vec![
+            Inline::Run(Run::new("Page ")),
+            Inline::PageField(PageFieldRef::CurrentPage {
+                format: rtfkit_core::PageNumberFormat::Arabic,
+            }),
+            Inline::Run(Run::new(" of ")),
+            Inline::PageField(PageFieldRef::TotalPages {
+                format: rtfkit_core::PageNumberFormat::Arabic,
+            }),
+        ]))]);
+
+        let output = map_document(&doc, &RenderOptions::default());
+        assert!(output.typst_source.contains("counter(page).get().at(0)"));
+        assert!(output.typst_source.contains("counter(page).final().at(0)"));
+    }
+
+    #[test]
+    fn test_map_document_inserts_generated_toc() {
+        let mut doc = Document::from_blocks(vec![
+            Block::Paragraph(Paragraph::from_runs(vec![Run::new("Intro")])),
+            Block::Paragraph(Paragraph::from_runs(vec![Run::new("Body")])),
+        ]);
+        doc.page_management = Some(PageManagement {
+            sections: vec![SectionPlan {
+                index: 0,
+                restart_page_numbering: false,
+                start_page: None,
+                number_format: rtfkit_core::PageNumberFormat::Arabic,
+            }],
+            running_content: RunningContentPlan::default(),
+            generated_blocks: vec![GeneratedBlock {
+                insertion_index: 1,
+                kind: GeneratedBlockKind::TableOfContents {
+                    options: TocOptions {
+                        levels: Some((1, 2)),
+                        hyperlinks: true,
+                    },
+                },
+                explicit: true,
+            }],
+        });
+
+        let output = map_document(&doc, &RenderOptions::default());
+        assert!(output.typst_source.contains("#outline(depth: 2)"));
+    }
+
+    #[test]
+    fn test_map_document_resolves_pageref_when_bookmark_exists() {
+        let doc = Document::from_blocks(vec![
+            Block::Paragraph(Paragraph::from_inlines(vec![
+                Inline::BookmarkAnchor(BookmarkAnchor {
+                    name: "sec_program_delivery".to_string(),
+                }),
+                Inline::Run(Run::new("Program Delivery")),
+            ])),
+            Block::Paragraph(Paragraph::from_inlines(vec![Inline::PageField(
+                PageFieldRef::PageRef {
+                    target: "sec_program_delivery".to_string(),
+                    format: rtfkit_core::PageNumberFormat::Arabic,
+                    fallback_text: Some("7".to_string()),
+                },
+            )])),
+        ]);
+
+        let output = map_document(&doc, &RenderOptions::default());
+        assert!(
+            output
+                .typst_source
+                .contains("#ref(<sec_program_delivery>, form: \"page\")")
+        );
+        assert!(
+            !output
+                .warnings
+                .iter()
+                .any(|w| matches!(w, MappingWarning::UnresolvedPageReference { .. }))
+        );
+    }
+
+    #[test]
+    fn test_map_document_pageref_fallback_when_missing() {
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_inlines(vec![
+            Inline::PageField(PageFieldRef::PageRef {
+                target: "missing_anchor".to_string(),
+                format: rtfkit_core::PageNumberFormat::Arabic,
+                fallback_text: Some("11".to_string()),
+            }),
+        ]))]);
+
+        let output = map_document(&doc, &RenderOptions::default());
+        assert!(output.typst_source.contains("11"));
+        assert!(
+            output.warnings.iter().any(
+                |w| matches!(w, MappingWarning::UnresolvedPageReference { target } if target == "missing_anchor")
+            )
+        );
+    }
+
+    #[test]
+    fn test_map_document_footnote_body_inlined() {
+        let mut doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_inlines(vec![
+            Inline::Run(Run::new("Body")),
+            Inline::NoteRef(NoteRef {
+                id: 1,
+                kind: NoteKind::Footnote,
+            }),
+        ]))]);
+        doc.structure = Some(DocumentStructure {
+            headers: HeaderFooterSet::default(),
+            footers: HeaderFooterSet::default(),
+            notes: vec![Note {
+                id: 1,
+                kind: NoteKind::Footnote,
+                blocks: vec![Block::Paragraph(Paragraph::from_runs(vec![Run::new(
+                    "Footnote body",
+                )]))],
+            }],
+        });
+
+        let output = map_document(&doc, &RenderOptions::default());
+        assert!(output.typst_source.contains("#footnote[Footnote body]"));
     }
 
     #[test]

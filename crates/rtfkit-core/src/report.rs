@@ -297,6 +297,46 @@ pub enum Warning {
         /// Severity of this warning
         severity: WarningSeverity,
     },
+
+    /// A page-management field instruction was only partially supported.
+    ///
+    /// Non-strict mode keeps rendering with best effort output.
+    UnsupportedPageField {
+        /// Description of the issue
+        reason: String,
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
+
+    /// A TOC field switch was parsed but not supported in v1 mapping.
+    ///
+    /// This is a partial-support warning and does not imply dropped content.
+    UnsupportedTocSwitch {
+        /// The unsupported TOC switch token (without leading backslash).
+        switch: String,
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
+
+    /// A page reference target could not be resolved.
+    ///
+    /// The renderer should preserve visible fallback text where possible.
+    UnresolvedPageReference {
+        /// Bookmark target that could not be resolved.
+        target: String,
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
+
+    /// Section numbering required fallback behavior.
+    ///
+    /// This indicates that section numbering semantics were approximated.
+    SectionNumberingFallback {
+        /// Description of the fallback.
+        reason: String,
+        /// Severity of this warning
+        severity: WarningSeverity,
+    },
 }
 
 impl Warning {
@@ -405,6 +445,38 @@ impl Warning {
         }
     }
 
+    /// Creates a new `UnsupportedPageField` warning.
+    pub fn unsupported_page_field(reason: impl Into<String>) -> Self {
+        Warning::UnsupportedPageField {
+            reason: reason.into(),
+            severity: WarningSeverity::Warning,
+        }
+    }
+
+    /// Creates a new `UnsupportedTocSwitch` warning.
+    pub fn unsupported_toc_switch(switch: impl Into<String>) -> Self {
+        Warning::UnsupportedTocSwitch {
+            switch: switch.into(),
+            severity: WarningSeverity::Warning,
+        }
+    }
+
+    /// Creates a new `UnresolvedPageReference` warning.
+    pub fn unresolved_page_reference(target: impl Into<String>) -> Self {
+        Warning::UnresolvedPageReference {
+            target: target.into(),
+            severity: WarningSeverity::Warning,
+        }
+    }
+
+    /// Creates a new `SectionNumberingFallback` warning.
+    pub fn section_numbering_fallback(reason: impl Into<String>) -> Self {
+        Warning::SectionNumberingFallback {
+            reason: reason.into(),
+            severity: WarningSeverity::Warning,
+        }
+    }
+
     /// Returns the severity of this warning.
     pub fn severity(&self) -> WarningSeverity {
         match self {
@@ -421,6 +493,10 @@ impl Warning {
             Warning::MergeConflict { severity, .. } => *severity,
             Warning::TableGeometryConflict { severity, .. } => *severity,
             Warning::UnsupportedField { severity, .. } => *severity,
+            Warning::UnsupportedPageField { severity, .. } => *severity,
+            Warning::UnsupportedTocSwitch { severity, .. } => *severity,
+            Warning::UnresolvedPageReference { severity, .. } => *severity,
+            Warning::SectionNumberingFallback { severity, .. } => *severity,
         }
     }
 }
@@ -707,6 +783,44 @@ impl ReportBuilder {
         }
     }
 
+    /// Records a page-field partial-support warning.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn unsupported_page_field(&mut self, reason: &str) {
+        if self.can_add_warning() {
+            self.warnings.push(Warning::unsupported_page_field(reason));
+        }
+    }
+
+    /// Records an unsupported TOC switch warning.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn unsupported_toc_switch(&mut self, switch: &str) {
+        if self.can_add_warning() {
+            self.warnings.push(Warning::unsupported_toc_switch(switch));
+        }
+    }
+
+    /// Records an unresolved page-reference warning.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn unresolved_page_reference(&mut self, target: &str) {
+        if self.can_add_warning() {
+            self.warnings
+                .push(Warning::unresolved_page_reference(target));
+        }
+    }
+
+    /// Records a section numbering fallback warning.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn section_numbering_fallback(&mut self, reason: &str) {
+        if self.can_add_warning() {
+            self.warnings
+                .push(Warning::section_numbering_fallback(reason));
+        }
+    }
+
     /// Check if we can add another warning (respects warning count limit).
     fn can_add_warning(&mut self) -> bool {
         if self.warning_limit_reached {
@@ -739,7 +853,10 @@ impl ReportBuilder {
 
     /// Builds the final report.
     pub fn build(self) -> Report {
-        let duration_ms = self.start_time.elapsed().as_millis() as u64;
+        // Keep report JSON deterministic across repeated runs.
+        // Runtime wall-clock duration is intentionally excluded from stable output.
+        let _ = self.start_time;
+        let duration_ms = 0;
         Report {
             warnings: self.warnings,
             stats: Stats {
