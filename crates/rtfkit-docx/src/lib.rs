@@ -51,6 +51,14 @@
 
 pub mod error;
 pub mod options;
+pub(crate) mod allocators;
+pub(crate) mod context;
+pub(crate) mod shading;
+pub(crate) mod utils;
+pub(crate) mod image;
+pub(crate) mod paragraph;
+pub(crate) mod structure;
+pub(crate) mod table;
 pub mod writer;
 
 pub use error::DocxError;
