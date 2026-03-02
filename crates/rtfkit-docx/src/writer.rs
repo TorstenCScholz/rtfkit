@@ -7,14 +7,13 @@ use crate::{DocxError, DocxWriterOptions};
 use docx_rs::{
     AbstractNumbering, AlignmentType, BorderType, Docx, Footer as DocxFooter,
     Footnote as DocxFootnote, Header as DocxHeader, HeightRule as DocxHeightRule,
-    Hyperlink as DocxHyperlink, HyperlinkType, IndentLevel, Level, LevelJc, LevelText,
-    LineSpacing, LineSpacingType, NumberFormat, Numbering, NumberingId, Numberings,
-    Paragraph as DocxParagraph, Pic, Run as DocxRun, RunFonts, RunProperty, Shading, ShdType,
-    Start, Table, TableAlignmentType, TableCell, TableCellBorder, TableCellBorderPosition,
-    TableCellBorders, TableCellMargins, TableRow, VAlignType, VMergeType, VertAlignType,
-    WidthType,
+    Hyperlink as DocxHyperlink, HyperlinkType, IndentLevel, Level, LevelJc, LevelText, LineSpacing,
+    LineSpacingType, NumberFormat, Numbering, NumberingId, Numberings, Paragraph as DocxParagraph,
+    Pic, Run as DocxRun, RunFonts, RunProperty, Shading, ShdType, Start, Table, TableAlignmentType,
+    TableBorder, TableBorderPosition, TableBorders, TableCell, TableCellBorder,
+    TableCellBorderPosition, TableCellBorders, TableCellMargins, TableRow, VAlignType, VMergeType,
+    VertAlignType, WidthType,
 };
-use rtfkit_style_tokens::{StyleProfile, TableStripeMode, builtins::resolve_profile};
 use image::{GenericImageView, ImageFormat as RasterFormat};
 use indexmap::IndexMap;
 use rtfkit_core::{
@@ -25,6 +24,7 @@ use rtfkit_core::{
     Shading as IrShading, ShadingPattern, TableBlock, TableCell as IrTableCell,
     TableRow as IrTableRow, WidthUnit, resolve_effective_cell_borders,
 };
+use rtfkit_style_tokens::{StyleProfile, TableStripeMode, builtins::resolve_profile};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{Cursor, Write};
@@ -73,8 +73,7 @@ impl NumberingAllocator {
     /// Creates a `NumberingAllocator` with indentation values from a style profile.
     pub fn with_profile(profile: &StyleProfile) -> Self {
         let mut s = Self::new();
-        s.indent_step_twips =
-            (profile.components.list.indentation_step * 20.0).round() as i32;
+        s.indent_step_twips = (profile.components.list.indentation_step * 20.0).round() as i32;
         s.marker_gap_twips = (profile.components.list.marker_gap * 20.0).round() as i32;
         s
     }
@@ -412,6 +411,7 @@ fn convert_document(
                                     &mut bookmark_id,
                                     &numbering,
                                     note_lookup,
+                                    profile.as_ref(),
                                 );
                                 doc = doc.add_paragraph(paragraph);
                             }
@@ -459,7 +459,14 @@ fn convert_document(
 
     // Apply document structure (headers, footers)
     if let Some(ref s) = document.structure {
-        doc = apply_document_structure(doc, s, &numbering, &mut images, note_lookup)?;
+        doc = apply_document_structure(
+            doc,
+            s,
+            &numbering,
+            &mut images,
+            note_lookup,
+            profile.as_ref(),
+        )?;
     }
 
     // Add numbering part if needed
@@ -513,7 +520,7 @@ fn convert_paragraph(
     numbering: &NumberingAllocator,
     note_lookup: Option<&NoteLookup>,
 ) -> DocxParagraph {
-    convert_paragraph_with_numbering(para, 0, 0, bookmark_id, numbering, note_lookup)
+    convert_paragraph_with_numbering(para, 0, 0, bookmark_id, numbering, note_lookup, None)
 }
 
 /// Converts an IR paragraph to a docx-rs paragraph with optional numbering.
@@ -524,6 +531,7 @@ fn convert_paragraph_with_numbering(
     bookmark_id: &mut usize,
     numbering: &NumberingAllocator,
     note_lookup: Option<&NoteLookup>,
+    profile: Option<&StyleProfile>,
 ) -> DocxParagraph {
     let mut p = DocxParagraph::new();
 
@@ -533,6 +541,11 @@ fn convert_paragraph_with_numbering(
             NumberingId::new(num_id as usize),
             IndentLevel::new(level as usize),
         );
+        if let Some(pf) = profile {
+            p = p.line_spacing(
+                LineSpacing::new().after((pf.spacing.list_item_gap * 20.0).round() as u32),
+            );
+        }
     }
 
     // Map alignment
@@ -654,6 +667,7 @@ fn append_note_blocks_as_paragraphs(
                                 bookmark_id,
                                 numbering,
                                 None,
+                                None,
                             )),
                             Block::ListBlock(nested) => {
                                 append_note_blocks_as_paragraphs(
@@ -705,6 +719,7 @@ fn blocks_to_docx_header(
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
     note_lookup: Option<&NoteLookup>,
+    profile: Option<&StyleProfile>,
 ) -> Result<DocxHeader, DocxError> {
     let mut header = DocxHeader::new();
     let mut bookmark_id: usize = 0;
@@ -725,7 +740,7 @@ fn blocks_to_docx_header(
                     images,
                     &mut bookmark_id,
                     note_lookup,
-                    None,
+                    profile,
                 )?);
             }
             Block::ListBlock(list) => {
@@ -740,6 +755,7 @@ fn blocks_to_docx_header(
                                 &mut bookmark_id,
                                 numbering,
                                 note_lookup,
+                                profile,
                             );
                             header = header.add_paragraph(p);
                         }
@@ -760,6 +776,7 @@ fn blocks_to_docx_footer(
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
     note_lookup: Option<&NoteLookup>,
+    profile: Option<&StyleProfile>,
 ) -> Result<DocxFooter, DocxError> {
     let mut footer = DocxFooter::new();
     let mut bookmark_id: usize = 0;
@@ -780,7 +797,7 @@ fn blocks_to_docx_footer(
                     images,
                     &mut bookmark_id,
                     note_lookup,
-                    None,
+                    profile,
                 )?);
             }
             Block::ListBlock(list) => {
@@ -795,6 +812,7 @@ fn blocks_to_docx_footer(
                                 &mut bookmark_id,
                                 numbering,
                                 note_lookup,
+                                profile,
                             );
                             footer = footer.add_paragraph(p);
                         }
@@ -834,6 +852,7 @@ fn apply_document_structure(
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
     note_lookup: Option<&NoteLookup>,
+    profile: Option<&StyleProfile>,
 ) -> Result<Docx, DocxError> {
     // Default headers
     if !structure.headers.default.is_empty() {
@@ -842,6 +861,7 @@ fn apply_document_structure(
             numbering,
             images,
             note_lookup,
+            profile,
         )?);
     }
     if !structure.headers.first.is_empty() {
@@ -850,6 +870,7 @@ fn apply_document_structure(
             numbering,
             images,
             note_lookup,
+            profile,
         )?);
     }
     if !structure.headers.even.is_empty() {
@@ -858,6 +879,7 @@ fn apply_document_structure(
             numbering,
             images,
             note_lookup,
+            profile,
         )?);
     }
     // Default footers
@@ -867,6 +889,7 @@ fn apply_document_structure(
             numbering,
             images,
             note_lookup,
+            profile,
         )?);
     }
     if !structure.footers.first.is_empty() {
@@ -875,6 +898,7 @@ fn apply_document_structure(
             numbering,
             images,
             note_lookup,
+            profile,
         )?);
     }
     if !structure.footers.even.is_empty() {
@@ -883,6 +907,7 @@ fn apply_document_structure(
             numbering,
             images,
             note_lookup,
+            profile,
         )?);
     }
     Ok(doc)
@@ -1270,6 +1295,12 @@ fn convert_table(
         }
     }
 
+    // Apply profile table border defaults at table level.
+    // Explicit IR borders continue to be applied on cells and take precedence.
+    if let Some(p) = profile {
+        docx_table = docx_table.set_borders(profile_table_borders(p));
+    }
+
     // Apply profile cell margins when no RTF row-default padding was specified.
     if let Some(p) = profile {
         if first_row_props
@@ -1453,6 +1484,50 @@ fn convert_border_set(borders: &IrBorderSet) -> TableCellBorders {
     docx_borders
 }
 
+fn profile_table_borders(profile: &StyleProfile) -> TableBorders {
+    let size = (profile.components.table.border_width * 8.0)
+        .round()
+        .max(1.0) as usize;
+    let color = profile.colors.border_default.without_hash().to_string();
+    TableBorders::with_empty()
+        .set(
+            TableBorder::new(TableBorderPosition::Top)
+                .border_type(BorderType::Single)
+                .size(size)
+                .color(&color),
+        )
+        .set(
+            TableBorder::new(TableBorderPosition::Left)
+                .border_type(BorderType::Single)
+                .size(size)
+                .color(&color),
+        )
+        .set(
+            TableBorder::new(TableBorderPosition::Bottom)
+                .border_type(BorderType::Single)
+                .size(size)
+                .color(&color),
+        )
+        .set(
+            TableBorder::new(TableBorderPosition::Right)
+                .border_type(BorderType::Single)
+                .size(size)
+                .color(&color),
+        )
+        .set(
+            TableBorder::new(TableBorderPosition::InsideH)
+                .border_type(BorderType::Single)
+                .size(size)
+                .color(&color),
+        )
+        .set(
+            TableBorder::new(TableBorderPosition::InsideV)
+                .border_type(BorderType::Single)
+                .size(size)
+                .color(&color),
+        )
+}
+
 /// Converts an IR TableCell to a docx-rs TableCell.
 ///
 /// Handles cell content (paragraphs and lists), width mapping, merge semantics,
@@ -1603,6 +1678,7 @@ fn convert_table_cell(
                                         bookmark_id,
                                         numbering,
                                         note_lookup,
+                                        profile,
                                     );
                                     docx_cell = docx_cell.add_paragraph(paragraph);
                                 }
@@ -1685,8 +1761,10 @@ mod tests {
     use super::*;
     use rtfkit_core::{
         Block, Document, DocumentStructure, HeaderFooterSet, ImageBlock, ImageFormat, Inline,
-        ListItem, ListKind, Note, NoteKind, NoteRef, Paragraph, Run,
+        ListBlock, ListItem, ListKind, Note, NoteKind, NoteRef, Paragraph, Run, TableBlock,
+        TableCell, TableRow,
     };
+    use rtfkit_style_tokens::StyleProfileName;
     use std::io::Read;
 
     fn zip_entry_string(bytes: &[u8], entry_name: &str) -> String {
@@ -3551,5 +3629,86 @@ mod tests {
         let bytes = super::write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         let header_xml = zip_entry_string(&bytes, "word/header1.xml");
         assert!(header_xml.contains("<w:drawing>"));
+    }
+
+    #[test]
+    fn style_profile_report_applies_table_border_width_and_color() {
+        let table =
+            TableBlock::from_rows(vec![TableRow::from_cells(vec![TableCell::from_paragraph(
+                Paragraph::from_runs(vec![Run::new("A")]),
+            )])]);
+        let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
+
+        let bytes = write_docx_to_bytes(
+            &doc,
+            &DocxWriterOptions {
+                style_profile: Some(StyleProfileName::Report),
+            },
+        )
+        .unwrap();
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+
+        assert!(document_xml.contains("<w:tblBorders>"));
+        assert!(
+            document_xml.contains(r#"w:top w:val="single" w:sz="4" w:space="0" w:color="D1D5DB""#)
+        );
+    }
+
+    #[test]
+    fn style_profile_report_applies_list_item_gap_on_numbered_paragraphs() {
+        let mut list = ListBlock::new(1, ListKind::Bullet);
+        list.add_item(ListItem::from_paragraph(
+            0,
+            Paragraph::from_runs(vec![Run::new("Item 1")]),
+        ));
+        let doc = Document::from_blocks(vec![Block::ListBlock(list)]);
+
+        let bytes = write_docx_to_bytes(
+            &doc,
+            &DocxWriterOptions {
+                style_profile: Some(StyleProfileName::Report),
+            },
+        )
+        .unwrap();
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+
+        assert!(document_xml.contains("<w:numPr>"));
+        assert!(document_xml.contains(r#"w:spacing w:after="120""#));
+    }
+
+    #[test]
+    fn style_profile_report_applies_table_profile_in_header() {
+        let header_table =
+            TableBlock::from_rows(vec![TableRow::from_cells(vec![TableCell::from_paragraph(
+                Paragraph::from_runs(vec![Run::new("H")]),
+            )])]);
+        let doc = Document {
+            blocks: vec![Block::Paragraph(Paragraph::from_runs(vec![Run::new(
+                "Body",
+            )]))],
+            structure: Some(DocumentStructure {
+                headers: HeaderFooterSet {
+                    default: vec![Block::TableBlock(header_table)],
+                    first: Vec::new(),
+                    even: Vec::new(),
+                },
+                footers: HeaderFooterSet::default(),
+                notes: Vec::new(),
+            }),
+            page_management: None,
+        };
+
+        let bytes = write_docx_to_bytes(
+            &doc,
+            &DocxWriterOptions {
+                style_profile: Some(StyleProfileName::Report),
+            },
+        )
+        .unwrap();
+        let header_xml = zip_entry_string(&bytes, "word/header1.xml");
+
+        assert!(header_xml.contains("<w:tblCellMar>"));
+        assert!(header_xml.contains(r#"w:left w:w="160" w:type="dxa""#));
+        assert!(header_xml.contains(r#"w:color="D1D5DB""#));
     }
 }
