@@ -471,7 +471,7 @@ fn generate_document_source(
 fn generate_page_setup(options: &RenderOptions, margins: &Margins) -> String {
     let (width_mm, height_mm) = options.page_size.dimensions_mm();
     format!(
-        "#set page(\n  width: {}mm,\n  height: {}mm,\n  margin: (top: {}mm, bottom: {}mm, left: {}mm, right: {}mm),\n  numbering: \"1\",\n)",
+        "#set page(\n  width: {}mm,\n  height: {}mm,\n  margin: (top: {}mm, bottom: {}mm, left: {}mm, right: {}mm),\n)",
         width_mm, height_mm, margins.top, margins.bottom, margins.left, margins.right
     )
 }
