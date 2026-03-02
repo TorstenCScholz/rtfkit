@@ -200,7 +200,8 @@ fn finalize_field(state: &mut RuntimeState) {
                 let mut pending_runs: Vec<crate::Run> = Vec::new();
                 let mut emitted_hyperlink_segment = false;
                 let mut saw_non_run_inline = false;
-                let result_inlines: Vec<Inline> = state.fields.field_result_inlines.drain(..).collect();
+                let result_inlines: Vec<Inline> =
+                    state.fields.field_result_inlines.drain(..).collect();
 
                 for inline in result_inlines {
                     match inline {
@@ -209,13 +210,12 @@ fn finalize_field(state: &mut RuntimeState) {
                             if !pending_runs.is_empty() {
                                 state.capture_paragraph_alignment_if_start();
                                 let runs = std::mem::take(&mut pending_runs);
-                                state
-                                    .current_paragraph
-                                    .inlines
-                                    .push(Inline::Hyperlink(Hyperlink {
+                                state.current_paragraph.inlines.push(Inline::Hyperlink(
+                                    Hyperlink {
                                         target: target.clone(),
                                         runs,
-                                    }));
+                                    },
+                                ));
                                 emitted_hyperlink_segment = true;
                             }
                             state.capture_paragraph_alignment_if_start();

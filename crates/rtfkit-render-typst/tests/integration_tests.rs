@@ -6,9 +6,8 @@
 //! - Various document types can be rendered
 
 use rtfkit_core::{
-    rtf::parse,
     Block, Document, ImageBlock, ImageFormat, ListBlock, ListItem, ListKind, Paragraph, Run,
-    TableBlock, TableCell, TableRow,
+    TableBlock, TableCell, TableRow, rtf::parse,
 };
 use rtfkit_render_typst::{
     DeterminismOptions, RenderOptions, TypstAssetBundle, compile_to_pdf,

@@ -9,7 +9,9 @@
 
 use rtfkit_core::{Block as IrBlock, DocumentStructure, HeaderFooterSet};
 
-use super::{MappingWarning, TypstAssetAllocator, map_block_with_context, paragraph::ParagraphMapContext};
+use super::{
+    MappingWarning, TypstAssetAllocator, map_block_with_context, paragraph::ParagraphMapContext,
+};
 
 /// Map a `DocumentStructure` to a Typst `#set page(...)` header/footer directive.
 ///

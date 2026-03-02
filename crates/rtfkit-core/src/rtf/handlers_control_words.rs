@@ -149,7 +149,9 @@ pub fn handle_control_word(state: &mut RuntimeState, word: &str, parameter: Opti
         }
         // Explicit section page start.
         "pgnstarts" => {
-            let start = parameter.and_then(|p| u32::try_from(p).ok()).filter(|p| *p > 0);
+            let start = parameter
+                .and_then(|p| u32::try_from(p).ok())
+                .filter(|p| *p > 0);
             state.set_current_section_start_page(start);
             if start.is_none() && parameter.is_some() {
                 state

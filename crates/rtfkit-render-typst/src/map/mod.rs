@@ -320,7 +320,10 @@ pub(crate) fn map_block_with_context(
     }
 }
 
-fn map_generated_block_kind(kind: &GeneratedBlockKind, warnings: &mut Vec<MappingWarning>) -> String {
+fn map_generated_block_kind(
+    kind: &GeneratedBlockKind,
+    warnings: &mut Vec<MappingWarning>,
+) -> String {
     match kind {
         GeneratedBlockKind::TableOfContents { options } => {
             if !options.hyperlinks {
@@ -503,9 +506,10 @@ fn page_size_to_typst(page_size: &crate::options::PageSize) -> &'static str {
 mod tests {
     use super::*;
     use rtfkit_core::{
-        Block, BookmarkAnchor, DocumentStructure, GeneratedBlock, GeneratedBlockKind, HeaderFooterSet,
-        Inline, ListKind as IrListKind, Note, NoteKind, NoteRef, PageFieldRef, PageManagement,
-        Paragraph, RunningContentPlan, Run, SectionPlan, TableBlock as IrTableBlock, TocOptions,
+        Block, BookmarkAnchor, DocumentStructure, GeneratedBlock, GeneratedBlockKind,
+        HeaderFooterSet, Inline, ListKind as IrListKind, Note, NoteKind, NoteRef, PageFieldRef,
+        PageManagement, Paragraph, Run, RunningContentPlan, SectionPlan,
+        TableBlock as IrTableBlock, TocOptions,
     };
 
     fn valid_png_data() -> Vec<u8> {

@@ -2,8 +2,8 @@
 
 use super::super::state::RuntimeState;
 use crate::{
-    Block, GeneratedBlock, GeneratedBlockKind, Inline, PageManagement, Paragraph, RunningContentPlan,
-    TocOptions,
+    Block, GeneratedBlock, GeneratedBlockKind, Inline, PageManagement, Paragraph,
+    RunningContentPlan, TocOptions,
 };
 
 /// Build and attach normalized page-management metadata to the document.
@@ -167,10 +167,11 @@ fn block_has_page_fields(block: &Block) -> bool {
             .items
             .iter()
             .any(|item| item.blocks.iter().any(block_has_page_fields)),
-        Block::TableBlock(table) => table
-            .rows
-            .iter()
-            .any(|row| row.cells.iter().any(|cell| cell.blocks.iter().any(block_has_page_fields))),
+        Block::TableBlock(table) => table.rows.iter().any(|row| {
+            row.cells
+                .iter()
+                .any(|cell| cell.blocks.iter().any(block_has_page_fields))
+        }),
         Block::ImageBlock(_) => false,
     }
 }

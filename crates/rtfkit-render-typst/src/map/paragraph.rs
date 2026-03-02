@@ -436,9 +436,7 @@ fn infer_heading_level(paragraph: &Paragraph) -> Option<u8> {
             Inline::BookmarkAnchor(_) => {
                 has_bookmark_anchor = true;
             }
-            Inline::NoteRef(_)
-            | Inline::PageField(_)
-            | Inline::GeneratedBlockMarker(_) => {}
+            Inline::NoteRef(_) | Inline::PageField(_) | Inline::GeneratedBlockMarker(_) => {}
         }
     }
 
