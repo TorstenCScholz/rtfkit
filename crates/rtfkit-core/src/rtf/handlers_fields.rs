@@ -567,7 +567,7 @@ fn tokenize_field_words(input: &str) -> Vec<String> {
             chars.next();
             let mut value = String::new();
             let mut escaped = false;
-            while let Some(next) = chars.next() {
+            for next in chars.by_ref() {
                 if escaped {
                     value.push(next);
                     escaped = false;
@@ -672,7 +672,7 @@ fn tokenize_hyperlink_instruction(input: &str) -> Vec<HyperlinkToken> {
             chars.next();
             let mut value = String::new();
             let mut escaped = false;
-            while let Some(next) = chars.next() {
+            for next in chars.by_ref() {
                 if escaped {
                     value.push(next);
                     escaped = false;

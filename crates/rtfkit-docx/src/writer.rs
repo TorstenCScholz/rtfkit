@@ -338,10 +338,7 @@ fn convert_document(
     let mut doc = Docx::new();
 
     // Resolve style profile (None = no profile defaults applied).
-    let profile: Option<StyleProfile> = options
-        .style_profile
-        .as_ref()
-        .map(|name| resolve_profile(name));
+    let profile: Option<StyleProfile> = options.style_profile.as_ref().map(resolve_profile);
 
     // Apply document-level defaults from profile when explicitly set.
     if let Some(ref p) = profile {
@@ -624,7 +621,7 @@ fn note_ref_to_docx_run(
         return DocxRun::new().add_footnote_reference(footnote);
     }
 
-    let mut run = DocxRun::new().add_text(&note_ref.id.to_string());
+    let mut run = DocxRun::new().add_text(note_ref.id.to_string());
     run.run_property = RunProperty::new().vert_align(VertAlignType::SuperScript);
     run
 }
@@ -1302,20 +1299,19 @@ fn convert_table(
     }
 
     // Apply profile cell margins when no RTF row-default padding was specified.
-    if let Some(p) = profile {
-        if first_row_props
+    if let Some(p) = profile
+        && first_row_props
             .and_then(|rp| rp.default_padding.as_ref())
             .is_none()
-        {
-            let pad_x = (p.spacing.table_cell_padding_x * 20.0).round() as usize;
-            let pad_y = (p.spacing.table_cell_padding_y * 20.0).round() as usize;
-            let margins = TableCellMargins::new()
-                .margin_top(pad_y, WidthType::Dxa)
-                .margin_right(pad_x, WidthType::Dxa)
-                .margin_bottom(pad_y, WidthType::Dxa)
-                .margin_left(pad_x, WidthType::Dxa);
-            docx_table = docx_table.margins(margins);
-        }
+    {
+        let pad_x = (p.spacing.table_cell_padding_x * 20.0).round() as usize;
+        let pad_y = (p.spacing.table_cell_padding_y * 20.0).round() as usize;
+        let margins = TableCellMargins::new()
+            .margin_top(pad_y, WidthType::Dxa)
+            .margin_right(pad_x, WidthType::Dxa)
+            .margin_bottom(pad_y, WidthType::Dxa)
+            .margin_left(pad_x, WidthType::Dxa);
+        docx_table = docx_table.margins(margins);
     }
 
     Ok(docx_table)
@@ -1328,6 +1324,7 @@ fn convert_table(
 /// Valid horizontal continuation cells are skipped because they are
 /// represented by the start cell's gridSpan. Orphan continuation cells are
 /// preserved as standalone cells to avoid silent text loss.
+#[allow(clippy::too_many_arguments)]
 fn convert_table_row(
     table: &TableBlock,
     row_idx: usize,
@@ -1534,6 +1531,7 @@ fn profile_table_borders(profile: &StyleProfile) -> TableBorders {
 /// vertical alignment, shading, and borders.
 ///
 /// Width is stored in twips in the IR and mapped to DXA for DOCX (1:1 ratio).
+#[allow(clippy::too_many_arguments)]
 fn convert_table_cell(
     cell: &IrTableCell,
     row_idx: usize,
