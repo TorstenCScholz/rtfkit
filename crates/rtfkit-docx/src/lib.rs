@@ -21,7 +21,7 @@
 //!
 //! ```rust
 //! use rtfkit_core::{Document, Block, Paragraph, Run};
-//! use rtfkit_docx::write_docx_to_bytes;
+//! use rtfkit_docx::{write_docx_to_bytes, DocxWriterOptions};
 //!
 //! // Create a document with a single paragraph
 //! let doc = Document::from_blocks(vec![
@@ -31,7 +31,7 @@
 //! ]);
 //!
 //! // Convert to DOCX bytes
-//! let bytes = write_docx_to_bytes(&doc).unwrap();
+//! let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 //! assert!(!bytes.is_empty());
 //! ```
 //!
@@ -50,9 +50,11 @@
 //! See [`DocxError`] for the error types that can occur.
 
 pub mod error;
+pub mod options;
 pub mod writer;
 
 pub use error::DocxError;
+pub use options::DocxWriterOptions;
 pub use writer::{write_docx, write_docx_to_bytes};
 
 // Re-export docx-rs types that users might need
@@ -68,7 +70,7 @@ mod tests {
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
             Run::new("Test"),
         ]))]);
-        let result = write_docx_to_bytes(&doc);
+        let result = write_docx_to_bytes(&doc, &DocxWriterOptions::default());
         assert!(result.is_ok());
     }
 
@@ -81,7 +83,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let path = temp_dir.path().join("test.docx");
 
-        let result = write_docx(&doc, &path);
+        let result = write_docx(&doc, &path, &DocxWriterOptions::default());
         assert!(result.is_ok());
         assert!(path.exists());
     }

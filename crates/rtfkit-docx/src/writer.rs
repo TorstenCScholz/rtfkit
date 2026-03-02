@@ -3,16 +3,18 @@
 //! This module provides the core conversion logic from rtfkit IR [`Document`]
 //! to DOCX format using the `docx-rs` library.
 
-use crate::DocxError;
+use crate::{DocxError, DocxWriterOptions};
 use docx_rs::{
     AbstractNumbering, AlignmentType, BorderType, Docx, Footer as DocxFooter,
     Footnote as DocxFootnote, Header as DocxHeader, HeightRule as DocxHeightRule,
     Hyperlink as DocxHyperlink, HyperlinkType, IndentLevel, Level, LevelJc, LevelText,
-    NumberFormat, Numbering, NumberingId, Numberings, Paragraph as DocxParagraph, Pic,
-    Run as DocxRun, RunFonts, RunProperty, Shading, ShdType, Start, Table, TableAlignmentType,
-    TableCell, TableCellBorder, TableCellBorderPosition, TableCellBorders, TableCellMargins,
-    TableRow, VAlignType, VMergeType, VertAlignType, WidthType,
+    LineSpacing, LineSpacingType, NumberFormat, Numbering, NumberingId, Numberings,
+    Paragraph as DocxParagraph, Pic, Run as DocxRun, RunFonts, RunProperty, Shading, ShdType,
+    Start, Table, TableAlignmentType, TableCell, TableCellBorder, TableCellBorderPosition,
+    TableCellBorders, TableCellMargins, TableRow, VAlignType, VMergeType, VertAlignType,
+    WidthType,
 };
+use rtfkit_style_tokens::{StyleProfile, TableStripeMode, builtins::resolve_profile};
 use image::{GenericImageView, ImageFormat as RasterFormat};
 use indexmap::IndexMap;
 use rtfkit_core::{
@@ -49,17 +51,32 @@ pub struct NumberingAllocator {
     next_abstract_num_id: u32,
     /// Next numId to assign (starts at 2 since 1 is reserved by docx-rs)
     next_num_id: u32,
+    /// Left indent step per level in twips (default: 420 = 21pt).
+    indent_step_twips: i32,
+    /// Hanging indent (marker gap) in twips (default: 420 = 21pt).
+    marker_gap_twips: i32,
 }
 
 impl NumberingAllocator {
-    /// Creates a new empty NumberingAllocator.
+    /// Creates a new empty NumberingAllocator with default indentation (21pt / 420 twips).
     pub fn new() -> Self {
         Self {
             abstract_num_ids: IndexMap::new(),
             list_to_num: IndexMap::new(),
             next_abstract_num_id: 0,
             next_num_id: 2, // Start at 2, since docx-rs reserves 1 for default
+            indent_step_twips: 420,
+            marker_gap_twips: 420,
         }
+    }
+
+    /// Creates a `NumberingAllocator` with indentation values from a style profile.
+    pub fn with_profile(profile: &StyleProfile) -> Self {
+        let mut s = Self::new();
+        s.indent_step_twips =
+            (profile.components.list.indentation_step * 20.0).round() as i32;
+        s.marker_gap_twips = (profile.components.list.marker_gap * 20.0).round() as i32;
+        s
     }
 
     /// Registers a list and returns its numId.
@@ -164,8 +181,8 @@ impl NumberingAllocator {
         };
 
         // Calculate indentation based on level
-        let left_indent = 420 * (level_idx as i32 + 1);
-        let hanging_indent = 420;
+        let left_indent = self.indent_step_twips * (level_idx as i32 + 1);
+        let hanging_indent = self.marker_gap_twips;
 
         Level::new(
             level_idx as usize,
@@ -257,17 +274,21 @@ fn twips_to_emu(twips: i32) -> u32 {
 ///
 /// ```no_run
 /// use rtfkit_core::{Document, Block, Paragraph, Run};
-/// use rtfkit_docx::write_docx;
+/// use rtfkit_docx::{write_docx, DocxWriterOptions};
 /// use std::path::Path;
 ///
 /// let doc = Document::from_blocks(vec![
 ///     Block::Paragraph(Paragraph::from_runs(vec![Run::new("Hello, World!")])),
 /// ]);
 ///
-/// write_docx(&doc, Path::new("output.docx")).unwrap();
+/// write_docx(&doc, Path::new("output.docx"), &DocxWriterOptions::default()).unwrap();
 /// ```
-pub fn write_docx(document: &Document, path: &Path) -> Result<(), DocxError> {
-    let bytes = write_docx_to_bytes(document)?;
+pub fn write_docx(
+    document: &Document,
+    path: &Path,
+    options: &DocxWriterOptions,
+) -> Result<(), DocxError> {
+    let bytes = write_docx_to_bytes(document, options)?;
     let mut file = File::create(path)?;
     file.write_all(&bytes)?;
     Ok(())
@@ -291,26 +312,64 @@ pub fn write_docx(document: &Document, path: &Path) -> Result<(), DocxError> {
 ///
 /// ```
 /// use rtfkit_core::{Document, Block, Paragraph, Run};
-/// use rtfkit_docx::write_docx_to_bytes;
+/// use rtfkit_docx::{write_docx_to_bytes, DocxWriterOptions};
 ///
 /// let doc = Document::from_blocks(vec![
 ///     Block::Paragraph(Paragraph::from_runs(vec![Run::new("Hello, World!")])),
 /// ]);
 ///
-/// let bytes = write_docx_to_bytes(&doc).unwrap();
+/// let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 /// assert!(!bytes.is_empty());
 /// ```
-pub fn write_docx_to_bytes(document: &Document) -> Result<Vec<u8>, DocxError> {
-    let docx = convert_document(document)?;
+pub fn write_docx_to_bytes(
+    document: &Document,
+    options: &DocxWriterOptions,
+) -> Result<Vec<u8>, DocxError> {
+    let docx = convert_document(document, options)?;
     let mut cursor = Cursor::new(Vec::new());
     docx.pack(&mut cursor)?;
     Ok(cursor.into_inner())
 }
 
 /// Converts an IR document to a docx-rs XMLDocx.
-fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> {
+fn convert_document(
+    document: &Document,
+    options: &DocxWriterOptions,
+) -> Result<docx_rs::XMLDocx, DocxError> {
     let mut doc = Docx::new();
-    let mut numbering = NumberingAllocator::new();
+
+    // Resolve style profile (None = no profile defaults applied).
+    let profile: Option<StyleProfile> = options
+        .style_profile
+        .as_ref()
+        .map(|name| resolve_profile(name));
+
+    // Apply document-level defaults from profile when explicitly set.
+    if let Some(ref p) = profile {
+        let font_name = p
+            .typography
+            .font_body
+            .split(',')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if !font_name.is_empty() {
+            doc = doc.default_fonts(RunFonts::new().ascii(&font_name).hi_ansi(&font_name));
+        }
+        doc = doc.default_size((p.typography.size_body * 2.0).round() as usize);
+        doc = doc.default_line_spacing(
+            LineSpacing::new()
+                .line_rule(LineSpacingType::Auto)
+                .line((p.typography.line_height_body * 240.0).round() as i32)
+                .after((p.spacing.paragraph_gap * 20.0).round() as u32),
+        );
+    }
+
+    let mut numbering = match profile.as_ref() {
+        Some(p) => NumberingAllocator::with_profile(p),
+        None => NumberingAllocator::new(),
+    };
     let mut images = ImageAllocator::new();
     let note_lookup = build_note_lookup(document.structure.as_ref());
     let note_lookup = (!note_lookup.is_empty()).then_some(&note_lookup);
@@ -370,6 +429,7 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
                                     &mut images,
                                     &mut bookmark_id,
                                     note_lookup,
+                                    profile.as_ref(),
                                 )?;
                                 doc = doc.add_table(table);
                             }
@@ -385,6 +445,7 @@ fn convert_document(document: &Document) -> Result<docx_rs::XMLDocx, DocxError> 
                     &mut images,
                     &mut bookmark_id,
                     note_lookup,
+                    profile.as_ref(),
                 )?;
                 doc = doc.add_table(docx_table);
             }
@@ -664,6 +725,7 @@ fn blocks_to_docx_header(
                     images,
                     &mut bookmark_id,
                     note_lookup,
+                    None,
                 )?);
             }
             Block::ListBlock(list) => {
@@ -718,6 +780,7 @@ fn blocks_to_docx_footer(
                     images,
                     &mut bookmark_id,
                     note_lookup,
+                    None,
                 )?);
             }
             Block::ListBlock(list) => {
@@ -1128,6 +1191,7 @@ fn convert_table(
     images: &mut ImageAllocator,
     bookmark_id: &mut usize,
     note_lookup: Option<&NoteLookup>,
+    profile: Option<&StyleProfile>,
 ) -> Result<Table, DocxError> {
     let rows: Vec<TableRow> = table
         .rows
@@ -1142,6 +1206,7 @@ fn convert_table(
                 images,
                 bookmark_id,
                 note_lookup,
+                profile,
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -1205,6 +1270,23 @@ fn convert_table(
         }
     }
 
+    // Apply profile cell margins when no RTF row-default padding was specified.
+    if let Some(p) = profile {
+        if first_row_props
+            .and_then(|rp| rp.default_padding.as_ref())
+            .is_none()
+        {
+            let pad_x = (p.spacing.table_cell_padding_x * 20.0).round() as usize;
+            let pad_y = (p.spacing.table_cell_padding_y * 20.0).round() as usize;
+            let margins = TableCellMargins::new()
+                .margin_top(pad_y, WidthType::Dxa)
+                .margin_right(pad_x, WidthType::Dxa)
+                .margin_bottom(pad_y, WidthType::Dxa)
+                .margin_left(pad_x, WidthType::Dxa);
+            docx_table = docx_table.margins(margins);
+        }
+    }
+
     Ok(docx_table)
 }
 
@@ -1223,6 +1305,7 @@ fn convert_table_row(
     images: &mut ImageAllocator,
     bookmark_id: &mut usize,
     note_lookup: Option<&NoteLookup>,
+    profile: Option<&StyleProfile>,
 ) -> Result<TableRow, DocxError> {
     let mut cells = Vec::with_capacity(row.cells.len());
     let mut expected_continuations = 0usize;
@@ -1233,11 +1316,13 @@ fn convert_table_row(
             Some(CellMerge::HorizontalStart { span }) if span > 1 => {
                 cells.push(convert_table_cell(
                     cell,
+                    row_idx,
                     effective_borders,
                     numbering,
                     images,
                     bookmark_id,
                     note_lookup,
+                    profile,
                 )?);
                 expected_continuations = span.saturating_sub(1) as usize;
             }
@@ -1248,11 +1333,13 @@ fn convert_table_row(
                 standalone.merge = None;
                 cells.push(convert_table_cell(
                     &standalone,
+                    row_idx,
                     effective_borders,
                     numbering,
                     images,
                     bookmark_id,
                     note_lookup,
+                    profile,
                 )?);
             }
             Some(CellMerge::HorizontalContinue) if expected_continuations > 0 => {
@@ -1264,22 +1351,26 @@ fn convert_table_row(
                 standalone.merge = None;
                 cells.push(convert_table_cell(
                     &standalone,
+                    row_idx,
                     effective_borders,
                     numbering,
                     images,
                     bookmark_id,
                     note_lookup,
+                    profile,
                 )?);
             }
             _ => {
                 expected_continuations = 0;
                 cells.push(convert_table_cell(
                     cell,
+                    row_idx,
                     effective_borders,
                     numbering,
                     images,
                     bookmark_id,
                     note_lookup,
+                    profile,
                 )?);
             }
         }
@@ -1370,11 +1461,13 @@ fn convert_border_set(borders: &IrBorderSet) -> TableCellBorders {
 /// Width is stored in twips in the IR and mapped to DXA for DOCX (1:1 ratio).
 fn convert_table_cell(
     cell: &IrTableCell,
+    row_idx: usize,
     effective_borders: Option<IrBorderSet>,
     numbering: &NumberingAllocator,
     images: &mut ImageAllocator,
     bookmark_id: &mut usize,
     note_lookup: Option<&NoteLookup>,
+    profile: Option<&StyleProfile>,
 ) -> Result<TableCell, DocxError> {
     let mut docx_cell = TableCell::new();
 
@@ -1462,11 +1555,23 @@ fn convert_table_cell(
         }
     }
 
-    // Apply cell shading if present
+    // Apply cell shading: IR-source shading takes priority; fall back to profile row striping.
     if let Some(ref shading) = cell.shading
         && let Some(docx_shading) = convert_shading(shading)
     {
         docx_cell = docx_cell.shading(docx_shading);
+    } else if let Some(p) = profile
+        && p.components.table.stripe_mode == TableStripeMode::AlternateRows
+        && row_idx % 2 == 1
+    {
+        // Odd rows (0-indexed: 1, 3, 5, …) receive the stripe color.
+        let fill = p.colors.surface_table_stripe.without_hash().to_string();
+        docx_cell = docx_cell.shading(
+            Shading::new()
+                .shd_type(ShdType::Clear)
+                .color("auto")
+                .fill(fill),
+        );
     }
 
     // Apply cell borders if present
@@ -1515,6 +1620,7 @@ fn convert_table_cell(
                                         images,
                                         bookmark_id,
                                         note_lookup,
+                                        profile,
                                     )?);
                                 }
                                 Block::ListBlock(_) => {}
@@ -1545,6 +1651,7 @@ fn convert_table_cell(
                                         images,
                                         bookmark_id,
                                         note_lookup,
+                                        profile,
                                     )?);
                                 }
                                 Block::ListBlock(_) => {}
@@ -1561,6 +1668,7 @@ fn convert_table_cell(
                     images,
                     bookmark_id,
                     note_lookup,
+                    profile,
                 )?);
             }
             Block::ImageBlock(image) => {
@@ -1736,7 +1844,7 @@ mod tests {
             Run::new("Hello, World!"),
         ]))]);
 
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
 
         // Verify it's a valid ZIP (DOCX is a ZIP file)
@@ -1753,7 +1861,7 @@ mod tests {
             Block::Paragraph(Paragraph::from_runs(vec![Run::new("Third paragraph")])),
         ]);
 
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1764,7 +1872,7 @@ mod tests {
             Run::new("World!"),
         ]))]);
 
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1779,7 +1887,7 @@ mod tests {
         para.inlines.push(Inline::Run(Run::new("Left aligned")));
 
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1790,7 +1898,7 @@ mod tests {
         para.inlines.push(Inline::Run(Run::new("Center aligned")));
 
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1801,7 +1909,7 @@ mod tests {
         para.inlines.push(Inline::Run(Run::new("Right aligned")));
 
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1812,7 +1920,7 @@ mod tests {
         para.inlines.push(Inline::Run(Run::new("Justified text")));
 
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1826,7 +1934,7 @@ mod tests {
         run.bold = true;
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1836,7 +1944,7 @@ mod tests {
         run.italic = true;
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1846,7 +1954,7 @@ mod tests {
         run.underline = true;
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1857,7 +1965,7 @@ mod tests {
         run.italic = true;
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1869,7 +1977,7 @@ mod tests {
         run.underline = true;
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1889,7 +1997,7 @@ mod tests {
             italic_run,
             underline_run,
         ]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1902,7 +2010,7 @@ mod tests {
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
             Run::new("  leading spaces"),
         ]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1911,7 +2019,7 @@ mod tests {
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
             Run::new("trailing spaces  "),
         ]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1920,7 +2028,7 @@ mod tests {
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
             Run::new("multiple   spaces   inside"),
         ]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1929,7 +2037,7 @@ mod tests {
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
             Run::new("    "),
         ]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1940,7 +2048,7 @@ mod tests {
     #[test]
     fn test_empty_document() {
         let doc = Document::new();
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
 
         // Verify it's a valid ZIP
@@ -1952,7 +2060,7 @@ mod tests {
     #[test]
     fn test_empty_paragraph() {
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::new())]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1961,7 +2069,7 @@ mod tests {
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
             Run::new(""),
         ]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -1978,7 +2086,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("test_output.docx");
 
-        write_docx(&doc, &file_path).unwrap();
+        write_docx(&doc, &file_path, &DocxWriterOptions::default()).unwrap();
         assert!(file_path.exists());
 
         // Verify the file is a valid DOCX
@@ -1996,7 +2104,7 @@ mod tests {
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
             Run::new("Hello 世界 🌍"),
         ]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2005,7 +2113,7 @@ mod tests {
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![
             Run::new("Special: <>&\"'"),
         ]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2030,7 +2138,7 @@ mod tests {
         ));
 
         let doc = Document::from_blocks(vec![Block::ListBlock(list)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
 
         // Verify it's a valid ZIP
@@ -2058,7 +2166,7 @@ mod tests {
         ));
 
         let doc = Document::from_blocks(vec![Block::ListBlock(list)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
 
         // Verify numbering.xml exists
@@ -2088,7 +2196,7 @@ mod tests {
         ));
 
         let doc = Document::from_blocks(vec![Block::ListBlock(list)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2106,7 +2214,7 @@ mod tests {
             Block::Paragraph(Paragraph::from_runs(vec![Run::new("After list")])),
         ]);
 
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2138,7 +2246,7 @@ mod tests {
             Block::ListBlock(list2),
         ]);
 
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
 
         // Verify numbering.xml exists
@@ -2161,7 +2269,7 @@ mod tests {
         ));
 
         let doc = Document::from_blocks(vec![Block::ListBlock(list)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2204,7 +2312,7 @@ mod tests {
         ])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
 
         // Verify it's a valid ZIP
@@ -2229,7 +2337,7 @@ mod tests {
         ]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2245,7 +2353,7 @@ mod tests {
         ])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2262,7 +2370,7 @@ mod tests {
             )])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2281,7 +2389,7 @@ mod tests {
             Block::Paragraph(Paragraph::from_runs(vec![Run::new("After table")])),
         ]);
 
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2290,7 +2398,7 @@ mod tests {
         let table = TableBlock::new();
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2304,7 +2412,7 @@ mod tests {
         ])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2325,7 +2433,7 @@ mod tests {
         ])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(outer_table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2343,7 +2451,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2365,7 +2473,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![row]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
 
         // Verify it's a valid DOCX
@@ -2390,7 +2498,7 @@ mod tests {
         let row = TableRow::from_cells(vec![start, orphan, end]);
         let table = TableBlock::from_rows(vec![row]);
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let reader = Cursor::new(&bytes);
         let mut archive = zip::ZipArchive::new(reader).expect("Should be valid ZIP");
@@ -2416,7 +2524,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2430,7 +2538,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2445,7 +2553,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2460,7 +2568,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2475,7 +2583,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2489,7 +2597,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2505,7 +2613,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
     }
 
@@ -2519,7 +2627,7 @@ mod tests {
             }),
         ]);
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         assert!(document_xml.contains("<w:hyperlink"));
@@ -2534,7 +2642,7 @@ mod tests {
             runs: vec![Run::new("Example")],
         })]);
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let rels_xml = zip_entry_string(&bytes, "word/_rels/document.xml.rels");
         assert!(rels_xml.contains(
@@ -2558,7 +2666,7 @@ mod tests {
             }),
         ]);
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let rels_xml = zip_entry_string(&bytes, "word/_rels/document.xml.rels");
         assert!(rels_xml.contains("Target=\"https://example.com\""));
@@ -2577,7 +2685,7 @@ mod tests {
             runs: vec![bold, italic],
         })]);
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         assert!(document_xml.contains("<w:hyperlink"));
@@ -2597,7 +2705,7 @@ mod tests {
         run.font_family = Some("Arial".to_string());
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         assert!(document_xml.contains(r#"w:ascii="Arial""#));
@@ -2611,7 +2719,7 @@ mod tests {
         run.font_size = Some(12.0); // 12pt = 24 half-points
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         assert!(document_xml.contains(r#"<w:sz w:val="24" />"#));
@@ -2624,7 +2732,7 @@ mod tests {
         run.color = Some(rtfkit_core::Color::new(255, 0, 0)); // Red
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         assert!(document_xml.contains(r#"<w:color w:val="FF0000" />"#));
@@ -2636,7 +2744,7 @@ mod tests {
         run.strikethrough = true;
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         assert!(document_xml.contains("<w:strike"));
@@ -2648,7 +2756,7 @@ mod tests {
         run.all_caps = true;
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         assert!(document_xml.contains("<w:caps"));
@@ -2660,7 +2768,7 @@ mod tests {
         run.small_caps = true;
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         assert!(document_xml.contains("<w:caps"));
@@ -2674,7 +2782,7 @@ mod tests {
         run.color = Some(rtfkit_core::Color::new(0, 128, 255)); // Blue
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Font family
@@ -2697,7 +2805,7 @@ mod tests {
         run.color = Some(rtfkit_core::Color::new(0, 255, 0)); // Green
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Font family
@@ -2723,7 +2831,7 @@ mod tests {
             runs: vec![styled_run],
         })]);
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Verify hyperlink is present
@@ -2744,7 +2852,7 @@ mod tests {
         run.font_size = Some(0.1); // Very small, should clamp to 1 half-point
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should be clamped to 1
@@ -2757,7 +2865,7 @@ mod tests {
         run.font_size = Some(1000.0); // Very large, should clamp to 1638 half-points
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should be clamped to 1638
@@ -2770,7 +2878,7 @@ mod tests {
         run.font_size = Some(12.4); // Should round to 25 half-points (12.5 * 2 = 25)
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // 12.4 * 2 = 24.8, rounds to 25
@@ -2789,7 +2897,7 @@ mod tests {
         ))); // Yellow
 
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         assert!(document_xml.contains("<w:pPr>"));
@@ -2809,7 +2917,7 @@ mod tests {
         para.shading = Some(shading);
 
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         assert!(document_xml.contains("<w:shd"));
@@ -2824,7 +2932,7 @@ mod tests {
         run.background_color = Some(rtfkit_core::Color::new(255, 255, 0)); // Yellow
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should contain w:shd with w:fill attribute
@@ -2839,7 +2947,7 @@ mod tests {
         let run = Run::new("Normal text");
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should NOT contain w:shd element
@@ -2853,7 +2961,7 @@ mod tests {
         run.background_color = Some(rtfkit_core::Color::new(0, 0, 255)); // Blue background
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should contain both w:color and w:shd
@@ -2873,7 +2981,7 @@ mod tests {
             runs: vec![run],
         })]);
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Verify hyperlink is present
@@ -2897,7 +3005,7 @@ mod tests {
         run.background_color = Some(rtfkit_core::Color::new(255, 192, 203)); // Pink background
 
         let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_runs(vec![run]))]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Verify all formatting is present
@@ -2928,7 +3036,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should contain w:shd in cell properties
@@ -2946,7 +3054,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should NOT contain w:shd in cell properties
@@ -2970,7 +3078,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell, cont_cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should contain both gridSpan and shading
@@ -2993,7 +3101,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should contain both vertical alignment and shading
@@ -3022,7 +3130,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should contain w:shd with pct25 pattern
@@ -3048,7 +3156,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should contain w:shd with horzStripe pattern
@@ -3074,7 +3182,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should contain w:shd with diagCross pattern
@@ -3100,7 +3208,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should contain w:shd with solid pattern and auto color
@@ -3125,7 +3233,7 @@ mod tests {
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
 
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
-        let bytes = write_docx_to_bytes(&doc).unwrap();
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
 
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         // Should contain w:shd with clear pattern
@@ -3340,7 +3448,7 @@ mod tests {
         };
 
         // Should not panic
-        let result = super::write_docx_to_bytes(&doc);
+        let result = super::write_docx_to_bytes(&doc, &DocxWriterOptions::default());
         assert!(result.is_ok());
     }
 
@@ -3378,7 +3486,7 @@ mod tests {
             structure: None,
             page_management: None,
         };
-        let bytes = super::write_docx_to_bytes(&doc).unwrap();
+        let bytes = super::write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
 
         assert!(document_xml.contains("<w:tcBorders"));
@@ -3413,7 +3521,7 @@ mod tests {
             page_management: None,
         };
 
-        let bytes = super::write_docx_to_bytes(&doc).unwrap();
+        let bytes = super::write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         let footnotes_xml = zip_entry_string(&bytes, "word/footnotes.xml");
 
@@ -3440,7 +3548,7 @@ mod tests {
             page_management: None,
         };
 
-        let bytes = super::write_docx_to_bytes(&doc).unwrap();
+        let bytes = super::write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         let header_xml = zip_entry_string(&bytes, "word/header1.xml");
         assert!(header_xml.contains("<w:drawing>"));
     }

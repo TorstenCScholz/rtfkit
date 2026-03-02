@@ -8,6 +8,7 @@ description = "DOCX writer for rtfkit IR documents"
 
 [dependencies]
 rtfkit-core = { path = "../rtfkit-core" }
+rtfkit-style-tokens = { path = "../rtfkit-style-tokens" }
 docx-rs = "0.4"
 thiserror = "2.0"
 indexmap = "2.7"

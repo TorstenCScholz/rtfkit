@@ -2308,6 +2308,7 @@ dependencies = [
  "image",
  "indexmap",
  "rtfkit-core",
+ "rtfkit-style-tokens",
  "tempfile",
  "thiserror",
  "zip 0.6.6",

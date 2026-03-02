@@ -2567,7 +2567,31 @@ mod style_profile_tests {
     }
 
     #[test]
-    fn style_profile_rejected_for_docx_output() {
+    fn docx_classic_style_profile_accepted() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/text_simple_paragraph.rtf");
+
+        let dir = tempdir().unwrap();
+        let output = dir.path().join("out.docx");
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--to",
+            "docx",
+            "--style-profile",
+            "classic",
+            "-o",
+            output.to_str().unwrap(),
+        ]);
+        cmd.assert().success();
+        assert!(output.exists(), "DOCX file should be created");
+    }
+
+    #[test]
+    fn docx_report_style_profile_accepted() {
         let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let project_root = manifest_dir.parent().unwrap().parent().unwrap();
         let fixture = project_root.join("fixtures/text_simple_paragraph.rtf");
@@ -2586,10 +2610,54 @@ mod style_profile_tests {
             "-o",
             output.to_str().unwrap(),
         ]);
-        cmd.assert()
-            .failure()
-            .code(2)
-            .stderr(contains("Style profiles are not supported for DOCX output"));
+        cmd.assert().success();
+        assert!(output.exists(), "DOCX file should be created");
+    }
+
+    #[test]
+    fn docx_compact_style_profile_accepted() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/text_simple_paragraph.rtf");
+
+        let dir = tempdir().unwrap();
+        let output = dir.path().join("out.docx");
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--to",
+            "docx",
+            "--style-profile",
+            "compact",
+            "-o",
+            output.to_str().unwrap(),
+        ]);
+        cmd.assert().success();
+        assert!(output.exists(), "DOCX file should be created");
+    }
+
+    #[test]
+    fn docx_no_profile_succeeds() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/text_simple_paragraph.rtf");
+
+        let dir = tempdir().unwrap();
+        let output = dir.path().join("out.docx");
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--to",
+            "docx",
+            "-o",
+            output.to_str().unwrap(),
+        ]);
+        cmd.assert().success();
+        assert!(output.exists(), "DOCX file should be created");
     }
 
     #[test]

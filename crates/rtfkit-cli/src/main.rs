@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use chrono::DateTime;
 use clap::{Parser, Subcommand, ValueEnum};
 use rtfkit_core::{Document, Report, Warning, parse};
-use rtfkit_docx::write_docx;
+use rtfkit_docx::{DocxWriterOptions, write_docx};
 use rtfkit_html::{CssMode, HtmlWriterOptions, document_to_html_with_warnings};
 use rtfkit_render_typst::{
     DeterminismOptions, Margins, PageSize, RenderOptions, document_to_pdf_with_warnings,
@@ -279,12 +279,6 @@ fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
         return Ok(ExitCode::from(EXIT_PARSE_ERROR));
     }
 
-    // Style profiles are not supported for DOCX output (MVP).
-    if resolved_to == Target::Docx && style_profile.is_some() {
-        eprintln!("Error: Style profiles are not supported for DOCX output");
-        return Ok(ExitCode::from(EXIT_PARSE_ERROR));
-    }
-
     // Validate pdf_page_size value if provided
     if let Some(ref page_size) = pdf_page_size {
         let page_size_lower = page_size.to_lowercase();
@@ -341,7 +335,22 @@ fn handle_convert(request: ConvertRequest) -> Result<ExitCode> {
     // Handle output if --output is specified
     if let Some(output_path) = output.as_ref() {
         return match resolved_to {
-            Target::Docx => handle_docx_output(&document, output_path, force, verbose),
+            Target::Docx => {
+                let docx_profile = if style_profile.is_some() {
+                    Some(resolved_style_profile)
+                } else {
+                    None
+                };
+                handle_docx_output(
+                    &document,
+                    output_path,
+                    force,
+                    verbose,
+                    DocxWriterOptions {
+                        style_profile: docx_profile,
+                    },
+                )
+            }
             Target::Html => handle_html_output(
                 &document,
                 output_path,
@@ -444,6 +453,7 @@ fn handle_docx_output(
     output_path: &Path,
     force: bool,
     verbose: bool,
+    options: DocxWriterOptions,
 ) -> Result<ExitCode> {
     if let Some(code) =
         validate_output_path(output_path, force, verbose, "DOCX", &["docx"], ".docx")
@@ -453,7 +463,7 @@ fn handle_docx_output(
 
     // Write DOCX file
     debug!("Writing DOCX to: {}", output_path.display());
-    if let Err(e) = write_docx(document, output_path) {
+    if let Err(e) = write_docx(document, output_path, &options) {
         eprintln!("Error writing DOCX file: {}", output_path.display());
         eprintln!("  {e}");
         return Ok(ExitCode::from(EXIT_CONVERSION_ERROR));

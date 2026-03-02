@@ -2004,3 +2004,147 @@ fn test_docx_image_determinism_multiple() {
         "document.xml.rels should be byte-identical across conversions for multiple images"
     );
 }
+
+// =============================================================================
+// Style Profile Tests
+// =============================================================================
+
+/// Run the CLI to convert an RTF file to DOCX with a specific style profile.
+fn run_cli_convert_with_profile(
+    fixture_name: &str,
+    temp_dir: &TempDir,
+    profile: &str,
+    suffix: &str,
+) -> PathBuf {
+    let input = fixture_dir().join(fixture_name);
+    let output = temp_dir
+        .path()
+        .join(format!("output_{suffix}_{profile}.docx"));
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        input.to_str().unwrap(),
+        "-o",
+        output.to_str().unwrap(),
+        "--style-profile",
+        profile,
+        "--force",
+    ]);
+
+    let result = cmd.output().expect("Failed to run CLI");
+    if !result.status.success() {
+        panic!(
+            "CLI failed for fixture '{}' with profile '{}':\nstdout: {}\nstderr: {}",
+            fixture_name,
+            profile,
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+
+    assert!(output.exists(), "Output DOCX file should be created");
+    output
+}
+
+#[test]
+fn test_style_profile_classic_doc_defaults_in_styles_xml() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx = run_cli_convert_with_profile("text_simple_paragraph.rtf", &temp_dir, "classic", "1");
+    let styles_xml = extract_xml_from_docx(&docx, "word/styles.xml");
+
+    // Classic profile: size_body = 12pt → 24 half-points; font = "Libertinus Serif"
+    assert!(
+        styles_xml.contains("24"),
+        "Classic profile should set font size 24 half-points (12pt) in styles.xml: {styles_xml}"
+    );
+    assert!(
+        styles_xml.contains("Libertinus Serif"),
+        "Classic profile should set 'Libertinus Serif' font in styles.xml: {styles_xml}"
+    );
+}
+
+#[test]
+fn test_style_profile_compact_doc_defaults_in_styles_xml() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx = run_cli_convert_with_profile("text_simple_paragraph.rtf", &temp_dir, "compact", "1");
+    let styles_xml = extract_xml_from_docx(&docx, "word/styles.xml");
+
+    // Compact profile: size_body = 9pt → 18 half-points
+    assert!(
+        styles_xml.contains("18"),
+        "Compact profile should set font size 18 half-points (9pt) in styles.xml: {styles_xml}"
+    );
+}
+
+#[test]
+fn test_style_profile_report_doc_defaults_in_styles_xml() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx = run_cli_convert_with_profile("text_simple_paragraph.rtf", &temp_dir, "report", "1");
+    let styles_xml = extract_xml_from_docx(&docx, "word/styles.xml");
+
+    // Report profile: size_body = 11pt → 22 half-points
+    assert!(
+        styles_xml.contains("22"),
+        "Report profile should set font size 22 half-points (11pt) in styles.xml: {styles_xml}"
+    );
+}
+
+#[test]
+fn test_style_profile_no_profile_unchanged_output() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Convert without profile
+    let no_profile = run_cli_convert("text_simple_paragraph.rtf", &temp_dir);
+    let no_profile_styles = extract_xml_from_docx(&no_profile, "word/styles.xml");
+
+    // Output without profile should NOT contain profile-injected font defaults
+    assert!(
+        !no_profile_styles.contains("Libertinus Serif"),
+        "No-profile output should not contain profile font defaults"
+    );
+}
+
+#[test]
+fn test_style_profile_list_indentation_classic() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx = run_cli_convert_with_profile("list_bullet_simple.rtf", &temp_dir, "classic", "1");
+    let numbering_xml = extract_xml_from_docx(&docx, "word/numbering.xml");
+
+    // Classic profile: indentation_step = 18pt → 360 twips; marker_gap = 6pt → 120 twips
+    // w:ind w:left="360" (for level 0: step * (0+1) = 360)
+    assert!(
+        numbering_xml.contains("360"),
+        "Classic profile should set list indent to 360 twips (18pt) in numbering.xml: {numbering_xml}"
+    );
+}
+
+#[test]
+fn test_style_profile_report_row_striping() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx = run_cli_convert_with_profile("table_simple_2x2.rtf", &temp_dir, "report", "1");
+    let document_xml = extract_xml_from_docx(&docx, "word/document.xml");
+
+    // Report profile has AlternateRows striping; stripe color is F4F6F8
+    // Odd rows (1-indexed even = 0-indexed odd) should have shading
+    assert!(
+        document_xml.contains("F4F6F8"),
+        "Report profile should apply stripe color F4F6F8 to alternate rows: {document_xml}"
+    );
+}
+
+#[test]
+fn test_style_profile_determinism_same_profile() {
+    let temp_dir = TempDir::new().unwrap();
+
+    let docx1 = run_cli_convert_with_profile("text_simple_paragraph.rtf", &temp_dir, "report", "1");
+    let docx2 = run_cli_convert_with_profile("text_simple_paragraph.rtf", &temp_dir, "report", "2");
+
+    let styles1 = extract_xml_from_docx(&docx1, "word/styles.xml");
+    let styles2 = extract_xml_from_docx(&docx2, "word/styles.xml");
+
+    assert_eq!(
+        styles1, styles2,
+        "Same profile should produce byte-identical styles.xml"
+    );
+}

@@ -1,6 +1,6 @@
 # rtfkit Plan: Style Profiles for DOCX Output
 
-**Status: PLANNED**
+**Status: IMPLEMENTED**
 
 Extend the style profiles system (`classic`, `report`, `compact`) to the DOCX writer. HTML and PDF output already support style profiles via design tokens. DOCX currently ignores the `--style-profile` flag, which the CLI rejects with an error. This feature completes the cross-format styling story.
 
@@ -13,6 +13,28 @@ Style profile tokens (typography, spacing, colors)
   → DOCX default styles (<w:styles>)
   → Applied to paragraphs, runs, tables, lists
 ```
+
+## 1.1 High-level implementation track
+
+1. CLI unblocking and option plumbing
+- Remove DOCX rejection for `--style-profile`.
+- Pass resolved profile into DOCX writer options with stable defaults.
+
+2. Writer baseline mapping (report parity)
+- Map profile tokens into DOCX defaults (`docDefaults`, paragraph spacing, table defaults).
+- Preserve current output for default profile as regression baseline.
+
+3. Profile differentiation
+- Implement clear deltas for `classic` and `compact` against `report`.
+- Keep explicit RTF formatting precedence above profile defaults.
+
+4. Verification hardening
+- Add profile-specific XML assertions (defaults, list indentation, table properties).
+- Add determinism checks and default-profile non-regression tests.
+
+5. Documentation and rollout
+- Remove "DOCX unsupported" statements.
+- Document supported profile behavior and known intentional limits.
 
 ## 2. Scope
 
