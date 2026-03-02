@@ -15,6 +15,18 @@ This document provides a comprehensive checklist for releasing rtfkit. Follow th
 
 ## Pre-Release Verification
 
+### Contract Documentation Gate
+
+Before tagging a release, verify:
+
+- [ ] `docs/feature-support.md` support matrix reflects all implemented features
+- [ ] `docs/warning-reference.md` has a section for every `Warning` enum variant (run `bash scripts/check_warning_docs.sh`)
+- [ ] `docs/reference/pdf-output.md` Supported Content table is consistent with `feature-support.md` PDF section
+- [ ] Version history in `feature-support.md` has an entry for this release
+- [ ] Any new "guaranteed" behavior is backed by a contract test in `cli_contract_tests.rs`
+
+> **Note for PR authors**: If your PR adds or changes a warning type, feature status, or strict-mode behavior, update the relevant docs and the `scripts/check_warning_docs.sh` variant list before merging.
+
 ### 1. Code Quality Checks
 
 - [ ] **All tests pass locally**
@@ -466,6 +478,9 @@ Copy this for each release:
 - [ ] Smoke tests pass locally
 - [ ] HTML output tests pass
 - [ ] Security audit clean
+- [ ] Warning docs check passes (`bash scripts/check_warning_docs.sh`)
+- [ ] Feature support matrix updated
+- [ ] Version history entry added
 
 ### Version Bump
 - [ ] Version updated in Cargo.toml

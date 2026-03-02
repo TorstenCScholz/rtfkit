@@ -40,6 +40,9 @@ jobs:
       - name: Check style token usage policy
         run: bash scripts/check_style_token_usage.sh
 
+      - name: Check warning documentation coverage
+        run: bash scripts/check_warning_docs.sh
+
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
 

@@ -67,15 +67,15 @@ Emitted when an RTF destination is not recognized.
 ```json
 {
   "type": "unknown_destination",
-  "destination": "header",
+  "destination": "customdest",
   "severity": "info"
 }
 ```
 
 **Common Examples**:
-- `\header` - Page header
-- `\footer` - Page footer
-- Custom application destinations
+- `\*\customdest` - Application-specific private destinations
+- `\*\generator` - Generator info group (application metadata)
+- Other unrecognized `\*\destination` groups
 
 **Impact**: Destination content is typically dropped (see `DroppedContent`).
 
@@ -442,6 +442,129 @@ Emitted when the hex data for an embedded image is invalid.
 - Strict mode: Conversion fails with exit code 4
 
 **Recommendation**: Ensure the RTF file is not corrupted and the image data is properly encoded.
+
+---
+
+### `unsupported_field`
+
+Emitted when an RTF field instruction (e.g. `DATE`, `SEQ`, `TOC`) is not supported, but the field's result text (`\fldrslt`) was preserved as plain text.
+
+**Severity**: `warning`
+
+**Strict Mode**: Does NOT cause failure — the visible result text is preserved; only field semantics are lost.
+
+**JSON Format**:
+```json
+{
+  "type": "unsupported_field",
+  "reason": "Unsupported field type: DATE",
+  "severity": "warning"
+}
+```
+
+**Common Causes**:
+- `DATE`, `TIME`, `SEQ`, `NUMPAGES`, and other dynamic fields that have no equivalent in the output format
+- Custom application-specific field types
+
+**Impact**: The field's result text (from `\fldrslt`) is emitted as plain text. Field update semantics are not available in converted output.
+
+---
+
+### `unsupported_page_field`
+
+Emitted when a page-management field instruction is only partially supported. Rendering continues with best-effort output.
+
+**Severity**: `warning`
+
+**Strict Mode**: Does NOT cause failure — best-effort rendering is applied.
+
+**JSON Format**:
+```json
+{
+  "type": "unsupported_page_field",
+  "reason": "PAGE field rendered as static placeholder",
+  "severity": "warning"
+}
+```
+
+**Common Causes**:
+- `PAGE`, `PAGEREF`, and other page-number fields where dynamic values cannot be computed at conversion time
+
+**Impact**: A static placeholder or fallback text is emitted. Actual page numbers will not update in the converted document.
+
+---
+
+### `unsupported_toc_switch`
+
+Emitted when a TOC (Table of Contents) field switch is parsed but not supported in the current mapping phase.
+
+**Severity**: `warning`
+
+**Strict Mode**: Does NOT cause failure — partial TOC support is applied without the unsupported switch.
+
+**JSON Format**:
+```json
+{
+  "type": "unsupported_toc_switch",
+  "switch": "\\f",
+  "severity": "warning"
+}
+```
+
+**Common Causes**:
+- TOC field switches like `\f` (entry field identifier), `\b` (bookmark range), `\d` (separator), `\p` (separator string) that have no equivalent in v1 output mapping
+
+**Impact**: TOC is rendered with partial support; the unsupported switch is ignored.
+
+---
+
+### `unresolved_page_reference`
+
+Emitted when a `PAGEREF` field references a bookmark target that could not be resolved. Visible fallback text is preserved where possible.
+
+**Severity**: `warning`
+
+**Strict Mode**: Does NOT cause failure — fallback text is preserved.
+
+**JSON Format**:
+```json
+{
+  "type": "unresolved_page_reference",
+  "target": "Section3",
+  "severity": "warning"
+}
+```
+
+**Common Causes**:
+- `PAGEREF` fields referencing bookmarks that were not found in the document
+- Bookmark names that were renamed or deleted from the source document
+
+**Impact**: The reference is rendered with fallback text. The target bookmark name is included in the warning for debugging.
+
+---
+
+### `section_numbering_fallback`
+
+Emitted when section numbering semantics required fallback behavior because the exact semantics could not be reproduced in the output format.
+
+**Severity**: `warning`
+
+**Strict Mode**: Does NOT cause failure — approximated semantics are applied.
+
+**JSON Format**:
+```json
+{
+  "type": "section_numbering_fallback",
+  "reason": "Section counter reset approximated as static value",
+  "severity": "warning"
+}
+```
+
+**Common Causes**:
+- `SECTION` or `SECTIONPAGES` fields with complex reset logic
+- Section numbering sequences that depend on document structure not available at conversion time
+
+**Impact**: Section numbering is approximated. The output will contain static values rather than dynamically updated section numbers.
 
 ## Strict Mode
 

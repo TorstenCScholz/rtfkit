@@ -150,8 +150,8 @@ rtfkit convert document.rtf --to pdf --emit-ir document.json -o document.pdf
 | Vertical cell merges | ✅ Supported |
 | Unicode text | ✅ Supported |
 | Page size options | ✅ Supported |
-| Images | ❌ Not Supported |
-| Hyperlinks | ❌ Not Supported (rendered as plain text) |
+| Images | ⚠️ Partial | Data URIs embedded; Typst rendering support varies |
+| Hyperlinks | ✅ Supported | Typst `#link()` syntax; external URLs and internal bookmarks |
 | Custom fonts | ❌ Not Supported (uses embedded fonts) |
 
 ## Determinism
@@ -166,8 +166,7 @@ For details on determinism guarantees and how to ensure reproducible output, see
 
 ## Limitations
 
-- **Images are not supported** - Image content is dropped with a warning
-- **Hyperlinks render as plain text** - Not active PDF annotations
+- **Image rendering via data URIs** - Partial support; embedded as data URIs but Typst rendering support may vary across versions
 - **Embedded fonts only** - Uses Typst's embedded fonts; custom fonts not supported
 - **Advanced typography** - Kerning and ligatures use Typst defaults
 

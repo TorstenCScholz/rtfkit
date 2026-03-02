@@ -73,7 +73,7 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | Row shading (`\trcbpatN`) | ✅ Supported | Default shading for cells without explicit shading |
 | Table shading | ✅ Supported | Fallback shading from first row's `\trcbpatN` |
 | Nested tables | ❌ Not Supported | Warning emitted |
-| Table borders | ❌ Not Supported | Parsed but not mapped |
+| Table borders | ✅ Supported | Cell, row, and table-level borders; styles (solid, double, dotted, dashed, none); DOCX, HTML (CSS), Typst (`stroke:`) |
 
 ### Embedded Images
 
@@ -123,11 +123,15 @@ rtfkit supports embedded PNG and JPEG images from RTF `\pict` groups.
 | Color table (`\colortbl`) | ✅ Supported | Parsed for color mapping |
 | List table (`\listtable`) | ✅ Supported | Parsed for list definitions |
 | List override table (`\listoverridetable`) | ✅ Supported | Parsed for list references |
-| Header (`\header`) | 🔸 Degraded | Dropped with warning |
-| Footer (`\footer`) | 🔸 Degraded | Dropped with warning |
+| Header (`\header`) | ✅ Supported | Default channel; DOCX, HTML full; Typst ⚠️ partial (default only, first/even emit `PartialSupport`) |
+| Header variants (`\headerl`, `\headerr`, `\headerf`) | ⚠️ Partial | Parsed; DOCX/HTML full; Typst degrades to `PartialSupport` |
+| Footer (`\footer`) | ✅ Supported | Default channel; DOCX, HTML full; Typst ⚠️ partial (default only, first/even emit `PartialSupport`) |
+| Footer variants (`\footerl`, `\footerr`, `\footerf`) | ⚠️ Partial | Parsed; DOCX/HTML full; Typst degrades to `PartialSupport` |
+| Footnote (`\footnote`) | ✅ Supported | Emitted as `NoteRef` inline + note body; DOCX, HTML, Typst |
+| Endnote (`\endnote`) | ✅ Supported | Emitted as `NoteRef` inline + note body; DOCX, HTML, Typst |
 | Picture (`\pict`) | ⚠️ Partial | PNG/JPEG supported; WMF/EMF dropped |
 | Object (`\obj`) | 🔸 Degraded | Dropped with `DroppedContent` |
-| Field (`\field`) | ⚠️ Partial | HYPERLINK fields supported; other fields dropped with warning |
+| Field (`\field`) | ⚠️ Partial | HYPERLINK (external + internal via `\l` switch) and `\bkmkstart` anchors supported; other fields preserve result text with `UnsupportedField` warning |
 | Unknown destinations (`\*\foo`) | 🔸 Degraded | Dropped with `DroppedContent` |
 
 ## Output Formats
@@ -241,12 +245,17 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 3. **List nesting limit** - Maximum 8 levels due to DOCX compatibility
 4. **No nested tables** - Tables inside cells are not supported
 5. **PDF uses embedded fonts** - Custom fonts not supported; uses Typst's embedded fonts
-6. **Limited hyperlink support** - Only external `http://`, `https://`, `mailto:` URLs; bookmark links not supported
+6. **Strikethrough, small caps, all caps** - `\strike`, `\scaps`, `\caps` are not yet mapped to output; text is preserved with `unsupported_control_word` warning
 
 ## Version History
 
 | Version | Changes |
 |---------|---------|
+| 0.16.0 | Added strikethrough (`\strike`), small caps (`\scaps`), and all caps (`\caps`) recognition with `unsupported_control_word` warnings; added page management fields and section numbering |
+| 0.15.0 | Added table borders (cell, row, and table-level; solid/double/dotted/dashed/none styles) for DOCX, HTML, Typst |
+| 0.14.0 | Added document structure: headers, footers (default/first/even channels), footnotes, endnotes for DOCX, HTML, Typst |
+| 0.13.0 | Added bookmark anchors (`\bkmkstart`) and internal hyperlinks (`\l` switch) for DOCX, HTML, Typst; added `UnsupportedField` warning for unrecognized field types |
+| 0.12.0 | Added table layout fidelity: alignment, indent, gap (`\trgaph`), preferred widths, row height, cell and row padding for DOCX, HTML, Typst |
 | 0.11.0 | Added embedded image support (PNG/JPEG) for DOCX, HTML, PDF output; image byte limit |
 | 0.10.0 | Added block shading support (`\cbpatN`, `\clcbpatN`, `\trcbpatN`) for paragraphs and tables; theme color resolution; pattern support with degradation |
 | 0.9.0 | Added background/highlight color support (`\cbN`, `\highlightN`) for DOCX, HTML, PDF; `\plain` now resets background/highlight |
