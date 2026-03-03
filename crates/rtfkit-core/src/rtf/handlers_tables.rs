@@ -467,7 +467,13 @@ fn handle_trowd(state: &mut RuntimeState) {
     }
 
     // Enter nested child contexts when requested and we're inside a parent row/cell stream.
-    while state.tables.nesting_depth() < requested_depth {
+    // Top-level `\trowd` starts at depth 1 and must not be treated as a nested transition.
+    if !state.tables.in_table() && requested_depth > 1 {
+        state
+            .report_builder
+            .malformed_table_structure("Nested table start without parent row context");
+    }
+    while state.tables.in_table() && state.tables.nesting_depth() < requested_depth {
         if state.tables.nesting_depth() >= state.limits.max_table_nesting_depth {
             state.set_hard_failure(crate::error::ParseError::InvalidStructure(format!(
                 "Table nesting depth exceeds maximum {}",

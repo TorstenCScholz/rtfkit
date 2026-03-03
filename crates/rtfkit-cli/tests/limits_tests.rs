@@ -24,6 +24,22 @@ use std::fs;
 use predicates::str::contains;
 use tempfile::tempdir;
 
+fn build_nested_table_depth_rtf(depth: usize) -> String {
+    assert!(depth >= 1, "depth must be at least 1");
+
+    let mut rtf = String::from("{\\rtf1\\ansi\n");
+    rtf.push_str("\\trowd\\cellx1000\\intbl L1\\par\n");
+    for d in 2..=depth {
+        rtf.push_str(&format!(
+            "\\itap{}\\nesttableprops\\trowd\\cellx1000\\intbl L{}\\par\n",
+            d, d
+        ));
+    }
+    // Close the deepest nested row; parent contexts are finalized by recovery logic.
+    rtf.push_str("\\nestcell\\nestrow\n}");
+    rtf
+}
+
 // =============================================================================
 // NEAR-LIMIT SUCCESS TESTS
 // =============================================================================
@@ -248,6 +264,17 @@ mod near_limit_success {
         cmd.args(["convert", fixture.to_str().unwrap(), "--format", "json"]);
         cmd.assert().success().code(0);
     }
+
+    #[test]
+    fn table_nesting_depth_at_limit_succeeds() {
+        let dir = tempdir().unwrap();
+        let input = dir.path().join("table_depth_16.rtf");
+        fs::write(&input, build_nested_table_depth_rtf(16)).unwrap();
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args(["convert", input.to_str().unwrap(), "--format", "json"]);
+        cmd.assert().success().code(0);
+    }
 }
 
 // =============================================================================
@@ -344,6 +371,20 @@ mod over_limit_failure {
             .failure()
             .code(2)
             .stderr(contains("Parse error"));
+    }
+
+    #[test]
+    fn table_nesting_depth_exceed_limit_fails() {
+        let dir = tempdir().unwrap();
+        let input = dir.path().join("table_depth_17.rtf");
+        fs::write(&input, build_nested_table_depth_rtf(17)).unwrap();
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args(["convert", input.to_str().unwrap(), "--format", "json"]);
+        cmd.assert()
+            .failure()
+            .code(2)
+            .stderr(contains("Table nesting depth exceeds maximum"));
     }
 
     // -------------------------------------------------------------------------

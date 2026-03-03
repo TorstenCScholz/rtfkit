@@ -320,23 +320,23 @@ impl TableState {
         !self.context_stack.is_empty()
     }
 
-    fn snapshot_active_context(&self) -> SavedTableContext {
+    fn take_active_context(&mut self) -> SavedTableContext {
         SavedTableContext {
-            current_table: self.current_table.clone(),
-            current_row: self.current_row.clone(),
-            current_cell: self.current_cell.clone(),
-            pending_cellx: self.pending_cellx.clone(),
-            pending_cell_merges: self.pending_cell_merges.clone(),
-            pending_cell_v_aligns: self.pending_cell_v_aligns.clone(),
-            pending_cell_cbpats: self.pending_cell_cbpats.clone(),
-            pending_cell_cfpats: self.pending_cell_cfpats.clone(),
-            pending_cell_shadings: self.pending_cell_shadings.clone(),
-            pending_cell_merge: self.pending_cell_merge.clone(),
+            current_table: self.current_table.take(),
+            current_row: self.current_row.take(),
+            current_cell: self.current_cell.take(),
+            pending_cellx: std::mem::take(&mut self.pending_cellx),
+            pending_cell_merges: std::mem::take(&mut self.pending_cell_merges),
+            pending_cell_v_aligns: std::mem::take(&mut self.pending_cell_v_aligns),
+            pending_cell_cbpats: std::mem::take(&mut self.pending_cell_cbpats),
+            pending_cell_cfpats: std::mem::take(&mut self.pending_cell_cfpats),
+            pending_cell_shadings: std::mem::take(&mut self.pending_cell_shadings),
+            pending_cell_merge: self.pending_cell_merge.take(),
             pending_cell_v_align: self.pending_cell_v_align,
             pending_cell_cbpat: self.pending_cell_cbpat,
             pending_cell_cfpat: self.pending_cell_cfpat,
             pending_cell_shading: self.pending_cell_shading,
-            pending_row_props: self.pending_row_props.clone(),
+            pending_row_props: std::mem::take(&mut self.pending_row_props),
             pending_row_cbpat: self.pending_row_cbpat,
             pending_row_cfpat: self.pending_row_cfpat,
             pending_row_shading: self.pending_row_shading,
@@ -347,24 +347,26 @@ impl TableState {
             pending_table_w_width: self.pending_table_w_width,
             pending_row_fts_width: self.pending_row_fts_width,
             pending_row_w_width: self.pending_row_w_width,
-            pending_cell_fts_widths: self.pending_cell_fts_widths.clone(),
-            pending_cell_w_widths: self.pending_cell_w_widths.clone(),
+            pending_cell_fts_widths: std::mem::take(&mut self.pending_cell_fts_widths),
+            pending_cell_w_widths: std::mem::take(&mut self.pending_cell_w_widths),
             pending_cell_fts_width: self.pending_cell_fts_width,
             pending_cell_w_width: self.pending_cell_w_width,
             pending_row_height_raw: self.pending_row_height_raw,
-            pending_row_padding: self.pending_row_padding.clone(),
+            pending_row_padding: std::mem::take(&mut self.pending_row_padding),
             pending_row_padding_fmt: self.pending_row_padding_fmt,
-            pending_cell_padding: self.pending_cell_padding.clone(),
+            pending_cell_padding: std::mem::take(&mut self.pending_cell_padding),
             pending_cell_padding_fmt: self.pending_cell_padding_fmt,
-            pending_cell_padding_captures: self.pending_cell_padding_captures.clone(),
-            pending_cell_padding_fmt_captures: self.pending_cell_padding_fmt_captures.clone(),
+            pending_cell_padding_captures: std::mem::take(&mut self.pending_cell_padding_captures),
+            pending_cell_padding_fmt_captures: std::mem::take(
+                &mut self.pending_cell_padding_fmt_captures,
+            ),
             pending_border_target: self.pending_border_target,
             pending_border_style: self.pending_border_style,
             pending_border_width_hp: self.pending_border_width_hp,
             pending_border_color_idx: self.pending_border_color_idx,
-            current_cell_borders: self.current_cell_borders.clone(),
-            pending_cell_border_captures: self.pending_cell_border_captures.clone(),
-            pending_row_borders: self.pending_row_borders.clone(),
+            current_cell_borders: std::mem::take(&mut self.current_cell_borders),
+            pending_cell_border_captures: std::mem::take(&mut self.pending_cell_border_captures),
+            pending_row_borders: std::mem::take(&mut self.pending_row_borders),
             seen_intbl_in_paragraph: self.seen_intbl_in_paragraph,
         }
     }
@@ -418,8 +420,10 @@ impl TableState {
 
     /// Push current table context and start a fresh child context.
     pub fn enter_child_context(&mut self) {
-        self.context_stack.push(self.snapshot_active_context());
-        self.clear_table();
+        let parent = self.take_active_context();
+        self.context_stack.push(parent);
+        self.pending_itap = None;
+        self.seen_nesttableprops = false;
         self.ensure_table();
     }
 
