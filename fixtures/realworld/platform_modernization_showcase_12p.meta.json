@@ -1,0 +1,10 @@
+{
+  "fixture": "platform_modernization_showcase_12p.rtf",
+  "description": "Anonymized platform modernization proposal with deterministic charts, broad RTF feature coverage, and strict-mode pass behavior.",
+  "expected_non_strict_exit": 0,
+  "expected_strict_exit": 0,
+  "required_warning_types": [],
+  "required_dropped_reasons": [],
+  "min_docx_bytes": 437020,
+  "min_html_bytes": 679384
+}

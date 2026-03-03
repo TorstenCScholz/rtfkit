@@ -15,17 +15,34 @@ This folder contains long-form, intentionally messy fixtures that approximate mo
 ## Contracts
 
 - non-strict conversion must succeed (`exit 0`)
-- strict conversion must fail (`exit 4`) because unsupported destination content is dropped
+- strict conversion behavior is defined per fixture metadata:
+  - strict-pass fixtures use `expected_strict_exit: 0`
+  - warning-probe fixtures use `expected_strict_exit: 4` with required dropped-content reasons
 
 Each fixture has a sibling `*.meta.json` contract consumed by `crates/rtfkit-cli/tests/realworld_tests.rs`.
 
 ## Regeneration
 
-Fixtures are deterministic and can be regenerated with:
+Legacy shell-generated fixtures:
 
 ```bash
 ./scripts/generate_realworld_fixtures.sh
 ```
+
+Platform modernization fixtures with deterministic synthetic charts:
+
+```bash
+python3 scripts/generate_platform_modernization_fixtures.py
+```
+
+Notes:
+
+- The platform modernization generator requires `matplotlib` (offline deterministic chart generation).
+- Optional flags:
+  - `--seed`
+  - `--out-dir`
+  - `--pages-showcase`
+  - `--pages-warning-probe`
 
 After regeneration, run:
 
