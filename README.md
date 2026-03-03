@@ -1,6 +1,7 @@
 # rtfkit
 
-RTF parsing toolkit with a CLI-first workflow.
+Open-source RTF toolkit and RTF-to-PDF converter with a CLI-first workflow.
+Convert `.rtf` files to PDF, DOCX, or HTML with a single command.
 
 [![CI](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml/badge.svg)](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml)
 
@@ -11,6 +12,8 @@ rtfkit provides a complete RTF-to-DOCX, RTF-to-HTML, and RTF-to-PDF conversion p
 - **Text extraction** with formatting preservation (bold, italic, underline, alignment)
 - **List support** - bullet and decimal lists with nested levels (up to 8)
 - **Table support** - rows, cells, horizontal/vertical merges, cell alignment
+- **Hyperlink support** - external URLs and internal bookmark links
+- **Embedded image support** - PNG/JPEG images with size/scaling controls
 - **HTML output** - semantic-first HTML5 output with `--to html`
 - **PDF output** - In-process PDF generation via embedded Typst renderer with `--to pdf`
 - **Style profiles** - Consistent cross-format styling with `--style-profile` (classic, report, compact)
@@ -20,6 +23,16 @@ rtfkit provides a complete RTF-to-DOCX, RTF-to-HTML, and RTF-to-PDF conversion p
 - **Strict mode** - fail on dropped content for quality assurance
 
 See [RTF Feature Overview](docs/rtf-feature-overview.md) for supported vs. not-yet-supported features.
+
+## RTF to PDF Converter (Quick Start)
+
+If you are looking for an RTF to PDF converter, this repository provides one via the `rtfkit` CLI:
+
+```sh
+rtfkit convert input.rtf --to pdf -o output.pdf
+```
+
+PDF conversion is in-process and offline-capable (no external PDF CLI required).
 
 ## Install
 
@@ -71,6 +84,9 @@ pip install -e .
 ```sh
 # Convert RTF to DOCX (default output format)
 rtfkit convert input.rtf -o output.docx
+
+# Convert RTF to PDF
+rtfkit convert input.rtf --to pdf -o output.pdf
 
 # Convert RTF to HTML
 rtfkit convert input.rtf --to html -o output.html
@@ -162,11 +178,60 @@ rtfkit convert document.rtf --to pdf --output document.pdf
 
 # US Letter page size
 rtfkit convert document.rtf --to pdf --pdf-page-size letter --output document.pdf
+
+# Deterministic metadata timestamp (for reproducible builds)
+rtfkit convert document.rtf --to pdf --fixed-timestamp "2024-01-01T00:00:00Z" --output document.pdf
 ```
 
 PDF output uses an embedded Typst renderer - no external dependencies required. The output is deterministic and works completely offline.
 
 See [PDF Output Reference](docs/reference/pdf-output.md) for PDF-specific options and [PDF Determinism](docs/reference/pdf-determinism.md) for determinism guarantees.
+
+### App Integration Examples (RTF to PDF)
+
+Small examples for using `rtfkit` inside application code.
+
+#### Java (web/enterprise app via CLI)
+
+Install `rtfkit` on the host/container and call it from your service layer:
+
+```java
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+
+public final class RtfToPdfService {
+    public static void convert(Path inputRtf, Path outputPdf) throws IOException, InterruptedException {
+        Process process = new ProcessBuilder(
+                "rtfkit", "convert",
+                inputRtf.toString(),
+                "--to", "pdf",
+                "-o", outputPdf.toString(),
+                "--force"
+        ).redirectErrorStream(true).start();
+
+        String logs = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            throw new IOException("rtfkit failed (exit " + exitCode + "): " + logs);
+        }
+    }
+}
+```
+
+#### Python (using bindings directly)
+
+```python
+from pathlib import Path
+import rtfkit
+
+def convert_rtf_to_pdf(input_rtf: str, output_pdf: str) -> None:
+    # latin-1 keeps a 1:1 byte mapping for raw RTF content
+    rtf_content = Path(input_rtf).read_bytes().decode("latin-1")
+    result = rtfkit.parse(rtf_content)
+    pdf_bytes = rtfkit.to_pdf(result.document, page_size="a4", style_profile="report")
+    Path(output_pdf).write_bytes(pdf_bytes)
+```
 
 ### Exit Codes
 
@@ -343,16 +408,15 @@ rtfkit has comprehensive test coverage:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the fixture-first contribution workflow.
 
-## Limitations (v0.6)
+## Current Limitations
 
-- Partial RTF coverage (focused on common text/style cases)
-- No images as first-class IR blocks
-- No hyperlinks/fields as first-class output
-- DOCX output supports basic text formatting, lists, and tables
-- HTML output is semantic-first, not pixel-perfect (no font sizes, colors, or borders)
+- Full RTF parity is not complete yet (advanced/edge-case layout and styling can degrade)
+- WMF/EMF image formats are not supported (PNG/JPEG are supported)
+- Images are block-level only (no inline/floating placement, no crop controls)
+- HTML output is semantic-first rather than pixel-perfect rendering
 - PDF output uses embedded fonts (no custom font support)
-- List nesting limited to 8 levels (DOCX compatibility)
-- Row alignment and indent not fully supported by docx-rs (cosmetic loss only)
+- List nesting is limited to 8 levels (DOCX compatibility)
+- Row alignment/indent controls are parsed, but docx-rs emission remains partially limited
 
 For up-to-date support details, see [RTF Feature Overview](docs/rtf-feature-overview.md) and [Feature Support Matrix](docs/feature-support.md).
 
