@@ -483,8 +483,8 @@ pub fn finalize_current_table(state: &mut RuntimeState) {
         finalize_current_row(state);
     }
 
-    // Add the table to the document if it has content
-    if let Some(mut table) = state.tables.current_table.take()
+    // Build the finalized table block for this active context (if any content).
+    let finalized_table = if let Some(mut table) = state.tables.current_table.take()
         && !table.is_empty()
     {
         // Resolve table-level preferred width from first-row \trftsWidth/\trwWidth
@@ -510,11 +510,31 @@ pub fn finalize_current_table(state: &mut RuntimeState) {
                 preferred_width: table_preferred_width.or(existing.preferred_width),
             });
         }
-        state.push_block_to_current_sink(Block::TableBlock(table));
-    }
+        Some(Block::TableBlock(table))
+    } else {
+        None
+    };
 
     // Reset table state
     state.tables.clear_table();
+
+    // Nested case: restore parent and append child table to parent cell stream.
+    if state.tables.has_parent_context() {
+        let restored = state.tables.restore_parent_context();
+        if restored && let Some(block) = finalized_table {
+            if state.tables.current_cell.is_none() {
+                state.tables.current_cell = Some(crate::TableCell::new());
+            }
+            if let Some(parent_cell) = state.tables.current_cell.as_mut() {
+                parent_cell.blocks.push(block);
+            }
+        }
+        return;
+    }
+
+    if let Some(block) = finalized_table {
+        state.push_block_to_current_sink(block);
+    }
 }
 
 /// Auto-close table cell if needed.

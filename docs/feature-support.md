@@ -61,7 +61,7 @@ This document provides a comprehensive overview of current RTF feature support i
 | Basic table structure | ✅ Supported | `\trowd`, `\cellxN`, `\intbl`, `\cell`, `\row` |
 | Multiple rows | ✅ Supported | Unlimited rows (within limits) |
 | Multiple columns | ✅ Supported | Unlimited cells (within limits) |
-| Cell content | ✅ Supported | Paragraphs and lists in cells |
+| Cell content | ✅ Supported | Paragraphs, lists, nested tables, and images in cells |
 | Cell width (`\cellxN`) | ✅ Supported | Stored in `width_twips` |
 | Horizontal merge (`\clmgf`, `\clmrg`) | ✅ Supported | Mapped to DOCX `gridSpan` |
 | Vertical merge (`\clvmgf`, `\clvmrg`) | ✅ Supported | Mapped to DOCX `vMerge` |
@@ -72,7 +72,7 @@ This document provides a comprehensive overview of current RTF feature support i
 | Cell shading pattern (`\clshdngN`, `\clcfpatN`) | ⚠️ Partial | Percentage patterns use deterministic blended approximation in HTML/Typst; DOCX full support; non-percent patterns still degrade to flat fill |
 | Row shading (`\trcbpatN`) | ✅ Supported | Default shading for cells without explicit shading |
 | Table shading | ✅ Supported | Fallback shading from first row's `\trcbpatN` |
-| Nested tables | ❌ Not Supported | Warning emitted |
+| Nested tables | ✅ Supported | Parsed with `\itap`/nested table controls; emitted recursively in DOCX/HTML/PDF |
 | Table borders | ✅ Supported | Cell, row, and table-level borders; styles (solid, double, dotted, dashed, none); DOCX, HTML (CSS), Typst (`stroke:`) |
 
 ### Embedded Images
@@ -224,6 +224,7 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 | Table cell limit | ✅ Supported | Default: 1,000 cells/row |
 | Merge span limit | ✅ Supported | Default: 1,000 cells |
 | Image byte limit | ✅ Supported | Default: 50 MiB cumulative |
+| Table nesting depth limit | ✅ Supported | Default: 16 nested table levels |
 | Strict mode | ✅ Supported | Exit code 4 on dropped content |
 
 ## Error Handling
@@ -242,10 +243,9 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 
 1. **Limited image format support** - PNG and JPEG are supported; WMF/EMF are dropped
 2. **List nesting limit** - Maximum 8 levels due to DOCX compatibility
-3. **No nested tables in RTF parser path** - Tables inside cells are not yet parsed from RTF input
-4. **PDF uses embedded fonts** - Custom fonts are not supported
-5. **DOCX small caps degradation** - `\scaps` degrades to all caps in DOCX output due to `docx-rs` API limitations
-6. **Row layout variance normalization** - Row alignment/indent controls are represented with table-level defaults when rows disagree
+3. **PDF uses embedded fonts** - Custom fonts are not supported
+4. **DOCX small caps degradation** - `\scaps` degrades to all caps in DOCX output due to `docx-rs` API limitations
+5. **Row layout variance normalization** - Row alignment/indent controls are represented with table-level defaults when rows disagree
 
 ## Version History
 

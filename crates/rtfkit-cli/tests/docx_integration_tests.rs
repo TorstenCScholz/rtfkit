@@ -1317,6 +1317,27 @@ fn test_table_with_list_in_cell_docx() {
 }
 
 #[test]
+fn test_nested_table_docx_contains_child_tbl_in_cell() {
+    let temp_dir = TempDir::new().unwrap();
+    let docx_path = run_cli_convert("table_nested_2level_basic.rtf", &temp_dir);
+    let xml = extract_document_xml(&docx_path);
+
+    // Parser-driven nested fixture should create at least two table elements.
+    let tbl_count = count_elements(&xml, "w:tbl");
+    assert!(
+        tbl_count >= 2,
+        "Should contain nested table structure (>=2 w:tbl), found {}",
+        tbl_count
+    );
+
+    // Ensure nested table appears within a table cell scope.
+    assert!(
+        xml.contains("<w:tc") && xml.contains("<w:tbl"),
+        "Expected nested table content emitted in cell scope"
+    );
+}
+
+#[test]
 fn test_table_missing_cell_terminator_docx() {
     let temp_dir = TempDir::new().unwrap();
     let docx_path = run_cli_convert("malformed_table_missing_cell_terminator.rtf", &temp_dir);

@@ -265,6 +265,7 @@ fn test_default_limits_values() {
     assert_eq!(limits.max_rows_per_table, 10000);
     assert_eq!(limits.max_cells_per_row, 1000);
     assert_eq!(limits.max_merge_span, 1000);
+    assert_eq!(limits.max_table_nesting_depth, 16);
 }
 
 #[test]
@@ -277,6 +278,7 @@ fn test_none_limits() {
     assert_eq!(limits.max_rows_per_table, usize::MAX);
     assert_eq!(limits.max_cells_per_row, usize::MAX);
     assert_eq!(limits.max_merge_span, u16::MAX);
+    assert_eq!(limits.max_table_nesting_depth, usize::MAX);
 }
 
 // =============================================================================
@@ -291,7 +293,8 @@ fn test_limits_builder_pattern() {
         .with_max_warning_count(500)
         .with_max_rows_per_table(5000)
         .with_max_cells_per_row(500)
-        .with_max_merge_span(500);
+        .with_max_merge_span(500)
+        .with_max_table_nesting_depth(8);
 
     assert_eq!(limits.max_input_bytes, 5 * 1024 * 1024);
     assert_eq!(limits.max_group_depth, 128);
@@ -299,6 +302,23 @@ fn test_limits_builder_pattern() {
     assert_eq!(limits.max_rows_per_table, 5000);
     assert_eq!(limits.max_cells_per_row, 500);
     assert_eq!(limits.max_merge_span, 500);
+    assert_eq!(limits.max_table_nesting_depth, 8);
+}
+
+#[test]
+fn test_nested_table_depth_under_limit_succeeds() {
+    let input = include_str!("../../../../../fixtures/table_nested_3level_complex_cells.rtf");
+    let limits = ParserLimits::new().with_max_table_nesting_depth(4);
+    let result = parse_with_limits(input, limits);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_nested_table_depth_exceeds_limit_fails() {
+    let input = include_str!("../../../../../fixtures/malformed_table_nested_depth_exceed.rtf");
+    let limits = ParserLimits::new().with_max_table_nesting_depth(3);
+    let result = parse_with_limits(input, limits);
+    assert!(result.is_err());
 }
 
 // =============================================================================

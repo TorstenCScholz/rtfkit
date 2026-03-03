@@ -1,0 +1,124 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Root",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
+                    }
+                  ]
+                },
+                {
+                  "type": "tableblock",
+                  "rows": [
+                    {
+                      "cells": [
+                        {
+                          "blocks": [
+                            {
+                              "type": "paragraph",
+                              "alignment": "left",
+                              "inlines": [
+                                {
+                                  "type": "run",
+                                  "text": "L2",
+                                  "bold": false,
+                                  "italic": false,
+                                  "underline": false,
+                                  "strikethrough": false,
+                                  "small_caps": false,
+                                  "all_caps": false
+                                }
+                              ]
+                            },
+                            {
+                              "type": "tableblock",
+                              "rows": [
+                                {
+                                  "cells": [
+                                    {
+                                      "blocks": [
+                                        {
+                                          "type": "paragraph",
+                                          "alignment": "left",
+                                          "inlines": [
+                                            {
+                                              "type": "run",
+                                              "text": "L3",
+                                              "bold": false,
+                                              "italic": false,
+                                              "underline": false,
+                                              "strikethrough": false,
+                                              "small_caps": false,
+                                              "all_caps": false
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "type": "tableblock",
+                                          "rows": [
+                                            {
+                                              "cells": [
+                                                {
+                                                  "blocks": [
+                                                    {
+                                                      "type": "paragraph",
+                                                      "alignment": "left",
+                                                      "inlines": [
+                                                        {
+                                                          "type": "run",
+                                                          "text": "L4",
+                                                          "bold": false,
+                                                          "italic": false,
+                                                          "underline": false,
+                                                          "strikethrough": false,
+                                                          "small_caps": false,
+                                                          "all_caps": false
+                                                        }
+                                                      ]
+                                                    }
+                                                  ],
+                                                  "width_twips": 5000
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ],
+                                      "width_twips": 5000
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ],
+                          "width_twips": 5000
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 5000
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

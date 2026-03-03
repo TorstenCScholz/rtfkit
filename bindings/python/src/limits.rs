@@ -19,6 +19,7 @@ impl PyParserLimits {
         max_cells_per_row = None,
         max_merge_span = None,
         max_image_bytes_total = None,
+        max_table_nesting_depth = None,
     ))]
     fn new(
         max_input_bytes: Option<usize>,
@@ -28,6 +29,7 @@ impl PyParserLimits {
         max_cells_per_row: Option<usize>,
         max_merge_span: Option<u16>,
         max_image_bytes_total: Option<usize>,
+        max_table_nesting_depth: Option<usize>,
     ) -> Self {
         let mut limits = ParserLimits::default();
         if let Some(v) = max_input_bytes {
@@ -50,6 +52,9 @@ impl PyParserLimits {
         }
         if let Some(v) = max_image_bytes_total {
             limits.max_image_bytes_total = v;
+        }
+        if let Some(v) = max_table_nesting_depth {
+            limits.max_table_nesting_depth = v;
         }
         Self { inner: limits }
     }
@@ -94,6 +99,11 @@ impl PyParserLimits {
     #[getter]
     fn max_image_bytes_total(&self) -> usize {
         self.inner.max_image_bytes_total
+    }
+
+    #[getter]
+    fn max_table_nesting_depth(&self) -> usize {
+        self.inner.max_table_nesting_depth
     }
 
     fn __repr__(&self) -> String {

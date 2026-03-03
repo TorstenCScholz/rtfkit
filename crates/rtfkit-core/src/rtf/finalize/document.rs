@@ -8,7 +8,7 @@ pub fn finalize_document(state: &mut RuntimeState) {
     super::paragraphs::finalize_paragraph(state);
 
     // Finalize any remaining table context at document end
-    if state.tables.in_table() {
+    while state.tables.in_table() {
         super::tables::finalize_current_table(state);
     }
 

@@ -1,0 +1,59 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "A",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 4000
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Orphan nested row",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 2000
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

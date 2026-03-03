@@ -1,0 +1,101 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Outer-before",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
+                    }
+                  ]
+                },
+                {
+                  "type": "tableblock",
+                  "rows": [
+                    {
+                      "cells": [
+                        {
+                          "blocks": [
+                            {
+                              "type": "paragraph",
+                              "alignment": "left",
+                              "inlines": [
+                                {
+                                  "type": "run",
+                                  "text": "Inner-A",
+                                  "bold": false,
+                                  "italic": false,
+                                  "underline": false,
+                                  "strikethrough": false,
+                                  "small_caps": false,
+                                  "all_caps": false
+                                }
+                              ]
+                            }
+                          ],
+                          "width_twips": 2500
+                        },
+                        {
+                          "blocks": [
+                            {
+                              "type": "paragraph",
+                              "alignment": "left",
+                              "inlines": [
+                                {
+                                  "type": "run",
+                                  "text": "Inner-B",
+                                  "bold": false,
+                                  "italic": false,
+                                  "underline": false,
+                                  "strikethrough": false,
+                                  "small_caps": false,
+                                  "all_caps": false
+                                }
+                              ]
+                            }
+                          ],
+                          "width_twips": 2500
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Outer-after",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 5000
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

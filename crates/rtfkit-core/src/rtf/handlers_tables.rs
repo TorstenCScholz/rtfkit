@@ -34,10 +34,24 @@ pub fn handle_table_control_word(
             state.tables.seen_intbl_in_paragraph = true;
             true
         }
+        // \itapN - table nesting depth hint (1 = top-level, >1 = nested)
+        "itap" => {
+            state.tables.pending_itap = parameter;
+            true
+        }
+        // \nesttableprops marker seen in nested-table producers
+        "nesttableprops" => {
+            state.tables.seen_nesttableprops = true;
+            true
+        }
+        // \nonesttables marker (currently no-op; table semantics remain explicit)
+        "nonesttables" => true,
         // \\cell - End of a table cell (handled in pipeline)
         "cell" => true,
+        "nestcell" => true,
         // \\row - End of a table row (handled in pipeline)
         "row" => true,
+        "nestrow" => true,
 
         // Row alignment
         "trql" => {
@@ -379,6 +393,12 @@ pub fn handle_table_control_word(
 
 /// Handle `\\cell` event.
 pub fn handle_cell_event(state: &mut RuntimeState) -> Result<(), ConversionError> {
+    // If a nested table was completed (\nestrow) and we're back at a cell boundary,
+    // close child contexts before handling the parent \cell event.
+    while state.tables.in_table() && !state.tables.in_row() && state.tables.has_parent_context() {
+        super::finalize::finalize_current_table(state);
+    }
+
     if !state.tables.in_table() || !state.tables.in_row() {
         state
             .report_builder
@@ -402,6 +422,10 @@ pub fn handle_cell_event(state: &mut RuntimeState) -> Result<(), ConversionError
 
 /// Handle `\\row` event.
 pub fn handle_row_event(state: &mut RuntimeState) -> Result<(), ConversionError> {
+    while state.tables.in_table() && !state.tables.in_row() && state.tables.has_parent_context() {
+        super::finalize::finalize_current_table(state);
+    }
+
     if !state.tables.in_table() || !state.tables.in_row() {
         state
             .report_builder
@@ -418,13 +442,6 @@ pub fn handle_row_event(state: &mut RuntimeState) -> Result<(), ConversionError>
     super::finalize::auto_close_table_cell_if_needed(state, "Unclosed table cell at row end");
     super::finalize::finalize_current_row(state);
 
-    state.tables.pending_cellx.clear();
-    state.tables.pending_cell_merges.clear();
-    state.tables.pending_cell_v_aligns.clear();
-    state.tables.pending_cell_fts_widths.clear();
-    state.tables.pending_cell_w_widths.clear();
-    state.tables.pending_cell_padding_captures.clear();
-    state.tables.pending_cell_padding_fmt_captures.clear();
     state.tables.seen_intbl_in_paragraph = false;
 
     Ok(())
@@ -432,6 +449,45 @@ pub fn handle_row_event(state: &mut RuntimeState) -> Result<(), ConversionError>
 
 /// Handle `\\trowd` - start of a new table row definition.
 fn handle_trowd(state: &mut RuntimeState) {
+    let requested_depth = state
+        .tables
+        .pending_itap
+        .unwrap_or(if state.tables.seen_nesttableprops {
+            2
+        } else {
+            1
+        })
+        .max(1) as usize;
+    state.tables.pending_itap = None;
+    state.tables.seen_nesttableprops = false;
+
+    // Unwind to requested depth first.
+    while state.tables.nesting_depth() > requested_depth && state.tables.has_parent_context() {
+        super::finalize::finalize_current_table(state);
+    }
+
+    // Enter nested child contexts when requested and we're inside a parent row/cell stream.
+    while state.tables.nesting_depth() < requested_depth {
+        if state.tables.nesting_depth() >= state.limits.max_table_nesting_depth {
+            state.set_hard_failure(crate::error::ParseError::InvalidStructure(format!(
+                "Table nesting depth exceeds maximum {}",
+                state.limits.max_table_nesting_depth
+            )));
+            return;
+        }
+        if !state.tables.in_row() {
+            state
+                .report_builder
+                .malformed_table_structure("Nested table start without parent row context");
+            break;
+        }
+        super::finalize::finalize_paragraph_for_table(state);
+        if state.tables.current_cell.is_none() {
+            state.tables.current_cell = Some(crate::TableCell::new());
+        }
+        state.tables.enter_child_context();
+    }
+
     // Finalize any dangling row/cell with warning.
     if state.tables.current_row.is_some() {
         super::finalize::auto_close_table_cell_if_needed(

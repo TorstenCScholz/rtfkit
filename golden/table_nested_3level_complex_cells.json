@@ -1,0 +1,147 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "L1-start",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
+                    }
+                  ]
+                },
+                {
+                  "type": "tableblock",
+                  "rows": [
+                    {
+                      "cells": [
+                        {
+                          "blocks": [
+                            {
+                              "type": "paragraph",
+                              "alignment": "left",
+                              "inlines": [
+                                {
+                                  "type": "run",
+                                  "text": "L2-left",
+                                  "bold": false,
+                                  "italic": false,
+                                  "underline": false,
+                                  "strikethrough": false,
+                                  "small_caps": false,
+                                  "all_caps": false
+                                }
+                              ]
+                            },
+                            {
+                              "type": "tableblock",
+                              "rows": [
+                                {
+                                  "cells": [
+                                    {
+                                      "blocks": [
+                                        {
+                                          "type": "paragraph",
+                                          "alignment": "left",
+                                          "inlines": [
+                                            {
+                                              "type": "run",
+                                              "text": "L3-a",
+                                              "bold": false,
+                                              "italic": false,
+                                              "underline": false,
+                                              "strikethrough": false,
+                                              "small_caps": false,
+                                              "all_caps": false
+                                            }
+                                          ]
+                                        }
+                                      ],
+                                      "width_twips": 1750
+                                    },
+                                    {
+                                      "blocks": [
+                                        {
+                                          "type": "paragraph",
+                                          "alignment": "left",
+                                          "inlines": [
+                                            {
+                                              "type": "run",
+                                              "text": "L3-b",
+                                              "bold": false,
+                                              "italic": false,
+                                              "underline": false,
+                                              "strikethrough": false,
+                                              "small_caps": false,
+                                              "all_caps": false
+                                            }
+                                          ]
+                                        }
+                                      ],
+                                      "width_twips": 1750
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "paragraph",
+                              "alignment": "left",
+                              "inlines": [
+                                {
+                                  "type": "run",
+                                  "text": "L2-right",
+                                  "bold": false,
+                                  "italic": false,
+                                  "underline": false,
+                                  "strikethrough": false,
+                                  "small_caps": false,
+                                  "all_caps": false
+                                }
+                              ]
+                            }
+                          ],
+                          "width_twips": 3500
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "L1-end",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 7000
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

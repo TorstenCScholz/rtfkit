@@ -156,6 +156,22 @@ Parse error: Image bytes exceeded: 60000000 bytes exceeds limit of 52428800
 
 **To disable**: Use `ParserLimits::none()` (not recommended for untrusted input).
 
+### `max_table_nesting_depth`
+
+| Property | Value |
+|----------|-------|
+| Default | 16 levels |
+| Type | `usize` |
+| Error | `ParseError` (table structure) |
+
+**Purpose**: Prevents runaway recursion and memory growth from deeply nested tables.
+
+**Behavior**: When nested table depth exceeds this limit, parsing fails immediately (exit code 2).
+
+**When to adjust**:
+- Increase when processing legitimate deeply nested enterprise documents
+- Decrease for stricter safety envelopes on untrusted inputs
+
 ## Exit Code Behavior
 
 When a limit is exceeded, rtfkit exits with a specific exit code:
@@ -163,7 +179,7 @@ When a limit is exceeded, rtfkit exits with a specific exit code:
 | Exit Code | Meaning | Limit-Related Cause |
 |-----------|---------|---------------------|
 | 0 | Success | — |
-| 2 | Parse/validation failure | `max_input_bytes`, `max_group_depth`, `max_rows_per_table`, `max_cells_per_row`, `max_merge_span`, `max_image_bytes_total` |
+| 2 | Parse/validation failure | `max_input_bytes`, `max_group_depth`, `max_rows_per_table`, `max_cells_per_row`, `max_merge_span`, `max_image_bytes_total`, `max_table_nesting_depth` |
 | 3 | Writer/IO failure | — |
 | 4 | Strict-mode violation | — |
 
@@ -183,7 +199,8 @@ let limits = ParserLimits::new()
     .with_max_rows_per_table(20000)
     .with_max_cells_per_row(2000)
     .with_max_merge_span(2000)
-    .with_max_image_bytes_total(100 * 1024 * 1024);  // 100 MiB
+    .with_max_image_bytes_total(100 * 1024 * 1024)   // 100 MiB
+    .with_max_table_nesting_depth(32);
 ```
 
 ### No Limits (Not Recommended)
@@ -247,6 +264,7 @@ cargo test --test limits_tests
 
 | Version | Change |
 |---------|--------|
+| 0.12.0 | Added `max_table_nesting_depth` limit for nested tables |
 | 0.11.0 | Added `max_image_bytes_total` limit for embedded images |
 | 0.6.0 | Added limits test matrix, updated documentation |
 | 0.5.0 | Added table-specific limits (rows, cells, merge span) |

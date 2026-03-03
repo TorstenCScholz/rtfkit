@@ -174,11 +174,11 @@ fn handle_control_word_event(
             super::finalize::finalize_paragraph(state);
             return Ok(());
         }
-        "cell" => {
+        "cell" | "nestcell" => {
             super::handlers_tables::handle_cell_event(state)?;
             return Ok(());
         }
-        "row" => {
+        "row" | "nestrow" => {
             super::handlers_tables::handle_row_event(state)?;
             return Ok(());
         }

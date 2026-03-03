@@ -1,0 +1,105 @@
+{
+  "blocks": [
+    {
+      "type": "tableblock",
+      "rows": [
+        {
+          "cells": [
+            {
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "alignment": "left",
+                  "inlines": [
+                    {
+                      "type": "run",
+                      "text": "Outer",
+                      "bold": false,
+                      "italic": false,
+                      "underline": false,
+                      "strikethrough": false,
+                      "small_caps": false,
+                      "all_caps": false
+                    }
+                  ]
+                },
+                {
+                  "type": "tableblock",
+                  "rows": [
+                    {
+                      "cells": [
+                        {
+                          "blocks": [
+                            {
+                              "type": "paragraph",
+                              "alignment": "left",
+                              "inlines": [
+                                {
+                                  "type": "run",
+                                  "text": "Inner-a",
+                                  "bold": false,
+                                  "italic": false,
+                                  "underline": false,
+                                  "strikethrough": false,
+                                  "small_caps": false,
+                                  "all_caps": false
+                                }
+                              ]
+                            }
+                          ],
+                          "width_twips": 2500
+                        },
+                        {
+                          "blocks": [
+                            {
+                              "type": "paragraph",
+                              "alignment": "left",
+                              "inlines": [
+                                {
+                                  "type": "run",
+                                  "text": "Inner-b",
+                                  "bold": false,
+                                  "italic": false,
+                                  "underline": false,
+                                  "strikethrough": false,
+                                  "small_caps": false,
+                                  "all_caps": false
+                                }
+                              ]
+                            }
+                          ],
+                          "width_twips": 2500
+                        },
+                        {
+                          "blocks": [
+                            {
+                              "type": "paragraph",
+                              "alignment": "left",
+                              "inlines": [
+                                {
+                                  "type": "run",
+                                  "text": "After malformed nested",
+                                  "bold": false,
+                                  "italic": false,
+                                  "underline": false,
+                                  "strikethrough": false,
+                                  "small_caps": false,
+                                  "all_caps": false
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "width_twips": 5000
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

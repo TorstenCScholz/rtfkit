@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+#### Nested Tables and Complex Cells
+- Parser-native nested table support from RTF controls (`\itap`, `\nesttableprops`, `\nestcell`, `\nestrow`) with deterministic parent/child table finalization.
+- Complex table-cell block streams now preserve source order for text, lists, nested tables, and images.
+- New parser safety guard: `max_table_nesting_depth` (default 16) with fail-closed behavior on limit violations.
+- New nested-table fixtures and parser/contract/integration coverage, including strict-mode and malformed nested-boundary scenarios.
+
 #### Block Shading and Theme Color Support
 - First-class block shading support in RTF-to-IR-to-output pipeline
 - New IR types: `Shading` struct, `ShadingPattern` enum, `ThemeColor` enum, `ColorEntry` struct

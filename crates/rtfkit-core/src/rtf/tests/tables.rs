@@ -753,3 +753,72 @@ fn test_no_borders_none_field() {
         panic!("expected table block");
     }
 }
+
+// =============================================================================
+// Nested Table Tests
+// =============================================================================
+
+#[test]
+fn test_nested_table_2level_basic() {
+    let input = include_str!("../../../../../fixtures/table_nested_2level_basic.rtf");
+    let (doc, _report) = parse(input).expect("nested table fixture should parse");
+
+    let table = match doc.blocks.first() {
+        Some(Block::TableBlock(table)) => table,
+        _ => panic!("expected outer table block"),
+    };
+    assert_eq!(table.rows.len(), 1);
+    assert_eq!(table.rows[0].cells.len(), 1);
+
+    let cell_blocks = &table.rows[0].cells[0].blocks;
+    assert!(
+        cell_blocks.iter().any(|b| matches!(b, Block::Paragraph(_))),
+        "expected paragraph content in outer cell"
+    );
+    assert!(
+        cell_blocks
+            .iter()
+            .any(|b| matches!(b, Block::TableBlock(_))),
+        "expected nested table block in outer cell"
+    );
+}
+
+#[test]
+fn test_nested_table_preserves_mixed_block_order() {
+    let input = include_str!("../../../../../fixtures/table_nested_mixed_text_list_image.rtf");
+    let (doc, _report) = parse(input).expect("nested mixed fixture should parse");
+
+    let table = match doc.blocks.first() {
+        Some(Block::TableBlock(table)) => table,
+        _ => panic!("expected outer table block"),
+    };
+    let cell = &table.rows[0].cells[0];
+
+    let first_list_idx = cell
+        .blocks
+        .iter()
+        .position(|b| matches!(b, Block::ListBlock(_)))
+        .expect("expected list block");
+    let nested_table_idx = cell
+        .blocks
+        .iter()
+        .position(|b| matches!(b, Block::TableBlock(_)))
+        .expect("expected nested table block");
+    let final_para_idx = cell
+        .blocks
+        .iter()
+        .rposition(|b| matches!(b, Block::Paragraph(_)))
+        .expect("expected trailing paragraph block");
+
+    assert!(
+        first_list_idx < nested_table_idx && nested_table_idx < final_para_idx,
+        "expected list -> nested table -> trailing paragraph ordering"
+    );
+}
+
+#[test]
+fn test_nested_table_missing_nestrow_recovers_deterministically() {
+    let input = include_str!("../../../../../fixtures/malformed_table_nested_missing_nestrow.rtf");
+    let result = parse(input);
+    assert!(result.is_ok(), "malformed nested fixture should recover");
+}

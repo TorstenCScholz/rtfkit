@@ -11,7 +11,7 @@ rtfkit provides a complete RTF-to-DOCX, RTF-to-HTML, and RTF-to-PDF conversion p
 
 - **Text extraction** with formatting preservation (bold, italic, underline, alignment)
 - **List support** - bullet and decimal lists with nested levels (up to 8)
-- **Table support** - rows, cells, horizontal/vertical merges, cell alignment
+- **Table support** - rows, cells, nested tables, horizontal/vertical merges, cell alignment
 - **Hyperlink support** - external URLs and internal bookmark links
 - **Embedded image support** - PNG/JPEG images with size/scaling controls
 - **HTML output** - semantic-first HTML5 output with `--to html`
@@ -254,6 +254,7 @@ For safety, the parser enforces these limits (see [Limits Policy](docs/limits-po
 | Maximum rows per table | 10,000 | Prevents resource exhaustion |
 | Maximum cells per row | 1,000 | Prevents resource exhaustion |
 | Maximum merge span | 1,000 cells | Limits merged regions |
+| Maximum table nesting depth | 16 levels | Prevents nested-table recursion abuse |
 
 ## Output Contract
 

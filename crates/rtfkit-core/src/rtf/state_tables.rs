@@ -62,6 +62,9 @@ pub struct RowBorderCapture {
 /// Tracks current table structure, cell boundaries, merge state, and shading.
 #[derive(Debug, Clone, Default)]
 pub struct TableState {
+    /// Parent table contexts for nested tables (outermost first).
+    pub context_stack: Vec<SavedTableContext>,
+
     // =============================================================================
     // Current Table Structure
     // =============================================================================
@@ -196,6 +199,60 @@ pub struct TableState {
     /// This flag is scoped to the current paragraph and reset at paragraph boundaries.
     /// Table membership itself is derived from active row/cell state.
     pub seen_intbl_in_paragraph: bool,
+
+    /// Pending `\itapN` depth hint for the next row definition.
+    pub pending_itap: Option<i32>,
+    /// Whether `\nesttableprops` was seen before the next row definition.
+    pub seen_nesttableprops: bool,
+}
+
+/// Snapshot of one active table context used to support nested parsing.
+#[derive(Debug, Clone)]
+pub struct SavedTableContext {
+    pub current_table: Option<TableBlock>,
+    pub current_row: Option<TableRow>,
+    pub current_cell: Option<TableCell>,
+    pub pending_cellx: Vec<i32>,
+    pub pending_cell_merges: Vec<Option<CellMerge>>,
+    pub pending_cell_v_aligns: Vec<Option<CellVerticalAlign>>,
+    pub pending_cell_cbpats: Vec<Option<i32>>,
+    pub pending_cell_cfpats: Vec<Option<i32>>,
+    pub pending_cell_shadings: Vec<Option<i32>>,
+    pub pending_cell_merge: Option<CellMerge>,
+    pub pending_cell_v_align: Option<CellVerticalAlign>,
+    pub pending_cell_cbpat: Option<i32>,
+    pub pending_cell_cfpat: Option<i32>,
+    pub pending_cell_shading: Option<i32>,
+    pub pending_row_props: RowProps,
+    pub pending_row_cbpat: Option<i32>,
+    pub pending_row_cfpat: Option<i32>,
+    pub pending_row_shading: Option<i32>,
+    pub pending_table_cbpat: Option<i32>,
+    pub pending_table_cfpat: Option<i32>,
+    pub pending_table_shading: Option<i32>,
+    pub pending_table_fts_width: Option<i32>,
+    pub pending_table_w_width: Option<i32>,
+    pub pending_row_fts_width: Option<i32>,
+    pub pending_row_w_width: Option<i32>,
+    pub pending_cell_fts_widths: Vec<Option<i32>>,
+    pub pending_cell_w_widths: Vec<Option<i32>>,
+    pub pending_cell_fts_width: Option<i32>,
+    pub pending_cell_w_width: Option<i32>,
+    pub pending_row_height_raw: Option<i32>,
+    pub pending_row_padding: BoxSpacingTwips,
+    pub pending_row_padding_fmt: [Option<i32>; 4],
+    pub pending_cell_padding: BoxSpacingTwips,
+    pub pending_cell_padding_fmt: [Option<i32>; 4],
+    pub pending_cell_padding_captures: Vec<BoxSpacingTwips>,
+    pub pending_cell_padding_fmt_captures: Vec<[Option<i32>; 4]>,
+    pub pending_border_target: Option<BorderTarget>,
+    pub pending_border_style: Option<BorderStyle>,
+    pub pending_border_width_hp: Option<u32>,
+    pub pending_border_color_idx: Option<i32>,
+    pub current_cell_borders: CellBorderCapture,
+    pub pending_cell_border_captures: Vec<CellBorderCapture>,
+    pub pending_row_borders: RowBorderCapture,
+    pub seen_intbl_in_paragraph: bool,
 }
 
 impl TableState {
@@ -247,6 +304,132 @@ impl TableState {
     /// Check if we're currently in a cell context.
     pub fn in_cell(&self) -> bool {
         self.current_cell.is_some()
+    }
+
+    /// Current effective table nesting depth (0 when not in a table).
+    pub fn nesting_depth(&self) -> usize {
+        if self.in_table() {
+            self.context_stack.len() + 1
+        } else {
+            self.context_stack.len()
+        }
+    }
+
+    /// Returns true when there is a parent table context on the stack.
+    pub fn has_parent_context(&self) -> bool {
+        !self.context_stack.is_empty()
+    }
+
+    fn snapshot_active_context(&self) -> SavedTableContext {
+        SavedTableContext {
+            current_table: self.current_table.clone(),
+            current_row: self.current_row.clone(),
+            current_cell: self.current_cell.clone(),
+            pending_cellx: self.pending_cellx.clone(),
+            pending_cell_merges: self.pending_cell_merges.clone(),
+            pending_cell_v_aligns: self.pending_cell_v_aligns.clone(),
+            pending_cell_cbpats: self.pending_cell_cbpats.clone(),
+            pending_cell_cfpats: self.pending_cell_cfpats.clone(),
+            pending_cell_shadings: self.pending_cell_shadings.clone(),
+            pending_cell_merge: self.pending_cell_merge.clone(),
+            pending_cell_v_align: self.pending_cell_v_align,
+            pending_cell_cbpat: self.pending_cell_cbpat,
+            pending_cell_cfpat: self.pending_cell_cfpat,
+            pending_cell_shading: self.pending_cell_shading,
+            pending_row_props: self.pending_row_props.clone(),
+            pending_row_cbpat: self.pending_row_cbpat,
+            pending_row_cfpat: self.pending_row_cfpat,
+            pending_row_shading: self.pending_row_shading,
+            pending_table_cbpat: self.pending_table_cbpat,
+            pending_table_cfpat: self.pending_table_cfpat,
+            pending_table_shading: self.pending_table_shading,
+            pending_table_fts_width: self.pending_table_fts_width,
+            pending_table_w_width: self.pending_table_w_width,
+            pending_row_fts_width: self.pending_row_fts_width,
+            pending_row_w_width: self.pending_row_w_width,
+            pending_cell_fts_widths: self.pending_cell_fts_widths.clone(),
+            pending_cell_w_widths: self.pending_cell_w_widths.clone(),
+            pending_cell_fts_width: self.pending_cell_fts_width,
+            pending_cell_w_width: self.pending_cell_w_width,
+            pending_row_height_raw: self.pending_row_height_raw,
+            pending_row_padding: self.pending_row_padding.clone(),
+            pending_row_padding_fmt: self.pending_row_padding_fmt,
+            pending_cell_padding: self.pending_cell_padding.clone(),
+            pending_cell_padding_fmt: self.pending_cell_padding_fmt,
+            pending_cell_padding_captures: self.pending_cell_padding_captures.clone(),
+            pending_cell_padding_fmt_captures: self.pending_cell_padding_fmt_captures.clone(),
+            pending_border_target: self.pending_border_target,
+            pending_border_style: self.pending_border_style,
+            pending_border_width_hp: self.pending_border_width_hp,
+            pending_border_color_idx: self.pending_border_color_idx,
+            current_cell_borders: self.current_cell_borders.clone(),
+            pending_cell_border_captures: self.pending_cell_border_captures.clone(),
+            pending_row_borders: self.pending_row_borders.clone(),
+            seen_intbl_in_paragraph: self.seen_intbl_in_paragraph,
+        }
+    }
+
+    fn restore_active_context(&mut self, ctx: SavedTableContext) {
+        self.current_table = ctx.current_table;
+        self.current_row = ctx.current_row;
+        self.current_cell = ctx.current_cell;
+        self.pending_cellx = ctx.pending_cellx;
+        self.pending_cell_merges = ctx.pending_cell_merges;
+        self.pending_cell_v_aligns = ctx.pending_cell_v_aligns;
+        self.pending_cell_cbpats = ctx.pending_cell_cbpats;
+        self.pending_cell_cfpats = ctx.pending_cell_cfpats;
+        self.pending_cell_shadings = ctx.pending_cell_shadings;
+        self.pending_cell_merge = ctx.pending_cell_merge;
+        self.pending_cell_v_align = ctx.pending_cell_v_align;
+        self.pending_cell_cbpat = ctx.pending_cell_cbpat;
+        self.pending_cell_cfpat = ctx.pending_cell_cfpat;
+        self.pending_cell_shading = ctx.pending_cell_shading;
+        self.pending_row_props = ctx.pending_row_props;
+        self.pending_row_cbpat = ctx.pending_row_cbpat;
+        self.pending_row_cfpat = ctx.pending_row_cfpat;
+        self.pending_row_shading = ctx.pending_row_shading;
+        self.pending_table_cbpat = ctx.pending_table_cbpat;
+        self.pending_table_cfpat = ctx.pending_table_cfpat;
+        self.pending_table_shading = ctx.pending_table_shading;
+        self.pending_table_fts_width = ctx.pending_table_fts_width;
+        self.pending_table_w_width = ctx.pending_table_w_width;
+        self.pending_row_fts_width = ctx.pending_row_fts_width;
+        self.pending_row_w_width = ctx.pending_row_w_width;
+        self.pending_cell_fts_widths = ctx.pending_cell_fts_widths;
+        self.pending_cell_w_widths = ctx.pending_cell_w_widths;
+        self.pending_cell_fts_width = ctx.pending_cell_fts_width;
+        self.pending_cell_w_width = ctx.pending_cell_w_width;
+        self.pending_row_height_raw = ctx.pending_row_height_raw;
+        self.pending_row_padding = ctx.pending_row_padding;
+        self.pending_row_padding_fmt = ctx.pending_row_padding_fmt;
+        self.pending_cell_padding = ctx.pending_cell_padding;
+        self.pending_cell_padding_fmt = ctx.pending_cell_padding_fmt;
+        self.pending_cell_padding_captures = ctx.pending_cell_padding_captures;
+        self.pending_cell_padding_fmt_captures = ctx.pending_cell_padding_fmt_captures;
+        self.pending_border_target = ctx.pending_border_target;
+        self.pending_border_style = ctx.pending_border_style;
+        self.pending_border_width_hp = ctx.pending_border_width_hp;
+        self.pending_border_color_idx = ctx.pending_border_color_idx;
+        self.current_cell_borders = ctx.current_cell_borders;
+        self.pending_cell_border_captures = ctx.pending_cell_border_captures;
+        self.pending_row_borders = ctx.pending_row_borders;
+        self.seen_intbl_in_paragraph = ctx.seen_intbl_in_paragraph;
+    }
+
+    /// Push current table context and start a fresh child context.
+    pub fn enter_child_context(&mut self) {
+        self.context_stack.push(self.snapshot_active_context());
+        self.clear_table();
+        self.ensure_table();
+    }
+
+    /// Pop and restore the parent table context.
+    pub fn restore_parent_context(&mut self) -> bool {
+        let Some(parent) = self.context_stack.pop() else {
+            return false;
+        };
+        self.restore_active_context(parent);
+        true
     }
 
     /// Reset state for a new row (called on \trowd).
@@ -376,6 +559,8 @@ impl TableState {
         self.pending_cell_w_widths.clear();
         self.pending_cell_padding_captures.clear();
         self.pending_cell_padding_fmt_captures.clear();
+        self.pending_itap = None;
+        self.seen_nesttableprops = false;
     }
 }
 

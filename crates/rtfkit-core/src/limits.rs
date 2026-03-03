@@ -87,6 +87,13 @@ pub struct ParserLimits {
     /// with a hard parse failure (exit code 2).
     /// Default: 50 MiB (52,428,800 bytes)
     pub max_image_bytes_total: usize,
+
+    /// Maximum nested table depth (`\itap`/nested contexts).
+    ///
+    /// Prevents pathological recursion and runaway memory growth from deeply
+    /// nested tables. Depth counts the active table level, where top-level is 1.
+    /// Default: 16 levels.
+    pub max_table_nesting_depth: usize,
 }
 
 impl Default for ParserLimits {
@@ -110,6 +117,7 @@ impl Default for ParserLimits {
             max_cells_per_row: 1000,
             max_merge_span: 1000,
             max_image_bytes_total: 50 * 1024 * 1024, // 50 MiB
+            max_table_nesting_depth: 16,
         }
     }
 }
@@ -133,6 +141,7 @@ impl ParserLimits {
             max_cells_per_row: usize::MAX,
             max_merge_span: u16::MAX,
             max_image_bytes_total: usize::MAX,
+            max_table_nesting_depth: usize::MAX,
         }
     }
 
@@ -177,6 +186,12 @@ impl ParserLimits {
         self.max_image_bytes_total = bytes;
         self
     }
+
+    /// Sets the maximum table nesting depth.
+    pub fn with_max_table_nesting_depth(mut self, depth: usize) -> Self {
+        self.max_table_nesting_depth = depth;
+        self
+    }
 }
 
 // =============================================================================
@@ -197,6 +212,7 @@ mod tests {
         assert_eq!(limits.max_cells_per_row, 1000);
         assert_eq!(limits.max_merge_span, 1000);
         assert_eq!(limits.max_image_bytes_total, 50 * 1024 * 1024);
+        assert_eq!(limits.max_table_nesting_depth, 16);
     }
 
     #[test]
@@ -215,6 +231,7 @@ mod tests {
         assert_eq!(limits.max_cells_per_row, usize::MAX);
         assert_eq!(limits.max_merge_span, u16::MAX);
         assert_eq!(limits.max_image_bytes_total, usize::MAX);
+        assert_eq!(limits.max_table_nesting_depth, usize::MAX);
     }
 
     #[test]
@@ -226,7 +243,8 @@ mod tests {
             .with_max_rows_per_table(500)
             .with_max_cells_per_row(50)
             .with_max_merge_span(100)
-            .with_max_image_bytes_total(1024 * 1024);
+            .with_max_image_bytes_total(1024 * 1024)
+            .with_max_table_nesting_depth(4);
 
         assert_eq!(limits.max_input_bytes, 1024);
         assert_eq!(limits.max_group_depth, 50);
@@ -235,6 +253,7 @@ mod tests {
         assert_eq!(limits.max_cells_per_row, 50);
         assert_eq!(limits.max_merge_span, 100);
         assert_eq!(limits.max_image_bytes_total, 1024 * 1024);
+        assert_eq!(limits.max_table_nesting_depth, 4);
     }
 
     #[test]
@@ -248,5 +267,6 @@ mod tests {
         assert!(json.contains("max_cells_per_row"));
         assert!(json.contains("max_merge_span"));
         assert!(json.contains("max_image_bytes_total"));
+        assert!(json.contains("max_table_nesting_depth"));
     }
 }

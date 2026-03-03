@@ -57,6 +57,17 @@ mod exit_code_tests {
     }
 
     #[test]
+    fn nested_table_conversion_returns_success() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/table_nested_2level_basic.rtf");
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args(["convert", fixture.to_str().unwrap(), "--format", "json"]);
+        cmd.assert().success().code(0);
+    }
+
+    #[test]
     fn list_conversion_returns_success() {
         // Well-formed list should succeed with exit code 0
         let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -663,6 +674,43 @@ mod exit_code_tests {
             "json",
         ]);
         cmd.assert().success().code(0);
+    }
+
+    #[test]
+    fn strict_mode_succeeds_on_supported_nested_table_fixture() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/table_nested_2level_basic.rtf");
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--strict",
+            "--format",
+            "json",
+        ]);
+        cmd.assert().success().code(0);
+    }
+
+    #[test]
+    fn strict_mode_fails_on_malformed_nested_table_fixture() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let fixture = project_root.join("fixtures/malformed_table_nested_missing_nestrow.rtf");
+
+        let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+        cmd.args([
+            "convert",
+            fixture.to_str().unwrap(),
+            "--strict",
+            "--format",
+            "json",
+        ]);
+        cmd.assert()
+            .failure()
+            .code(4)
+            .stderr(contains("Strict mode violated"));
     }
 }
 

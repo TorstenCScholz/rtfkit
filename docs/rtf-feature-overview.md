@@ -43,9 +43,11 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
   - bullet and decimal ordered output
 - **Tables**:
   - row/cell structure (`\trowd`, `\cellxN`, `\intbl`, `\cell`, `\row`)
+  - nested table controls (`\itap`, `\nesttableprops`, `\nestcell`, `\nestrow`)
   - horizontal merges (`\clmgf`, `\clmrg`)
   - vertical merges (`\clvmgf`, `\clvmrg`)
   - cell vertical alignment (`\clvertalt`, `\clvertalc`, `\clvertalb`)
+  - complex cell content ordering (text, lists, nested tables, images)
   - deterministic recovery for malformed merge/table structures
 - **Embedded images**:
   - PNG images (`\pngblip`)
@@ -76,7 +78,6 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
 - **Inline images** - Images are block-level only
 - **Image cropping** - `\cropl`, `\cropr`, `\cropt`, `\cropb` controls not supported
 - **Floating/anchored images** - Images are inline with text flow
-- **Nested tables from RTF input** - Not yet parsed as nested structures in the parser path
 
 ## Notes
 
