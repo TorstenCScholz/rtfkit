@@ -218,10 +218,11 @@ pub fn map_document(doc: &Document, options: &RenderOptions) -> DocumentOutput {
     let enable_numbering = resolve_page_numbering(options.page_numbering, requires_numbering);
     let note_bodies = build_note_body_map(doc, &mut assets, &mut warnings);
     let known_bookmarks = collect_bookmark_labels(doc);
-    let enable_heading_inference = doc
-        .page_management
-        .as_ref()
-        .is_some_and(|pm| !pm.generated_blocks.is_empty());
+    let enable_heading_inference = doc.page_management.as_ref().is_some_and(|pm| {
+        pm.generated_blocks
+            .iter()
+            .any(|g| matches!(g.kind, GeneratedBlockKind::TableOfContents { .. }))
+    });
     let body_context = ParagraphMapContext {
         note_bodies: Some(&note_bodies),
         known_bookmarks: Some(&known_bookmarks),

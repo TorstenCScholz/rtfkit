@@ -36,7 +36,8 @@ use std::collections::{BTreeMap, HashSet};
 use rtfkit_core::{
     Alignment, BookmarkAnchor, Color, GeneratedBlockKind, Hyperlink, HyperlinkTarget, Inline,
     NoteKind, NoteRef, PageFieldRef, PageNumberFormat, Paragraph, Run, Shading, ShadingPattern,
-    ShadingRenderPolicy, TocOptions, percent_pattern_density, resolve_shading_fill_color,
+    ShadingRenderPolicy, TocOptions, extract_heading_plain_text, infer_heading_level,
+    percent_pattern_density, resolve_shading_fill_color,
 };
 
 use super::MappingWarning;
@@ -85,18 +86,18 @@ pub(crate) fn map_paragraph_with_context(
 ) -> ParagraphOutput {
     let mut warnings = Vec::new();
 
-    // Map inlines to text content
-    let content = map_inlines(&paragraph.inlines, &mut warnings, context);
-
     if context.enable_heading_inference
         && let Some(level) = infer_heading_level(paragraph)
-        && !content.is_empty()
+        && let Some(heading_source) = map_inferred_heading(paragraph, level)
     {
         return ParagraphOutput {
-            typst_source: format!("#heading(level: {level})[{content}]"),
+            typst_source: heading_source,
             warnings,
         };
     }
+
+    // Map inlines to text content
+    let content = map_inlines(&paragraph.inlines, &mut warnings, context);
 
     // Apply paragraph shading (background) if present
     let content = if let Some(ref shading) = paragraph.shading {
@@ -124,6 +125,18 @@ pub(crate) fn map_paragraph_with_context(
         typst_source,
         warnings,
     }
+}
+
+fn map_inferred_heading(paragraph: &Paragraph, level: u8) -> Option<String> {
+    let plain_text = extract_heading_plain_text(paragraph);
+    let trimmed = plain_text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "#heading(level: {level})[#text(\"{}\")]",
+        escape_typst_string(trimmed)
+    ))
 }
 
 /// Apply paragraph-level shading as a highlight wrapper.
@@ -407,53 +420,6 @@ fn format_total_pages(format: PageNumberFormat) -> String {
             "#context numbering(\"I\", counter(page).final().at(0))".to_string()
         }
     }
-}
-
-fn infer_heading_level(paragraph: &Paragraph) -> Option<u8> {
-    let mut text = String::new();
-    let mut has_bold = false;
-    let mut max_size = 0.0_f32;
-    let mut has_bookmark_anchor = false;
-
-    for inline in &paragraph.inlines {
-        match inline {
-            Inline::Run(run) => {
-                text.push_str(&run.text);
-                has_bold |= run.bold;
-                if let Some(size) = run.font_size {
-                    max_size = max_size.max(size);
-                }
-            }
-            Inline::Hyperlink(link) => {
-                for run in &link.runs {
-                    text.push_str(&run.text);
-                    has_bold |= run.bold;
-                    if let Some(size) = run.font_size {
-                        max_size = max_size.max(size);
-                    }
-                }
-            }
-            Inline::BookmarkAnchor(_) => {
-                has_bookmark_anchor = true;
-            }
-            Inline::NoteRef(_) | Inline::PageField(_) | Inline::GeneratedBlockMarker(_) => {}
-        }
-    }
-
-    let trimmed = text.trim();
-    if trimmed.is_empty() || trimmed.len() > 140 {
-        return None;
-    }
-    if !(has_bold && max_size >= 13.0) {
-        return None;
-    }
-    if has_bookmark_anchor {
-        // Keep bookmark anchors out of inferred headings to avoid duplicate
-        // label declarations in Typst heading/outline processing.
-        return None;
-    }
-
-    Some(1)
 }
 
 /// Sanitize a bookmark name to a valid Typst label identifier.
@@ -761,6 +727,49 @@ mod tests {
 
         assert_eq!(output.typst_source, "Hello, World!");
         assert!(output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_inferred_numbered_heading_uses_text_function() {
+        let mut run = Run::new("2. Operational Performance");
+        run.bold = true;
+        run.font_size = Some(13.0);
+        let paragraph = Paragraph::from_runs(vec![run]);
+        let context = ParagraphMapContext {
+            enable_heading_inference: true,
+            ..ParagraphMapContext::default()
+        };
+
+        let output = map_paragraph_with_context(&paragraph, &context);
+        assert_eq!(
+            output.typst_source,
+            "#heading(level: 1)[#text(\"2. Operational Performance\")]"
+        );
+    }
+
+    #[test]
+    fn test_bookmark_anchor_heading_is_not_inferred() {
+        let mut run = Run::new("2. Operational Performance");
+        run.bold = true;
+        run.font_size = Some(13.0);
+        let paragraph = Paragraph::from_inlines(vec![
+            Inline::BookmarkAnchor(BookmarkAnchor {
+                name: "sec_two".to_string(),
+            }),
+            Inline::Run(run),
+        ]);
+        let context = ParagraphMapContext {
+            enable_heading_inference: true,
+            ..ParagraphMapContext::default()
+        };
+
+        let output = map_paragraph_with_context(&paragraph, &context);
+        assert!(!output.typst_source.starts_with("#heading("));
+        assert!(
+            output
+                .typst_source
+                .contains("#box(width: 0pt, height: 0pt)[] <sec_two>")
+        );
     }
 
     #[test]

@@ -228,6 +228,11 @@ fn test_realworld_policy_fixture_uses_dynamic_page_fields() {
     assert!(mapped.typst_source.contains("counter(page).get().at(0)"));
     assert!(mapped.typst_source.contains("counter(page).final().at(0)"));
     assert!(mapped.typst_source.contains("#outline("));
+    assert!(
+        mapped
+            .typst_source
+            .contains("#heading(level: 1)[#text(\"2. Operational Performance\")]")
+    );
 }
 
 #[test]

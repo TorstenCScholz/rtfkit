@@ -104,53 +104,9 @@ fn has_inferred_headings(blocks: &[Block]) -> bool {
                 None
             }
         })
-        .filter(|p| paragraph_looks_like_heading(p))
+        .filter(|p| crate::paragraph_looks_like_heading(p))
         .count();
     count >= 3
-}
-
-fn paragraph_looks_like_heading(paragraph: &Paragraph) -> bool {
-    let mut text = String::new();
-    let mut has_bold = false;
-    let mut max_size = 0.0_f32;
-
-    for inline in &paragraph.inlines {
-        match inline {
-            Inline::Run(run) => {
-                text.push_str(&run.text);
-                has_bold |= run.bold;
-                if let Some(size) = run.font_size {
-                    max_size = max_size.max(size);
-                }
-            }
-            Inline::Hyperlink(link) => {
-                for run in &link.runs {
-                    text.push_str(&run.text);
-                    has_bold |= run.bold;
-                    if let Some(size) = run.font_size {
-                        max_size = max_size.max(size);
-                    }
-                }
-            }
-            Inline::BookmarkAnchor(_)
-            | Inline::NoteRef(_)
-            | Inline::PageField(_)
-            | Inline::GeneratedBlockMarker(_) => {}
-        }
-    }
-
-    let trimmed = text.trim();
-    if trimmed.is_empty() || trimmed.len() > 140 {
-        return false;
-    }
-    if !(has_bold && max_size >= 13.0) {
-        return false;
-    }
-
-    trimmed
-        .chars()
-        .next()
-        .is_some_and(|c| c.is_ascii_digit() || c.is_ascii_uppercase())
 }
 
 fn document_has_page_fields(blocks: &[Block]) -> bool {

@@ -48,6 +48,17 @@ pub use shading_render::{
 };
 
 // =============================================================================
+// Heading Semantics Helpers
+// =============================================================================
+
+pub mod heading_semantics;
+
+pub use heading_semantics::{
+    HeadingInferenceOptions, extract_heading_plain_text, infer_heading_level,
+    infer_heading_level_with_options, paragraph_looks_like_heading,
+};
+
+// =============================================================================
 // IR Types for RTF Conversion
 // =============================================================================
 
