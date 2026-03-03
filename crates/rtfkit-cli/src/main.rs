@@ -9,7 +9,8 @@ use rtfkit_core::{Document, Report, Warning, parse};
 use rtfkit_docx::{DocxWriterOptions, write_docx};
 use rtfkit_html::{CssMode, HtmlWriterOptions, document_to_html_with_warnings};
 use rtfkit_render_typst::{
-    DeterminismOptions, Margins, PageSize, RenderOptions, document_to_pdf_with_warnings,
+    DeterminismOptions, Margins, PageNumberingMode, PageSize, RenderOptions,
+    document_to_pdf_with_warnings,
 };
 use rtfkit_style_tokens::StyleProfileName;
 use tracing::debug;
@@ -590,6 +591,7 @@ fn handle_pdf_output(
             fixed_timestamp: fixed_timestamp.map(str::to_owned),
             normalize_metadata: fixed_timestamp.is_some(),
         },
+        page_numbering: PageNumberingMode::Auto,
         style_profile,
     };
 

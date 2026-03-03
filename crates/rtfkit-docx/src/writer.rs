@@ -177,11 +177,10 @@ fn convert_document(
                                 doc = doc.add_paragraph(paragraph);
                             }
                             Block::ImageBlock(image) => {
-                                let paragraph =
-                                    convert_image_block(image, ctx.images)?.numbering(
-                                        NumberingId::new(num_id as usize),
-                                        IndentLevel::new(item.level as usize),
-                                    );
+                                let paragraph = convert_image_block(image, ctx.images)?.numbering(
+                                    NumberingId::new(num_id as usize),
+                                    IndentLevel::new(item.level as usize),
+                                );
                                 doc = doc.add_paragraph(paragraph);
                             }
                             Block::TableBlock(table) => {
@@ -249,9 +248,7 @@ pub(crate) fn register_lists_in_block(block: &Block, numbering: &mut NumberingAl
     }
 }
 
-fn build_note_lookup(
-    structure: Option<&DocumentStructure>,
-) -> crate::allocators::NoteLookup {
+fn build_note_lookup(structure: Option<&DocumentStructure>) -> crate::allocators::NoteLookup {
     let mut lookup = crate::allocators::NoteLookup::new();
     if let Some(structure) = structure {
         for note in &structure.notes {
@@ -353,9 +350,9 @@ mod tests {
         .unwrap();
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
         assert!(document_xml.contains("<w:tblBorders>"));
-        assert!(document_xml.contains(
-            r#"w:top w:val="single" w:sz="4" w:space="0" w:color="D1D5DB""#
-        ));
+        assert!(
+            document_xml.contains(r#"w:top w:val="single" w:sz="4" w:space="0" w:color="D1D5DB""#)
+        );
     }
 
     #[test]

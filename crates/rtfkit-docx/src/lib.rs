@@ -49,16 +49,16 @@
 //! All functions return [`Result`] with [`DocxError`] on failure.
 //! See [`DocxError`] for the error types that can occur.
 
-pub mod error;
-pub mod options;
 pub(crate) mod allocators;
 pub(crate) mod context;
-pub(crate) mod shading;
-pub(crate) mod utils;
+pub mod error;
 pub(crate) mod image;
+pub mod options;
 pub(crate) mod paragraph;
+pub(crate) mod shading;
 pub(crate) mod structure;
 pub(crate) mod table;
+pub(crate) mod utils;
 pub mod writer;
 
 pub use error::DocxError;

@@ -230,6 +230,20 @@ fn test_realworld_policy_fixture_uses_dynamic_page_fields() {
     assert!(mapped.typst_source.contains("#outline("));
 }
 
+#[test]
+fn test_realworld_policy_fixture_renders_with_auto_numbering_policy() {
+    let input = include_str!("../../../fixtures/realworld/policy_doc_15p.rtf");
+    let (doc, _report) = parse(input).expect("fixture should parse");
+
+    let options = RenderOptions::default();
+    let result = document_to_pdf_with_warnings(&doc, &options);
+    assert!(
+        result.is_ok(),
+        "policy_doc_15p should render successfully with default Auto page-numbering policy: {:?}",
+        result.err()
+    );
+}
+
 /// Test that deterministic output works.
 #[test]
 fn test_deterministic_pdf_output() {

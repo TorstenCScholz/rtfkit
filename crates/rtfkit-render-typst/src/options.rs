@@ -24,6 +24,25 @@ pub enum PageSize {
     },
 }
 
+/// Policy for page numbering behavior in Typst output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageNumberingMode {
+    /// Enable page numbering only when the document semantics require it
+    /// (e.g., page fields or a generated table of contents).
+    Auto,
+    /// Always enable page numbering, even if the document does not use page-related fields.
+    Always,
+    /// Never enable page numbering. Documents that require numbering will be rejected
+    /// by the renderer as an invalid option.
+    Never,
+}
+
+impl Default for PageNumberingMode {
+    fn default() -> Self {
+        PageNumberingMode::Auto
+    }
+}
+
 impl PageSize {
     /// Returns the page dimensions in millimeters.
     pub fn dimensions_mm(&self) -> (f32, f32) {
@@ -86,7 +105,9 @@ pub struct DeterminismOptions {
 /// # Example
 ///
 /// ```rust
-/// use rtfkit_render_typst::{RenderOptions, PageSize, Margins, DeterminismOptions};
+/// use rtfkit_render_typst::{
+///     DeterminismOptions, Margins, PageNumberingMode, PageSize, RenderOptions,
+/// };
 /// use rtfkit_style_tokens::StyleProfileName;
 ///
 /// // Default options: A4 page size, 1-inch margins, Report style profile
@@ -105,6 +126,7 @@ pub struct DeterminismOptions {
 ///         fixed_timestamp: Some("2024-01-01T00:00:00Z".to_string()),
 ///         normalize_metadata: true,
 ///     },
+///     page_numbering: PageNumberingMode::Auto,
 ///     style_profile: StyleProfileName::Report,
 /// };
 /// ```
@@ -121,6 +143,13 @@ pub struct RenderOptions {
 
     /// Determinism controls for reproducible output.
     pub determinism: DeterminismOptions,
+
+    /// Page-numbering policy for Typst page setup (default: Auto).
+    ///
+    /// This controls whether the `numbering` parameter is enabled in the Typst
+    /// `#set page(...)` directive. When left at the default [`PageNumberingMode::Auto`],
+    /// numbering is enabled only when the document semantics require it.
+    pub page_numbering: PageNumberingMode,
 
     /// Style profile for Typst preamble generation (default: Report).
     ///
@@ -139,6 +168,7 @@ mod tests {
         assert_eq!(options.page_size, PageSize::A4);
         assert!(options.determinism.fixed_timestamp.is_none());
         assert!(!options.determinism.normalize_metadata);
+        assert_eq!(options.page_numbering, PageNumberingMode::Auto);
         assert_eq!(options.style_profile, StyleProfileName::Report);
     }
 

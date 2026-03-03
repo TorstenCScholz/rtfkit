@@ -48,7 +48,7 @@ pub mod options;
 
 // Re-export public API types
 pub use error::{RenderError, Warning, WarningKind};
-pub use options::{DeterminismOptions, Margins, PageSize, RenderOptions};
+pub use options::{DeterminismOptions, Margins, PageNumberingMode, PageSize, RenderOptions};
 
 // Re-export style profile types for external use
 pub use rtfkit_style_tokens::StyleProfileName;
@@ -117,6 +117,19 @@ pub fn document_to_pdf_with_warnings(
     doc: &Document,
     options: &RenderOptions,
 ) -> Result<RenderOutput, RenderError> {
+    // Validate page-numbering policy against document semantics before mapping.
+    let requires_numbering = map::document_requires_page_numbering(doc);
+    if matches!(
+        options.page_numbering,
+        crate::options::PageNumberingMode::Never
+    ) && requires_numbering
+    {
+        return Err(RenderError::InvalidOption(
+            "PageNumberingMode::Never is incompatible with documents that contain page fields or a generated table of contents"
+                .to_string(),
+        ));
+    }
+
     // Step 1: Map IR to Typst source
     let mapped = map::map_document(doc, options);
 
@@ -162,7 +175,7 @@ mod tests {
     use super::*;
     use rtfkit_core::{
         Block, BookmarkAnchor, Hyperlink, HyperlinkTarget, Inline, ListBlock, ListItem, ListKind,
-        Paragraph, Run,
+        PageFieldRef, PageNumberFormat, Paragraph, Run,
     };
 
     #[test]
@@ -305,6 +318,26 @@ mod tests {
             result.is_ok(),
             "internal bookmark navigation should compile"
         );
+    }
+
+    #[test]
+    fn test_page_numbering_never_rejected_when_document_requires_numbering() {
+        let doc = Document::from_blocks(vec![Block::Paragraph(Paragraph::from_inlines(vec![
+            Inline::Run(Run::new("Page ")),
+            Inline::PageField(PageFieldRef::CurrentPage {
+                format: PageNumberFormat::Arabic,
+            }),
+        ]))]);
+
+        let options = RenderOptions {
+            page_numbering: crate::options::PageNumberingMode::Never,
+            ..Default::default()
+        };
+
+        let result = document_to_pdf_with_warnings(&doc, &options);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("PageNumberingMode::Never"));
     }
 
     #[test]

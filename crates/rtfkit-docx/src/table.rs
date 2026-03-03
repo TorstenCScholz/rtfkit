@@ -1,10 +1,10 @@
 //! Table, row, cell, and border conversion from IR to docx-rs types.
 
+use crate::DocxError;
 use crate::context::ConvertCtx;
 use crate::image::convert_image_block;
 use crate::paragraph::{convert_paragraph, convert_paragraph_with_numbering};
 use crate::shading::convert_shading;
-use crate::DocxError;
 use docx_rs::{
     BorderType, HeightRule as DocxHeightRule, IndentLevel, NumberingId, Shading, ShdType, Table,
     TableAlignmentType, TableBorder, TableBorderPosition, TableBorders, TableCell, TableCellBorder,
@@ -429,8 +429,8 @@ fn convert_table_cell(
                                     docx_cell = docx_cell.add_paragraph(paragraph);
                                 }
                                 Block::ImageBlock(image) => {
-                                    let paragraph =
-                                        convert_image_block(image, ctx.images)?.numbering(
+                                    let paragraph = convert_image_block(image, ctx.images)?
+                                        .numbering(
                                             NumberingId::new(num_id as usize),
                                             IndentLevel::new(item.level as usize),
                                         );
@@ -486,7 +486,7 @@ fn convert_table_cell(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{write_docx_to_bytes, DocxWriterOptions};
+    use crate::{DocxWriterOptions, write_docx_to_bytes};
     use rtfkit_core::{
         Block, Border, BorderSet, CellMerge, CellVerticalAlign, Color, Document, Paragraph,
         RowProps, Run, ShadingPattern, TableBlock, TableCell, TableRow,
@@ -712,8 +712,7 @@ mod tests {
 
     #[test]
     fn test_table_cell_horizontal_merge_start() {
-        let mut cell =
-            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Merged")]));
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Merged")]));
         cell.merge = Some(CellMerge::HorizontalStart { span: 2 });
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
@@ -729,10 +728,8 @@ mod tests {
         let mut continue_cell =
             TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Continue")]));
         continue_cell.merge = Some(CellMerge::HorizontalContinue);
-        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![
-            start_cell,
-            continue_cell,
-        ])]);
+        let table =
+            TableBlock::from_rows(vec![TableRow::from_cells(vec![start_cell, continue_cell])]);
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
         let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
@@ -746,8 +743,7 @@ mod tests {
     fn test_orphan_horizontal_continue_preserves_text() {
         use std::io::Read;
         let start = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Alpha")]));
-        let mut orphan =
-            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Bravo")]));
+        let mut orphan = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Bravo")]));
         orphan.merge = Some(CellMerge::HorizontalContinue);
         let end = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Charlie")]));
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![start, orphan, end])]);
@@ -832,8 +828,7 @@ mod tests {
 
     #[test]
     fn test_table_combined_merge_and_alignment() {
-        let mut cell =
-            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Combined")]));
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Combined")]));
         cell.merge = Some(CellMerge::HorizontalStart { span: 3 });
         cell.v_align = Some(CellVerticalAlign::Center);
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
@@ -878,8 +873,7 @@ mod tests {
         cell.shading = Some(rtfkit_core::Shading::solid(Color::new(0, 0, 255)));
         let mut cont_cell = TableCell::new();
         cont_cell.merge = Some(CellMerge::HorizontalContinue);
-        let table =
-            TableBlock::from_rows(vec![TableRow::from_cells(vec![cell, cont_cell])]);
+        let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell, cont_cell])]);
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
         let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         let document_xml = zip_entry_string(&bytes, "word/document.xml");
@@ -890,9 +884,8 @@ mod tests {
 
     #[test]
     fn test_table_cell_shading_with_vertical_align() {
-        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new(
-            "Aligned and shaded",
-        )]));
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Aligned and shaded")]));
         cell.v_align = Some(CellVerticalAlign::Center);
         cell.shading = Some(rtfkit_core::Shading::solid(Color::new(128, 128, 128)));
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
@@ -929,9 +922,8 @@ mod tests {
         shading.fill_color = Some(Color::new(200, 200, 200));
         shading.pattern_color = Some(Color::new(100, 100, 100));
         shading.pattern = Some(ShadingPattern::HorzStripe);
-        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new(
-            "Horizontal stripes",
-        )]));
+        let mut cell =
+            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("Horizontal stripes")]));
         cell.shading = Some(shading);
         let table = TableBlock::from_rows(vec![TableRow::from_cells(vec![cell])]);
         let doc = Document::from_blocks(vec![Block::TableBlock(table)]);
@@ -1003,8 +995,7 @@ mod tests {
 
     #[test]
     fn cell_with_borders_builds_docx_without_error() {
-        let mut cell =
-            TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("bordered")]));
+        let mut cell = TableCell::from_paragraph(Paragraph::from_runs(vec![Run::new("bordered")]));
         cell.borders = Some(BorderSet {
             top: Some(Border {
                 style: IrBorderStyle::Single,

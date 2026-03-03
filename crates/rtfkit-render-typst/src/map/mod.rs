@@ -18,6 +18,7 @@
 
 mod image;
 mod list;
+mod page_semantics;
 mod paragraph;
 mod structure;
 mod table;
@@ -29,7 +30,7 @@ use rtfkit_core::{Block as IrBlock, Document, GeneratedBlockKind, Inline, NoteKi
 use rtfkit_style_tokens::{StyleProfile, StyleProfileName, builtins, serialize::to_typst_preamble};
 
 use crate::error::WarningKind;
-use crate::options::{Margins, RenderOptions};
+use crate::options::{Margins, PageNumberingMode, RenderOptions};
 
 use image::map_image_block_with_assets;
 pub use image::{ImageOutput, map_image_block};
@@ -213,6 +214,8 @@ pub fn map_document(doc: &Document, options: &RenderOptions) -> DocumentOutput {
     let mut warnings = Vec::new();
     let mut block_sources = Vec::new();
     let mut assets = TypstAssetAllocator::new();
+    let requires_numbering = document_requires_page_numbering(doc);
+    let enable_numbering = resolve_page_numbering(options.page_numbering, requires_numbering);
     let note_bodies = build_note_body_map(doc, &mut assets, &mut warnings);
     let known_bookmarks = collect_bookmark_labels(doc);
     let enable_heading_inference = doc
@@ -267,13 +270,23 @@ pub fn map_document(doc: &Document, options: &RenderOptions) -> DocumentOutput {
     }
 
     // Generate document structure
-    let typst_source = generate_document_source(&block_sources, options, &structure_page_setup);
+    let typst_source = generate_document_source(
+        &block_sources,
+        options,
+        &structure_page_setup,
+        enable_numbering,
+    );
 
     DocumentOutput {
         typst_source,
         warnings,
         assets: assets.into_bundle(),
     }
+}
+
+/// Determine whether the source document requires Typst page numbering.
+pub(crate) fn document_requires_page_numbering(doc: &Document) -> bool {
+    page_semantics::requires_page_numbering(doc)
 }
 
 /// Map a single IR block to Typst source.
@@ -434,6 +447,7 @@ fn generate_document_source(
     block_sources: &[String],
     options: &RenderOptions,
     structure_page_setup: &str,
+    enable_numbering: bool,
 ) -> String {
     let mut lines = Vec::new();
 
@@ -444,7 +458,7 @@ fn generate_document_source(
 
     // Apply page geometry in one place to avoid option/profile drift.
     let margins = effective_margins(options, &profile);
-    lines.push(generate_page_setup(options, &margins));
+    lines.push(generate_page_setup(options, &margins, enable_numbering));
 
     // Append header/footer page setup override if present
     if !structure_page_setup.is_empty() {
@@ -466,14 +480,33 @@ fn generate_document_source(
 
 /// Generate Typst page size setup directives.
 ///
-/// Note: Margins are set via the style preamble. This function only sets
-/// the page width and height.
-fn generate_page_setup(options: &RenderOptions, margins: &Margins) -> String {
+/// Note: Margins are set via the style preamble. This function sets
+/// the page width, height, margins, and optionally page numbering.
+fn generate_page_setup(
+    options: &RenderOptions,
+    margins: &Margins,
+    enable_numbering: bool,
+) -> String {
     let (width_mm, height_mm) = options.page_size.dimensions_mm();
-    format!(
-        "#set page(\n  width: {}mm,\n  height: {}mm,\n  margin: (top: {}mm, bottom: {}mm, left: {}mm, right: {}mm),\n)",
-        width_mm, height_mm, margins.top, margins.bottom, margins.left, margins.right
-    )
+    if enable_numbering {
+        format!(
+            "#set page(\n  width: {}mm,\n  height: {}mm,\n  margin: (top: {}mm, bottom: {}mm, left: {}mm, right: {}mm),\n  numbering: \"1\",\n)",
+            width_mm, height_mm, margins.top, margins.bottom, margins.left, margins.right
+        )
+    } else {
+        format!(
+            "#set page(\n  width: {}mm,\n  height: {}mm,\n  margin: (top: {}mm, bottom: {}mm, left: {}mm, right: {}mm),\n)",
+            width_mm, height_mm, margins.top, margins.bottom, margins.left, margins.right
+        )
+    }
+}
+
+fn resolve_page_numbering(mode: PageNumberingMode, doc_requires: bool) -> bool {
+    match mode {
+        PageNumberingMode::Always => true,
+        PageNumberingMode::Never => false,
+        PageNumberingMode::Auto => doc_requires,
+    }
 }
 
 fn effective_margins(options: &RenderOptions, profile: &StyleProfile) -> Margins {
@@ -844,7 +877,7 @@ mod tests {
             ..Default::default()
         };
 
-        let setup = generate_page_setup(&options, &Margins::default());
+        let setup = generate_page_setup(&options, &Margins::default(), false);
 
         // A4 dimensions
         assert!(setup.contains("210mm"));
@@ -858,7 +891,7 @@ mod tests {
             ..Default::default()
         };
 
-        let setup = generate_page_setup(&options, &Margins::default());
+        let setup = generate_page_setup(&options, &Margins::default(), false);
 
         // Letter dimensions
         assert!(setup.contains("215.9mm"));
@@ -878,7 +911,7 @@ mod tests {
             ..Default::default()
         };
 
-        let setup = generate_page_setup(&options, &options.margins);
+        let setup = generate_page_setup(&options, &options.margins, false);
 
         assert!(setup.contains("top: 10mm"));
         assert!(setup.contains("bottom: 15mm"));
@@ -917,6 +950,25 @@ mod tests {
         assert_eq!(margins.bottom, 12.0);
         assert_eq!(margins.left, 13.0);
         assert_eq!(margins.right, 14.0);
+    }
+
+    #[test]
+    fn test_generate_page_setup_with_numbering_enabled() {
+        let options = RenderOptions {
+            page_size: crate::options::PageSize::A4,
+            ..Default::default()
+        };
+
+        let setup = generate_page_setup(&options, &Margins::default(), true);
+        assert!(setup.contains("numbering: \"1\""));
+    }
+
+    #[test]
+    fn test_resolve_page_numbering_policy() {
+        assert!(resolve_page_numbering(PageNumberingMode::Always, false));
+        assert!(!resolve_page_numbering(PageNumberingMode::Never, true));
+        assert!(resolve_page_numbering(PageNumberingMode::Auto, true));
+        assert!(!resolve_page_numbering(PageNumberingMode::Auto, false));
     }
 
     #[test]

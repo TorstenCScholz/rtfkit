@@ -4,19 +4,16 @@ use crate::context::ConvertCtx;
 use crate::shading::convert_shading;
 use docx_rs::{
     AlignmentType, Hyperlink as DocxHyperlink, HyperlinkType, IndentLevel, LineSpacing,
-    NumberingId, Paragraph as DocxParagraph, Run as DocxRun, RunFonts,
-    RunProperty, Shading, ShdType,
+    NumberingId, Paragraph as DocxParagraph, Run as DocxRun, RunFonts, RunProperty, Shading,
+    ShdType,
 };
 use rtfkit_core::{
-    Alignment, GeneratedBlockKind, Hyperlink as IrHyperlink, HyperlinkTarget, Inline,
-    PageFieldRef, Paragraph, Run,
+    Alignment, GeneratedBlockKind, Hyperlink as IrHyperlink, HyperlinkTarget, Inline, PageFieldRef,
+    Paragraph, Run,
 };
 
 /// Converts an IR paragraph to a docx-rs paragraph without numbering.
-pub(crate) fn convert_paragraph(
-    para: &Paragraph,
-    ctx: &mut ConvertCtx<'_>,
-) -> DocxParagraph {
+pub(crate) fn convert_paragraph(para: &Paragraph, ctx: &mut ConvertCtx<'_>) -> DocxParagraph {
     convert_paragraph_with_numbering(para, 0, 0, ctx)
 }
 
@@ -210,7 +207,7 @@ pub(crate) fn convert_run(run: &Run) -> DocxRun {
 
 #[cfg(test)]
 mod tests {
-    use crate::{write_docx_to_bytes, DocxWriterOptions};
+    use crate::{DocxWriterOptions, write_docx_to_bytes};
     use rtfkit_core::{
         Alignment, Block, Document, Hyperlink as IrHyperlink, HyperlinkTarget, Inline, ListBlock,
         ListItem, ListKind, Paragraph, Run, ShadingPattern,
@@ -696,7 +693,9 @@ mod tests {
     #[test]
     fn test_paragraph_with_shading() {
         let mut para = Paragraph::from_runs(vec![Run::new("Shaded paragraph")]);
-        para.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(255, 255, 0)));
+        para.shading = Some(rtfkit_core::Shading::solid(rtfkit_core::Color::new(
+            255, 255, 0,
+        )));
         let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
         let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         let document_xml = zip_entry_string(&bytes, "word/document.xml");

@@ -1,10 +1,10 @@
 //! Document structure conversion: headers, footers, footnotes, and endnotes.
 
+use crate::DocxError;
 use crate::allocators::{ImageAllocator, NoteLookup, NumberingAllocator};
 use crate::context::ConvertCtx;
 use crate::image::convert_image_block;
 use crate::paragraph::{convert_paragraph, convert_paragraph_with_numbering};
-use crate::DocxError;
 use docx_rs::{
     Footer as DocxFooter, Footnote as DocxFootnote, Header as DocxHeader,
     Paragraph as DocxParagraph, Run as DocxRun, RunProperty, VertAlignType,
@@ -65,10 +65,7 @@ fn append_note_blocks_as_paragraphs(
                     for item_block in &item.blocks {
                         match item_block {
                             Block::Paragraph(para) => out.push(convert_paragraph_with_numbering(
-                                para,
-                                num_id,
-                                item.level,
-                                ctx,
+                                para, num_id, item.level, ctx,
                             )),
                             Block::ListBlock(nested) => {
                                 append_note_blocks_as_paragraphs(
@@ -80,11 +77,7 @@ fn append_note_blocks_as_paragraphs(
                             Block::TableBlock(table) => {
                                 for row in &table.rows {
                                     for cell in &row.cells {
-                                        append_note_blocks_as_paragraphs(
-                                            &cell.blocks,
-                                            ctx,
-                                            out,
-                                        );
+                                        append_note_blocks_as_paragraphs(&cell.blocks, ctx, out);
                                     }
                                 }
                             }
@@ -290,10 +283,10 @@ pub(crate) fn apply_document_structure(
 
 #[cfg(test)]
 mod tests {
-    use crate::{write_docx_to_bytes, DocxWriterOptions};
+    use crate::{DocxWriterOptions, write_docx_to_bytes};
     use rtfkit_core::{
-        Block, Document, DocumentStructure, HeaderFooterSet, ImageBlock, ImageFormat, Inline,
-        Note, NoteKind, NoteRef, Paragraph, Run,
+        Block, Document, DocumentStructure, HeaderFooterSet, ImageBlock, ImageFormat, Inline, Note,
+        NoteKind, NoteRef, Paragraph, Run,
     };
 
     fn zip_entry_string(bytes: &[u8], entry_name: &str) -> String {

@@ -1,8 +1,8 @@
 //! Image block conversion from IR to docx-rs drawing elements.
 
+use crate::DocxError;
 use crate::allocators::ImageAllocator;
 use crate::utils::{DEFAULT_IMAGE_EMU, px_to_emu, scale_emu, twips_to_emu};
-use crate::DocxError;
 use docx_rs::{Paragraph as DocxParagraph, Pic, Run as DocxRun};
 use image::{GenericImageView, ImageFormat as RasterFormat};
 use rtfkit_core::ImageBlock;
