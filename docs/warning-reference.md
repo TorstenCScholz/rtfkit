@@ -39,17 +39,17 @@ Emitted when an RTF control word is recognized but not implemented.
 ```json
 {
   "type": "unsupported_control_word",
-  "word": "strike",
+  "word": "outl",
   "parameter": null,
   "severity": "warning"
 }
 ```
 
 **Common Examples**:
-- `\strike` - Strikethrough
-- `\scaps` - Small caps
-- `\caps` - All caps
 - `\outl` - Outline
+- `\embo` - Emboss
+- `\impr` - Imprint
+- other recognized-but-unmapped visual effect controls
 
 **Impact**: Text content is preserved; formatting is not applied.
 

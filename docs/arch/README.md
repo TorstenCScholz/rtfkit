@@ -1,6 +1,6 @@
 # rtfkit Architecture
 
-This document reflects the current implementation in `main` (v0.6, Phase 6).
+This document reflects the current implementation in `main` (Phase 6+).
 
 ## Overview
 
@@ -64,18 +64,20 @@ The Intermediate Representation (IR) is the core data model for RTF documents:
 ```
 Document
 └── blocks: Vec<Block>
-    ├── Paragraph { alignment, runs: Vec<Run> }
+    ├── Paragraph { alignment, inlines: Vec<Inline> }
     ├── ListBlock { list_id, kind, items: Vec<ListItem> }
-    └── TableBlock { rows: Vec<TableRow> }
+    ├── TableBlock { rows: Vec<TableRow> }
         └── TableRow { cells: Vec<TableCell>, row_props }
             └── TableCell { blocks, width_twips, merge, v_align }
+    └── ImageBlock { format, data, width_twips?, height_twips? }
 ```
 
 **Core Types:**
 - `Document { blocks: Vec<Block> }` - Root document container
-- `Block` - Block-level element (Paragraph, ListBlock, TableBlock)
-- `Paragraph { alignment, runs }` - Text paragraph
-- `Run { text, bold, italic, underline, font_size?, color? }` - Text run with formatting
+- `Block` - Block-level element (Paragraph, ListBlock, TableBlock, ImageBlock)
+- `Paragraph { alignment, inlines }` - Text paragraph
+- `Inline` - Run, hyperlink, bookmark anchor, note ref, and page-management inline markers
+- `Run { text, bold, italic, underline, strikethrough, small_caps, all_caps, font_size?, color? }` - Text run with formatting
 
 **List Types (Phase 3):**
 - `ListBlock { list_id, kind, items }` - List container
@@ -116,8 +118,9 @@ See [Phase 5 IR Design](phase5-ir-design.md) for merge semantics details.
 - `\trql`, `\trqc`, `\trqr`, `\trleft` - Row alignment and indent
 
 **Destination Handling:**
-- `fonttbl`, `colortbl` - Skipped (formatting not fully mapped)
+- `fonttbl`, `colortbl` - Parsed and mapped to run-level styling
 - `\listtable`, `\listoverridetable` - Parsed for list definitions
+- `\field` - Hyperlinks, page fields, and TOC markers parsed with deterministic fallbacks
 - Unknown `\*` destinations - Skipped with `DroppedContent` warning
 - Legacy `\pn...` controls - Dropped with warnings
 
@@ -197,7 +200,7 @@ Responsibilities:
 
 ### HTML Output Characteristics
 
-- **Semantic-first**: No font sizes, colors, or borders
+- **Semantic-first structure with deterministic styling**: supports font styles, colors, shading, and table border CSS mapping
 - **Deterministic**: Same IR always produces byte-identical HTML
 - **Well-formed**: Valid HTML5 with proper escaping
 - **Minimal CSS**: Optional default stylesheet for basic styling
@@ -340,12 +343,11 @@ Fixtures are organized by category:
 
 ## Known Gaps
 
-- Limited RTF feature coverage (no images as IR blocks)
-- No hyperlinks/fields as first-class output
-- DOCX output supports basic text formatting, lists, and tables
-- HTML output is semantic-first (no font sizes, colors, or borders)
+- Nested tables from RTF input are not yet parsed as nested structures
+- WMF/EMF image formats are not supported
+- DOCX small-caps semantics degrade to all-caps due to `docx-rs` API limits
 - PDF output uses embedded fonts (no custom font support)
-- Row alignment and indent not fully supported by docx-rs (cosmetic loss only)
+- Row-level layout variance may be normalized to table-level defaults
 - No full RTF spec compliance target
 
 ## References

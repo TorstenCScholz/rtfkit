@@ -1,6 +1,6 @@
 # RTF Feature Overview
 
-This document summarizes the current RTF feature support in `rtfkit` (Phase 6).
+This document summarizes the current RTF feature support in `rtfkit`.
 
 For a detailed feature support matrix, see [Feature Support Matrix](feature-support.md).
 
@@ -12,6 +12,9 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
   - bold (`\b`)
   - italic (`\i`)
   - underline (`\ul`)
+  - strikethrough (`\strike`)
+  - all caps (`\caps`)
+  - small caps (`\scaps`) with DOCX fallback to caps
 - **Font and color styling**:
   - font family (`\fN`, `\fonttbl`, `\deffN`)
   - font size (`\fsN`)
@@ -28,7 +31,12 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
 - **Unicode escape handling** (`\uN` with `\ucN`)
 - **Hyperlinks**:
   - external URLs (`http://`, `https://`, `mailto:`)
+  - internal links (`\l` switch)
   - formatted link text
+- **Field/page semantics**:
+  - page fields (`PAGE`, `NUMPAGES`, `SECTIONPAGES`, `PAGEREF`)
+  - generated TOC markers from TOC fields
+  - bookmark anchors (`\bkmkstart`)
 - **Lists**:
   - list references (`\lsN`)
   - nesting levels (`\ilvlN`, clamped to 0..8)
@@ -50,7 +58,7 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
 
 - **Row-level table properties** are parsed but only partially emitted:
   - parsed: `\trql`, `\trqc`, `\trqr`, `\trleft`
-  - currently not fully mapped by `docx-rs` writer
+  - represented as table-level defaults; conflicting row-level values may be normalized
 - **Shading patterns** are fully supported in DOCX and partially degraded in HTML/Typst:
   - percentage patterns (e.g., 25%, 50%, 75%) are approximated via deterministic blended fills in HTML/Typst
   - non-percent hatch/stripe/cross patterns remain degraded to flat fill
@@ -59,14 +67,16 @@ For a detailed feature support matrix, see [Feature Support Matrix](feature-supp
 - **WMF/EMF images** are dropped with `unsupported_image_format` warning
 - **Malformed image hex data** is dropped with `malformed_image_hex_payload` warning
 - **Warning-cap behavior** preserves strict-mode signal (`DroppedContent`)
+- **DOCX style profiles** are opt-in (`--style-profile`) and currently apply defaults rather than changing explicit run-level RTF formatting
+- **DOCX small caps** degrade to all caps due to `docx-rs` API limits
 
 ## Not yet supported
 
-- **Full RTF table styling parity** (complex borders/layout behavior)
 - **WMF/EMF image formats** - Vector image formats are dropped with warning; convert to PNG/JPEG before embedding
 - **Inline images** - Images are block-level only
 - **Image cropping** - `\cropl`, `\cropr`, `\cropt`, `\cropb` controls not supported
 - **Floating/anchored images** - Images are inline with text flow
+- **Nested tables from RTF input** - Not yet parsed as nested structures in the parser path
 
 ## Notes
 

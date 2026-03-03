@@ -25,7 +25,7 @@ rtfkit convert input.rtf --to pdf -o output.pdf
 
 ## Style Profiles
 
-PDF output uses **style profiles** to control typography, spacing, and layout. Style profiles ensure consistent visual identity between HTML and PDF outputs from the same source document.
+PDF output uses **style profiles** to control typography, spacing, and layout. Style profiles ensure consistent visual identity across HTML, DOCX, and PDF outputs from the same source document.
 
 ### Built-in Profiles
 
@@ -70,11 +70,12 @@ The `report` profile provides particularly noticeable improvements for PDF outpu
 
 ### Cross-Format Consistency
 
-Using the same style profile for both HTML and PDF ensures visual consistency:
+Using the same style profile across formats ensures visual consistency:
 
 ```bash
 # Generate both outputs with the same profile
 rtfkit convert document.rtf --to html --style-profile report --output document.html
+rtfkit convert document.rtf --to docx --style-profile report --output document.docx
 rtfkit convert document.rtf --to pdf --style-profile report --output document.pdf
 ```
 
@@ -150,7 +151,7 @@ rtfkit convert document.rtf --to pdf --emit-ir document.json -o document.pdf
 | Vertical cell merges | ✅ Supported |
 | Unicode text | ✅ Supported |
 | Page size options | ✅ Supported |
-| Images | ⚠️ Partial | Data URIs embedded; Typst rendering support varies |
+| Images | ✅ Supported | PNG/JPEG images mapped via deterministic in-memory assets |
 | Hyperlinks | ✅ Supported | Typst `#link()` syntax; external URLs and internal bookmarks |
 | Custom fonts | ❌ Not Supported (uses embedded fonts) |
 
@@ -166,7 +167,6 @@ For details on determinism guarantees and how to ensure reproducible output, see
 
 ## Limitations
 
-- **Image rendering via data URIs** - Partial support; embedded as data URIs but Typst rendering support may vary across versions
 - **Embedded fonts only** - Uses Typst's embedded fonts; custom fonts not supported
 - **Advanced typography** - Kerning and ligatures use Typst defaults
 

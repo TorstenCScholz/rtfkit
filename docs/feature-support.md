@@ -1,6 +1,6 @@
 # Feature Support Matrix
 
-This document provides a comprehensive overview of RTF feature support in rtfkit (Phase 6).
+This document provides a comprehensive overview of current RTF feature support in rtfkit.
 
 ## Support Levels
 
@@ -38,9 +38,9 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | Paragraph shading (`\cbpatN`) | ✅ Supported | Block-level background for paragraphs; mapped to DOCX `<w:shd>`, HTML `background-color`; `\pard` resets, `\plain` does not |
 | Paragraph shading pattern (`\shadingN`, `\cfpatN`) | ⚠️ Partial | Percentage patterns (0-10000) mapped to `ShadingPattern`; DOCX full support, HTML/Typst use deterministic blended approximation; non-percent patterns still degrade to flat fill |
 | Formatting reset (`\plain`) | ✅ Supported | Resets character formatting to defaults (including background/highlight) |
-| Strikethrough (`\strike`) | ❌ Not Supported | Warning emitted |
-| Small caps (`\scaps`) | ❌ Not Supported | Warning emitted |
-| All caps (`\caps`) | ❌ Not Supported | Warning emitted |
+| Strikethrough (`\strike`) | ✅ Supported | Mapped to DOCX `<w:strike>`, HTML `<span class="rtf-s">`, Typst `#strike[...]` |
+| Small caps (`\scaps`) | ⚠️ Partial | HTML and Typst map small caps directly; DOCX degrades to `<w:caps>` (all caps) because `docx-rs` has no `w:smallCaps` setter |
+| All caps (`\caps`) | ✅ Supported | Mapped to DOCX `<w:caps>`, HTML `<span class="rtf-ac">`, Typst `#upper[...]` |
 
 ### Lists
 
@@ -66,8 +66,8 @@ This document provides a comprehensive overview of RTF feature support in rtfkit
 | Horizontal merge (`\clmgf`, `\clmrg`) | ✅ Supported | Mapped to DOCX `gridSpan` |
 | Vertical merge (`\clvmgf`, `\clvmrg`) | ✅ Supported | Mapped to DOCX `vMerge` |
 | Cell vertical alignment (`\clvertalt`, etc.) | ✅ Supported | Mapped to DOCX `vAlign` |
-| Row alignment (`\trql`, `\trqc`, `\trqr`) | ⚠️ Partial | Parsed but not fully emitted by docx-rs |
-| Row indent (`\trleft`) | ⚠️ Partial | Parsed but not fully emitted by docx-rs |
+| Row alignment (`\trql`, `\trqc`, `\trqr`) | ⚠️ Partial | Parsed and emitted as table-level layout defaults; per-row variance may be normalized |
+| Row indent (`\trleft`) | ⚠️ Partial | Parsed and emitted as table-level indent defaults; per-row variance may be normalized |
 | Cell shading (`\clcbpatN`) | ✅ Supported | Cell background color; precedence: cell > row > table |
 | Cell shading pattern (`\clshdngN`, `\clcfpatN`) | ⚠️ Partial | Percentage patterns use deterministic blended approximation in HTML/Typst; DOCX full support; non-percent patterns still degrade to flat fill |
 | Row shading (`\trcbpatN`) | ✅ Supported | Default shading for cells without explicit shading |
@@ -105,7 +105,7 @@ rtfkit supports embedded PNG and JPEG images from RTF `\pict` groups.
 
 - **DOCX**: Images embedded as media files with DrawingML references
 - **HTML**: Images as data URIs in `<figure class="rtf-image">` elements
-- **PDF/Typst**: Images as data URIs (note: Typst may not support data URIs)
+- **PDF/Typst**: Images mapped to deterministic in-memory assets
 
 #### Limitations
 
@@ -131,7 +131,7 @@ rtfkit supports embedded PNG and JPEG images from RTF `\pict` groups.
 | Endnote (`\endnote`) | ✅ Supported | Emitted as `NoteRef` inline + note body; DOCX, HTML, Typst |
 | Picture (`\pict`) | ⚠️ Partial | PNG/JPEG supported; WMF/EMF dropped |
 | Object (`\obj`) | 🔸 Degraded | Dropped with `DroppedContent` |
-| Field (`\field`) | ⚠️ Partial | HYPERLINK (external + internal via `\l` switch) and `\bkmkstart` anchors supported; other fields preserve result text with `UnsupportedField` warning |
+| Field (`\field`) | ⚠️ Partial | HYPERLINK (external + internal via `\l` switch), page fields (`PAGE`, `NUMPAGES`, `SECTIONPAGES`, `PAGEREF`), TOC markers, and `\bkmkstart` anchors supported; unsupported fields preserve result text with warnings |
 | Unknown destinations (`\*\foo`) | 🔸 Degraded | Dropped with `DroppedContent` |
 
 ## Output Formats
@@ -153,7 +153,7 @@ Style profiles provide consistent visual styling across output formats:
 |--------|----------------|-------|
 | HTML | ✅ Supported | CSS variables generated from profile |
 | PDF | ✅ Supported | Typst preamble generated from profile |
-| DOCX | ❌ Not Supported | Future support planned |
+| DOCX | ✅ Supported | `--style-profile` is supported for DOCX output (opt-in) |
 
 Built-in profiles: `classic`, `report` (default), `compact`
 
@@ -180,7 +180,7 @@ HTML output is selected with `--to html` and produces semantic HTML5:
 | Font size | ✅ Supported | Inline `font-size` style (pt) |
 | Colors | ✅ Supported | Inline `color` style (hex) |
 | Background color | ✅ Supported | Inline `background-color` style (hex) |
-| Borders | ❌ Not Supported | Semantic-first design |
+| Borders | ✅ Supported | Table/cell border CSS emitted from IR border model |
 | Images | ✅ Supported | `<figure class="rtf-image">` with data URI |
 | Style Profiles | ✅ Supported | `--style-profile` flag (classic, report, compact) |
 
@@ -209,7 +209,7 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 | Font size | ✅ Supported | Typst `#text(size: ...)` wrapper |
 | Text color | ✅ Supported | Typst `#text(fill: ...)` wrapper |
 | Background color | ✅ Supported | Typst `#highlight(fill: ...)` wrapper |
-| Images | ⚠️ Partial | Data URIs (Typst support may vary) |
+| Images | ✅ Supported | PNG/JPEG mapped via deterministic in-memory assets; malformed payloads are dropped with warnings |
 | Custom fonts | ❌ Not Supported | Uses embedded fonts |
 | Style Profiles | ✅ Supported | `--style-profile` flag (classic, report, compact) |
 
@@ -240,18 +240,18 @@ PDF output is selected with `--to pdf` and produces PDF via the embedded Typst r
 
 ## Known Limitations
 
-1. **Limited image support** - Only PNG and JPEG formats supported; WMF/EMF dropped; images are block-level only
-2. **Row alignment cosmetic loss** - Row alignment is parsed but not fully emitted by docx-rs
-3. **List nesting limit** - Maximum 8 levels due to DOCX compatibility
-4. **No nested tables** - Tables inside cells are not supported
-5. **PDF uses embedded fonts** - Custom fonts not supported; uses Typst's embedded fonts
-6. **Strikethrough, small caps, all caps** - `\strike`, `\scaps`, `\caps` are not yet mapped to output; text is preserved with `unsupported_control_word` warning
+1. **Limited image format support** - PNG and JPEG are supported; WMF/EMF are dropped
+2. **List nesting limit** - Maximum 8 levels due to DOCX compatibility
+3. **No nested tables in RTF parser path** - Tables inside cells are not yet parsed from RTF input
+4. **PDF uses embedded fonts** - Custom fonts are not supported
+5. **DOCX small caps degradation** - `\scaps` degrades to all caps in DOCX output due to `docx-rs` API limitations
+6. **Row layout variance normalization** - Row alignment/indent controls are represented with table-level defaults when rows disagree
 
 ## Version History
 
 | Version | Changes |
 |---------|---------|
-| 0.16.0 | Added strikethrough (`\strike`), small caps (`\scaps`), and all caps (`\caps`) recognition with `unsupported_control_word` warnings; added page management fields and section numbering |
+| 0.16.0 | Added strikethrough (`\strike`), small caps (`\scaps`), and all caps (`\caps`) mapping across outputs (DOCX small-caps fallback); added page-management fields and section numbering |
 | 0.15.0 | Added table borders (cell, row, and table-level; solid/double/dotted/dashed/none styles) for DOCX, HTML, Typst |
 | 0.14.0 | Added document structure: headers, footers (default/first/even channels), footnotes, endnotes for DOCX, HTML, Typst |
 | 0.13.0 | Added bookmark anchors (`\bkmkstart`) and internal hyperlinks (`\l` switch) for DOCX, HTML, Typst; added `UnsupportedField` warning for unrecognized field types |
