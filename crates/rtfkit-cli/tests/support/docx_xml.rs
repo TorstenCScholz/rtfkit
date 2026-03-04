@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(clippy::collapsible_if)]
 
 use std::fs::File;
 use std::io::Read;
@@ -10,6 +10,7 @@ use zip::ZipArchive;
 
 /// Extract word/document.xml from a DOCX file.
 /// Returns the XML content as a string.
+#[allow(dead_code)]
 pub fn extract_document_xml(docx_path: &Path) -> String {
     let file = File::open(docx_path).expect("Failed to open DOCX file");
     let mut archive = ZipArchive::new(file).expect("Failed to read DOCX as ZIP");
@@ -40,24 +41,9 @@ pub fn extract_xml_from_docx(docx_path: &Path, xml_path: &str) -> String {
     xml_content
 }
 
-/// Extract an XML file from a DOCX archive (determinism variant).
-/// Returns the XML content as a string.
-pub fn extract_docx_xml(docx_path: &Path, xml_name: &str) -> String {
-    let file = File::open(docx_path).expect("Failed to open DOCX file");
-    let mut archive = ZipArchive::new(file).expect("Failed to read DOCX as ZIP");
-
-    let mut xml_content = String::new();
-    archive
-        .by_name(xml_name)
-        .unwrap_or_else(|_| panic!("{xml_name} not found in DOCX"))
-        .read_to_string(&mut xml_content)
-        .expect("Failed to read XML content");
-
-    xml_content
-}
-
 /// Extract word/numbering.xml from a DOCX file.
 /// Returns None if the file doesn't exist.
+#[allow(dead_code)]
 pub fn extract_numbering_xml(docx_path: &Path) -> Option<String> {
     let file = File::open(docx_path).expect("Failed to open DOCX file");
     let mut archive = ZipArchive::new(file).expect("Failed to read DOCX as ZIP");
@@ -74,6 +60,7 @@ pub fn extract_numbering_xml(docx_path: &Path) -> Option<String> {
 }
 
 /// Extract word/_rels/document.xml.rels from a DOCX file.
+#[allow(dead_code)]
 pub fn extract_rels_xml(docx_path: &Path) -> Option<String> {
     let file = File::open(docx_path).expect("Failed to open DOCX file");
     let mut archive = ZipArchive::new(file).expect("Failed to read DOCX as ZIP");
@@ -90,6 +77,7 @@ pub fn extract_rels_xml(docx_path: &Path) -> Option<String> {
 }
 
 /// Check if a file exists inside a DOCX archive.
+#[allow(dead_code)]
 pub fn file_exists_in_docx(docx_path: &Path, file_path: &str) -> bool {
     let file = File::open(docx_path).expect("Failed to open DOCX file");
     let mut archive = ZipArchive::new(file).expect("Failed to read DOCX as ZIP");
@@ -97,6 +85,7 @@ pub fn file_exists_in_docx(docx_path: &Path, file_path: &str) -> bool {
 }
 
 /// Get the list of files in a DOCX archive directory.
+#[allow(dead_code)]
 pub fn list_docx_files(docx_path: &Path, prefix: &str) -> Vec<String> {
     let file = File::open(docx_path).expect("Failed to open DOCX file");
     let archive = ZipArchive::new(file).expect("Failed to read DOCX as ZIP");
@@ -109,6 +98,7 @@ pub fn list_docx_files(docx_path: &Path, prefix: &str) -> Vec<String> {
 }
 
 /// Count occurrences of a specific XML element in the document.
+#[allow(dead_code)]
 pub fn count_elements(xml: &str, element_name: &str) -> usize {
     let mut reader = Reader::from_str(xml);
     let mut count = 0;
@@ -130,6 +120,7 @@ pub fn count_elements(xml: &str, element_name: &str) -> usize {
 }
 
 /// Check if the XML contains a specific text string within a <w:t> element.
+#[allow(dead_code)]
 pub fn contains_text(xml: &str, text: &str) -> bool {
     let mut reader = Reader::from_str(xml);
     let mut in_text_element = false;
@@ -172,6 +163,7 @@ pub fn contains_text(xml: &str, text: &str) -> bool {
 }
 
 /// Get all text content from <w:t> elements.
+#[allow(dead_code)]
 pub fn get_all_text_content(xml: &str) -> Vec<String> {
     let mut reader = Reader::from_str(xml);
     let mut in_text_element = false;
@@ -208,6 +200,7 @@ pub fn get_all_text_content(xml: &str) -> Vec<String> {
 }
 
 /// Check if a formatting element (like <w:b>, <w:i>, <w:u>) exists in the document.
+#[allow(dead_code)]
 pub fn has_formatting_element(xml: &str, element_name: &str) -> bool {
     let mut reader = Reader::from_str(xml);
 
@@ -228,6 +221,7 @@ pub fn has_formatting_element(xml: &str, element_name: &str) -> bool {
 }
 
 /// Check if a <w:jc w:val="..."> element exists with the specified alignment value.
+#[allow(dead_code)]
 pub fn has_alignment(xml: &str, alignment_value: &str) -> bool {
     let mut reader = Reader::from_str(xml);
     let mut buf = Vec::new();
@@ -258,6 +252,7 @@ pub fn has_alignment(xml: &str, alignment_value: &str) -> bool {
 }
 
 /// Check if a run (<w:r>) with specific formatting exists containing the given text.
+#[allow(dead_code)]
 pub fn has_run_with_formatting_and_text(xml: &str, formatting_element: &str, text: &str) -> bool {
     let mut reader = Reader::from_str(xml);
     let mut in_run = false;
@@ -323,16 +318,19 @@ pub fn has_run_with_formatting_and_text(xml: &str, formatting_element: &str, tex
 }
 
 /// Check if a <w:numPr> element exists in the document (indicates list paragraph).
+#[allow(dead_code)]
 pub fn has_num_pr(xml: &str) -> bool {
     has_formatting_element(xml, "w:numPr")
 }
 
 /// Count the number of <w:numPr> elements in the document.
+#[allow(dead_code)]
 pub fn count_num_pr(xml: &str) -> usize {
     count_elements(xml, "w:numPr")
 }
 
 /// Check if a <w:ilvl> element exists with the specified level value.
+#[allow(dead_code)]
 pub fn has_ilvl_with_value(xml: &str, level: u8) -> bool {
     let mut reader = Reader::from_str(xml);
     let mut buf = Vec::new();
@@ -365,16 +363,19 @@ pub fn has_ilvl_with_value(xml: &str, level: u8) -> bool {
 }
 
 /// Check if numbering.xml contains an <w:abstractNum> element.
+#[allow(dead_code)]
 pub fn has_abstract_num(numbering_xml: &str) -> bool {
     has_formatting_element(numbering_xml, "w:abstractNum")
 }
 
 /// Check if numbering.xml contains a <w:num> element.
+#[allow(dead_code)]
 pub fn has_num(numbering_xml: &str) -> bool {
     has_formatting_element(numbering_xml, "w:num")
 }
 
 /// Extract numId values from document.xml to verify stability.
+#[allow(dead_code)]
 pub fn extract_num_ids(xml: &str) -> Vec<String> {
     let mut reader = Reader::from_str(xml);
     let mut buf = Vec::new();
@@ -404,6 +405,7 @@ pub fn extract_num_ids(xml: &str) -> Vec<String> {
 }
 
 /// Extract abstractNumId values from numbering.xml to verify stability.
+#[allow(dead_code)]
 pub fn extract_abstract_num_ids(numbering_xml: &str) -> Vec<String> {
     let mut reader = Reader::from_str(numbering_xml);
     let mut buf = Vec::new();
@@ -433,6 +435,7 @@ pub fn extract_abstract_num_ids(numbering_xml: &str) -> Vec<String> {
 }
 
 /// Check if a <w:gridSpan> element exists with the specified span value.
+#[allow(dead_code)]
 pub fn has_grid_span_with_value(xml: &str, span: u16) -> bool {
     let mut reader = Reader::from_str(xml);
     let mut buf = Vec::new();
@@ -465,6 +468,7 @@ pub fn has_grid_span_with_value(xml: &str, span: u16) -> bool {
 }
 
 /// Check if a <w:vMerge> element exists in the document.
+#[allow(dead_code)]
 pub fn has_vmerge_element(xml: &str) -> bool {
     has_formatting_element(xml, "w:vMerge")
 }

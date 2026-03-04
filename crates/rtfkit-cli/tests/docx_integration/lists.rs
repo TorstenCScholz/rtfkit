@@ -1,6 +1,6 @@
 #![allow(clippy::collapsible_if)]
 
-use crate::support::cli::{run_cli_convert, run_cli_convert_determinism};
+use crate::support::cli::{run_cli_convert, run_cli_to_docx};
 use crate::support::docx_xml::{
     contains_text, count_elements, count_num_pr, extract_abstract_num_ids, extract_document_xml,
     extract_num_ids, extract_numbering_xml, extract_xml_from_docx, has_abstract_num,
@@ -241,8 +241,8 @@ fn test_list_determinism_nested_two_levels() {
     let fixture = "list_nested_two_levels.rtf";
 
     // Convert the same fixture twice
-    let output1 = run_cli_convert_determinism(fixture, &temp_dir, "1");
-    let output2 = run_cli_convert_determinism(fixture, &temp_dir, "2");
+    let output1 = run_cli_to_docx(fixture, &temp_dir, "1");
+    let output2 = run_cli_to_docx(fixture, &temp_dir, "2");
 
     // Extract and compare document.xml
     let doc1 = extract_xml_from_docx(&output1, "word/document.xml");
@@ -283,8 +283,8 @@ fn test_list_determinism_mixed_kinds() {
     let fixture = "list_mixed_kinds.rtf";
 
     // Convert the same fixture twice
-    let output1 = run_cli_convert_determinism(fixture, &temp_dir, "1");
-    let output2 = run_cli_convert_determinism(fixture, &temp_dir, "2");
+    let output1 = run_cli_to_docx(fixture, &temp_dir, "1");
+    let output2 = run_cli_to_docx(fixture, &temp_dir, "2");
 
     // Extract and compare document.xml
     let doc1 = extract_xml_from_docx(&output1, "word/document.xml");
@@ -325,8 +325,8 @@ fn test_list_determinism_bullet_simple() {
     let fixture = "list_bullet_simple.rtf";
 
     // Convert the same fixture twice
-    let output1 = run_cli_convert_determinism(fixture, &temp_dir, "1");
-    let output2 = run_cli_convert_determinism(fixture, &temp_dir, "2");
+    let output1 = run_cli_to_docx(fixture, &temp_dir, "1");
+    let output2 = run_cli_to_docx(fixture, &temp_dir, "2");
 
     // Extract and compare document.xml
     let doc1 = extract_xml_from_docx(&output1, "word/document.xml");
@@ -351,8 +351,8 @@ fn test_list_determinism_decimal_simple() {
     let fixture = "list_decimal_simple.rtf";
 
     // Convert the same fixture twice
-    let output1 = run_cli_convert_determinism(fixture, &temp_dir, "1");
-    let output2 = run_cli_convert_determinism(fixture, &temp_dir, "2");
+    let output1 = run_cli_to_docx(fixture, &temp_dir, "1");
+    let output2 = run_cli_to_docx(fixture, &temp_dir, "2");
 
     // Extract and compare document.xml
     let doc1 = extract_xml_from_docx(&output1, "word/document.xml");

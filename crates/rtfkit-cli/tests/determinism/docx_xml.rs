@@ -1,5 +1,5 @@
 use crate::support::cli::run_cli_to_docx;
-use crate::support::docx_xml::extract_docx_xml;
+use crate::support::docx_xml::extract_xml_from_docx;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -18,7 +18,7 @@ fn docx_document_xml_simple_text_is_deterministic() {
     // Extract document.xml from each
     let doc_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/document.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/document.xml"))
         .collect();
 
     // Verify all are identical
@@ -44,7 +44,7 @@ fn docx_document_xml_nested_lists_is_deterministic() {
 
     let doc_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/document.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/document.xml"))
         .collect();
 
     let first = &doc_xmls[0];
@@ -69,7 +69,7 @@ fn docx_numbering_xml_nested_lists_is_deterministic() {
 
     let num_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/numbering.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/numbering.xml"))
         .collect();
 
     let first = &num_xmls[0];
@@ -94,7 +94,7 @@ fn docx_document_xml_horizontal_merge_is_deterministic() {
 
     let doc_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/document.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/document.xml"))
         .collect();
 
     let first = &doc_xmls[0];
@@ -119,7 +119,7 @@ fn docx_document_xml_vertical_merge_is_deterministic() {
 
     let doc_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/document.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/document.xml"))
         .collect();
 
     let first = &doc_xmls[0];
@@ -144,7 +144,7 @@ fn docx_document_xml_degraded_content_is_deterministic() {
 
     let doc_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/document.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/document.xml"))
         .collect();
 
     let first = &doc_xmls[0];
@@ -169,7 +169,7 @@ fn docx_document_xml_mixed_complex_is_deterministic() {
 
     let doc_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/document.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/document.xml"))
         .collect();
 
     let first = &doc_xmls[0];
@@ -194,7 +194,7 @@ fn docx_document_xml_mixed_list_kinds_is_deterministic() {
 
     let doc_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/document.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/document.xml"))
         .collect();
 
     let first = &doc_xmls[0];
@@ -219,7 +219,7 @@ fn docx_numbering_xml_mixed_list_kinds_is_deterministic() {
 
     let num_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/numbering.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/numbering.xml"))
         .collect();
 
     let first = &num_xmls[0];
@@ -244,7 +244,7 @@ fn docx_document_xml_table_with_list_in_cell_is_deterministic() {
 
     let doc_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/document.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/document.xml"))
         .collect();
 
     let first = &doc_xmls[0];
@@ -269,7 +269,7 @@ fn docx_document_xml_bullet_list_is_deterministic() {
 
     let doc_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/document.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/document.xml"))
         .collect();
 
     let first = &doc_xmls[0];
@@ -294,7 +294,7 @@ fn docx_document_xml_decimal_list_is_deterministic() {
 
     let doc_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/document.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/document.xml"))
         .collect();
 
     let first = &doc_xmls[0];
@@ -319,7 +319,7 @@ fn docx_document_xml_simple_table_is_deterministic() {
 
     let doc_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/document.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/document.xml"))
         .collect();
 
     let first = &doc_xmls[0];
@@ -344,7 +344,7 @@ fn docx_document_xml_conflicting_merge_is_deterministic() {
 
     let doc_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/document.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/document.xml"))
         .collect();
 
     let first = &doc_xmls[0];
@@ -369,7 +369,7 @@ fn docx_document_xml_stress_table_is_deterministic() {
 
     let doc_xmls: Vec<String> = docx_paths
         .iter()
-        .map(|path| extract_docx_xml(path, "word/document.xml"))
+        .map(|path| extract_xml_from_docx(path, "word/document.xml"))
         .collect();
 
     let first = &doc_xmls[0];

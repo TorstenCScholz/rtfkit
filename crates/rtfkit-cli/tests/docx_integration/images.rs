@@ -1,6 +1,6 @@
 #![allow(clippy::collapsible_if)]
 
-use crate::support::cli::{run_cli_convert, run_cli_convert_determinism};
+use crate::support::cli::{run_cli_convert, run_cli_to_docx};
 use crate::support::docx_xml::{
     extract_document_xml, extract_rels_xml, extract_xml_from_docx, file_exists_in_docx,
     list_docx_files,
@@ -159,8 +159,8 @@ fn test_docx_image_determinism_png() {
     let fixture = "image_png_simple.rtf";
 
     // Convert the same fixture twice
-    let output1 = run_cli_convert_determinism(fixture, &temp_dir, "1");
-    let output2 = run_cli_convert_determinism(fixture, &temp_dir, "2");
+    let output1 = run_cli_to_docx(fixture, &temp_dir, "1");
+    let output2 = run_cli_to_docx(fixture, &temp_dir, "2");
 
     // Extract and compare document.xml
     let doc1 = extract_xml_from_docx(&output1, "word/document.xml");
@@ -185,8 +185,8 @@ fn test_docx_image_determinism_multiple() {
     let fixture = "image_multiple.rtf";
 
     // Convert the same fixture twice
-    let output1 = run_cli_convert_determinism(fixture, &temp_dir, "1");
-    let output2 = run_cli_convert_determinism(fixture, &temp_dir, "2");
+    let output1 = run_cli_to_docx(fixture, &temp_dir, "1");
+    let output2 = run_cli_to_docx(fixture, &temp_dir, "2");
 
     // Extract and compare document.xml
     let doc1 = extract_xml_from_docx(&output1, "word/document.xml");

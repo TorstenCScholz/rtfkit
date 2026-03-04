@@ -1,6 +1,6 @@
 #![allow(clippy::collapsible_if)]
 
-use crate::support::cli::{run_cli_convert, run_cli_convert_determinism};
+use crate::support::cli::{run_cli_convert, run_cli_to_docx};
 use crate::support::docx_xml::{
     contains_text, count_elements, extract_document_xml, extract_xml_from_docx,
     has_grid_span_with_value, has_vmerge_element,
@@ -475,8 +475,8 @@ fn test_table_determinism_horizontal_merge() {
     let fixture = "table_horizontal_merge_valid.rtf";
 
     // Convert the same fixture twice
-    let output1 = run_cli_convert_determinism(fixture, &temp_dir, "1");
-    let output2 = run_cli_convert_determinism(fixture, &temp_dir, "2");
+    let output1 = run_cli_to_docx(fixture, &temp_dir, "1");
+    let output2 = run_cli_to_docx(fixture, &temp_dir, "2");
 
     // Extract and compare document.xml
     let doc1 = extract_xml_from_docx(&output1, "word/document.xml");
@@ -493,8 +493,8 @@ fn test_table_determinism_vertical_merge() {
     let fixture = "table_vertical_merge_valid.rtf";
 
     // Convert the same fixture twice
-    let output1 = run_cli_convert_determinism(fixture, &temp_dir, "1");
-    let output2 = run_cli_convert_determinism(fixture, &temp_dir, "2");
+    let output1 = run_cli_to_docx(fixture, &temp_dir, "1");
+    let output2 = run_cli_to_docx(fixture, &temp_dir, "2");
 
     // Extract and compare document.xml
     let doc1 = extract_xml_from_docx(&output1, "word/document.xml");

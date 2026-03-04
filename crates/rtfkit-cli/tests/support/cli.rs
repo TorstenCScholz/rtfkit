@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::path::PathBuf;
 
 use tempfile::TempDir;
@@ -8,43 +6,10 @@ use super::fs::fixture_dir;
 
 /// Run the CLI to convert an RTF file to DOCX.
 /// Returns the path to the generated DOCX file.
+#[allow(dead_code)]
 pub fn run_cli_convert(fixture_name: &str, temp_dir: &TempDir) -> PathBuf {
     let input = fixture_dir().join(fixture_name);
     let output = temp_dir.path().join("output.docx");
-
-    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
-    cmd.args([
-        "convert",
-        input.to_str().unwrap(),
-        "-o",
-        output.to_str().unwrap(),
-        "--force",
-    ]);
-
-    let output_result = cmd.output().expect("Failed to run CLI");
-
-    if !output_result.status.success() {
-        panic!(
-            "CLI failed for fixture '{}':\nstdout: {}\nstderr: {}",
-            fixture_name,
-            String::from_utf8_lossy(&output_result.stdout),
-            String::from_utf8_lossy(&output_result.stderr)
-        );
-    }
-
-    assert!(output.exists(), "Output DOCX file should be created");
-    output
-}
-
-/// Run the CLI to convert an RTF file to DOCX with a suffix for determinism tests.
-/// Returns the path to the generated DOCX file.
-pub fn run_cli_convert_determinism(
-    fixture_name: &str,
-    temp_dir: &TempDir,
-    suffix: &str,
-) -> PathBuf {
-    let input = fixture_dir().join(fixture_name);
-    let output = temp_dir.path().join(format!("output_{suffix}.docx"));
 
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
     cmd.args([
@@ -102,6 +67,7 @@ pub fn run_cli_to_docx(fixture_name: &str, temp_dir: &TempDir, suffix: &str) -> 
 
 /// Run the CLI to emit IR JSON to a file.
 /// Returns the path to the generated IR JSON file.
+#[allow(dead_code)]
 pub fn run_cli_to_ir(fixture_name: &str, temp_dir: &TempDir, suffix: &str) -> PathBuf {
     let input = fixture_dir().join(fixture_name);
     let output = temp_dir.path().join(format!("ir_{suffix}.json"));
@@ -131,6 +97,7 @@ pub fn run_cli_to_ir(fixture_name: &str, temp_dir: &TempDir, suffix: &str) -> Pa
 
 /// Run the CLI to convert an RTF file to DOCX with a style profile.
 /// Returns the path to the generated DOCX file.
+#[allow(dead_code)]
 pub fn run_cli_convert_with_profile(
     fixture_name: &str,
     temp_dir: &TempDir,
@@ -170,6 +137,7 @@ pub fn run_cli_convert_with_profile(
 
 /// Run rtfkit multiple times with the given arguments and collect outputs.
 /// Returns a vector of stdout bytes (one per run).
+#[allow(dead_code)]
 pub fn run_rtfkit_multiple_times(args: &[&str], runs: usize) -> Vec<Vec<u8>> {
     let mut outputs = Vec::with_capacity(runs);
 
@@ -196,6 +164,7 @@ pub fn run_rtfkit_multiple_times(args: &[&str], runs: usize) -> Vec<Vec<u8>> {
 
 /// Verify that all outputs are byte-identical.
 /// Returns true if all outputs match the first one.
+#[allow(dead_code)]
 pub fn verify_identical_outputs(outputs: &[Vec<u8>]) -> bool {
     if outputs.is_empty() {
         return true;
