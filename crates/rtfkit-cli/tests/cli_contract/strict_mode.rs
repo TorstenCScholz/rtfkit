@@ -275,6 +275,40 @@ fn non_monotonic_cellx_non_strict_succeeds() {
 }
 
 #[test]
+fn strict_mode_allows_mergefield_when_result_text_preserved() {
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/field_mergefield_preserve_result.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert().success().code(0);
+}
+
+#[test]
+fn strict_mode_allows_ref_when_fallback_text_preserved() {
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/field_ref_unresolved_target.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--strict",
+        "--format",
+        "json",
+    ]);
+    cmd.assert().success().code(0);
+}
+
+#[test]
 fn prose_interleave_strict_succeeds() {
     // Prose/table interleave should succeed in strict mode
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));

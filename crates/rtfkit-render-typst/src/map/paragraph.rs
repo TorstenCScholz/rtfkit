@@ -35,9 +35,9 @@ use std::collections::{BTreeMap, HashSet};
 
 use rtfkit_core::{
     Alignment, BookmarkAnchor, Color, GeneratedBlockKind, Hyperlink, HyperlinkTarget, Inline,
-    NoteKind, NoteRef, PageFieldRef, PageNumberFormat, Paragraph, Run, Shading, ShadingPattern,
-    ShadingRenderPolicy, TocOptions, extract_heading_plain_text, infer_heading_level,
-    percent_pattern_density, resolve_shading_fill_color,
+    NoteKind, NoteRef, PageFieldRef, PageNumberFormat, Paragraph, Run, SemanticFieldRef, Shading,
+    ShadingPattern, ShadingRenderPolicy, TocOptions, extract_heading_plain_text,
+    infer_heading_level, percent_pattern_density, resolve_shading_fill_color,
 };
 
 use super::MappingWarning;
@@ -235,6 +235,13 @@ fn map_inlines(
                 }
                 result.push_str(&map_page_field_ref(page_field, warnings, context));
             }
+            Inline::SemanticField(field) => {
+                if !pending_runs.is_empty() {
+                    result.push_str(&map_runs(&pending_runs, warnings));
+                    pending_runs.clear();
+                }
+                result.push_str(&map_semantic_field_ref(field, warnings, context));
+            }
             Inline::GeneratedBlockMarker(kind) => {
                 if !pending_runs.is_empty() {
                     result.push_str(&map_runs(&pending_runs, warnings));
@@ -394,6 +401,56 @@ fn map_page_field_ref(
                 target: target.clone(),
             });
             fallback_text.clone().unwrap_or_else(|| "??".to_string())
+        }
+    }
+}
+
+fn map_semantic_field_ref(
+    field: &SemanticFieldRef,
+    warnings: &mut Vec<MappingWarning>,
+    context: &ParagraphMapContext<'_>,
+) -> String {
+    match field {
+        SemanticFieldRef::Ref {
+            target,
+            fallback_text,
+        }
+        | SemanticFieldRef::NoteRef {
+            target,
+            fallback_text,
+        } => {
+            let label = sanitize_typst_label(target);
+            let display = fallback_text.as_deref().unwrap_or(target.as_str());
+            if let Some(known) = context.known_bookmarks
+                && known.contains(&label)
+            {
+                return format!("#link(<{label}>)[{}]", escape_typst_text(display));
+            }
+            warnings.push(MappingWarning::PartialSupport {
+                feature: "unresolved_cross_reference".into(),
+                reason: format!("Cross-reference target '{target}' not found; using fallback text"),
+            });
+            escape_typst_text(display)
+        }
+        SemanticFieldRef::Sequence {
+            identifier,
+            fallback_text,
+        } => escape_typst_text(fallback_text.as_deref().unwrap_or(identifier.as_str())),
+        SemanticFieldRef::DocProperty {
+            name,
+            fallback_text,
+        } => escape_typst_text(fallback_text.as_deref().unwrap_or(name.as_str())),
+        SemanticFieldRef::MergeField {
+            name,
+            fallback_text,
+        } => {
+            warnings.push(MappingWarning::PartialSupport {
+                feature: "mergefield".into(),
+                reason:
+                    "Mail-merge dynamic evaluation is not available; rendering deterministic fallback"
+                        .into(),
+            });
+            escape_typst_text(fallback_text.as_deref().unwrap_or(name.as_str()))
         }
     }
 }

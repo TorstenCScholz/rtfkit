@@ -152,3 +152,44 @@ fn list_fallback_generates_warnings() {
     // Should succeed with warnings
     cmd.assert().success().stdout(contains("warnings"));
 }
+
+#[test]
+fn mergefield_preserve_result_emits_unsupported_field_warning() {
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/field_mergefield_preserve_result.rtf");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args(["convert", fixture.to_str().unwrap(), "--format", "json"]);
+    cmd.assert()
+        .success()
+        .stdout(contains("unsupported_field"))
+        .stdout(contains("MERGEFIELD"));
+}
+
+#[test]
+fn ref_field_is_parsed_as_semantic_field_in_ir() {
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let fixture = project_root.join("fixtures/field_ref_simple.rtf");
+    let out_dir = tempfile::tempdir().unwrap();
+    let ir_path = out_dir.path().join("out.json");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("rtfkit");
+    cmd.args([
+        "convert",
+        fixture.to_str().unwrap(),
+        "--emit-ir",
+        ir_path.to_str().unwrap(),
+        "--format",
+        "json",
+    ]);
+    cmd.assert().success();
+
+    let ir = std::fs::read_to_string(ir_path).unwrap();
+    assert!(
+        ir.contains("\"semantic_field\""),
+        "expected semantic field inline"
+    );
+    assert!(ir.contains("\"ref\""), "expected REF semantic field type");
+}

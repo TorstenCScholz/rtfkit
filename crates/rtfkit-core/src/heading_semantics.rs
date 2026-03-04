@@ -43,6 +43,7 @@ pub fn extract_heading_plain_text(paragraph: &Paragraph) -> String {
             Inline::BookmarkAnchor(_)
             | Inline::NoteRef(_)
             | Inline::PageField(_)
+            | Inline::SemanticField(_)
             | Inline::GeneratedBlockMarker(_) => {}
         }
     }
@@ -84,7 +85,10 @@ pub fn infer_heading_level_with_options(
             Inline::BookmarkAnchor(_) => {
                 has_bookmark_anchor = true;
             }
-            Inline::NoteRef(_) | Inline::PageField(_) | Inline::GeneratedBlockMarker(_) => {}
+            Inline::NoteRef(_)
+            | Inline::PageField(_)
+            | Inline::SemanticField(_)
+            | Inline::GeneratedBlockMarker(_) => {}
         }
     }
 

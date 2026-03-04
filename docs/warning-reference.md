@@ -447,7 +447,7 @@ Emitted when the hex data for an embedded image is invalid.
 
 ### `unsupported_field`
 
-Emitted when an RTF field instruction (e.g. `DATE`, `SEQ`, `TOC`) is not supported, but the field's result text (`\fldrslt`) was preserved as plain text.
+Emitted when an RTF field instruction is not fully supported, but the field's result text (`\fldrslt`) was preserved as plain text.
 
 **Severity**: `warning`
 
@@ -463,10 +463,11 @@ Emitted when an RTF field instruction (e.g. `DATE`, `SEQ`, `TOC`) is not support
 ```
 
 **Common Causes**:
-- `DATE`, `TIME`, `SEQ`, `NUMPAGES`, and other dynamic fields that have no equivalent in the output format
+- `DATE`, `TIME`, formula fields (`IF`, `=`), and other dynamic fields that have no equivalent in the output format
+- `MERGEFIELD` dynamic mail-merge semantics (fallback text is preserved and rendered deterministically)
 - Custom application-specific field types
 
-**Impact**: The field's result text (from `\fldrslt`) is emitted as plain text. Field update semantics are not available in converted output.
+**Impact**: The field's result text (from `\fldrslt`) is emitted as plain text. For supported semantic field references (`REF`, `NOTEREF`, `SEQ`, `DOCPROPERTY`, built-in doc properties), structured IR is still emitted; dynamic update semantics are not available in converted output.
 
 ---
 

@@ -9,7 +9,7 @@ use docx_rs::{
 };
 use rtfkit_core::{
     Alignment, GeneratedBlockKind, Hyperlink as IrHyperlink, HyperlinkTarget, Inline, PageFieldRef,
-    Paragraph, Run,
+    Paragraph, Run, SemanticFieldRef,
 };
 
 /// Converts an IR paragraph to a docx-rs paragraph without numbering.
@@ -71,6 +71,46 @@ pub(crate) fn convert_paragraph_with_numbering(
             Inline::PageField(page_field) => {
                 p = p.add_run(page_field_to_docx_run(page_field));
             }
+            Inline::SemanticField(field) => match field {
+                SemanticFieldRef::Ref {
+                    target,
+                    fallback_text,
+                }
+                | SemanticFieldRef::NoteRef {
+                    target,
+                    fallback_text,
+                } => {
+                    let visible = fallback_text.as_deref().unwrap_or(target.as_str());
+                    let link = DocxHyperlink::new(target, HyperlinkType::Anchor)
+                        .add_run(DocxRun::new().add_text(visible));
+                    p = p.add_hyperlink(link);
+                }
+                SemanticFieldRef::Sequence {
+                    identifier,
+                    fallback_text,
+                } => {
+                    p = p.add_run(
+                        DocxRun::new()
+                            .add_text(fallback_text.as_deref().unwrap_or(identifier.as_str())),
+                    );
+                }
+                SemanticFieldRef::DocProperty {
+                    name,
+                    fallback_text,
+                } => {
+                    p = p.add_run(
+                        DocxRun::new().add_text(fallback_text.as_deref().unwrap_or(name.as_str())),
+                    );
+                }
+                SemanticFieldRef::MergeField {
+                    name,
+                    fallback_text,
+                } => {
+                    p = p.add_run(
+                        DocxRun::new().add_text(fallback_text.as_deref().unwrap_or(name.as_str())),
+                    );
+                }
+            },
             Inline::GeneratedBlockMarker(kind) => {
                 if matches!(kind, GeneratedBlockKind::TableOfContents { .. }) {
                     p = p.add_run(DocxRun::new().add_text("[TOC]"));
@@ -210,7 +250,7 @@ mod tests {
     use crate::{DocxWriterOptions, write_docx_to_bytes};
     use rtfkit_core::{
         Alignment, Block, Document, Hyperlink as IrHyperlink, HyperlinkTarget, Inline, ListBlock,
-        ListItem, ListKind, Paragraph, Run, ShadingPattern,
+        ListItem, ListKind, Paragraph, Run, SemanticFieldRef, ShadingPattern,
     };
 
     fn zip_entry_string(bytes: &[u8], entry_name: &str) -> String {
@@ -903,5 +943,19 @@ mod tests {
         let doc = Document::from_blocks(vec![Block::ListBlock(list)]);
         let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
         assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_semantic_ref_emits_anchor_hyperlink() {
+        let para = Paragraph::from_inlines(vec![Inline::SemanticField(SemanticFieldRef::Ref {
+            target: "sec_intro".to_string(),
+            fallback_text: Some("Introduction".to_string()),
+        })]);
+        let doc = Document::from_blocks(vec![Block::Paragraph(para)]);
+        let bytes = write_docx_to_bytes(&doc, &DocxWriterOptions::default()).unwrap();
+        let document_xml = zip_entry_string(&bytes, "word/document.xml");
+        assert!(document_xml.contains("<w:hyperlink"));
+        assert!(document_xml.contains("w:anchor=\"sec_intro\""));
+        assert!(document_xml.contains("Introduction"));
     }
 }

@@ -6,7 +6,9 @@
 //! - Nested fields
 
 use crate::rtf::parse;
-use crate::{Block, GeneratedBlockKind, HyperlinkTarget, Inline, PageFieldRef, Warning};
+use crate::{
+    Block, GeneratedBlockKind, HyperlinkTarget, Inline, PageFieldRef, SemanticFieldRef, Warning,
+};
 
 // =============================================================================
 // Simple Hyperlink Tests
@@ -709,6 +711,7 @@ fn test_bookmark_name_in_field_result_is_not_rendered_as_text() {
             Inline::BookmarkAnchor(_) => Vec::new(),
             Inline::NoteRef(_) => Vec::new(),
             Inline::PageField(_) => Vec::new(),
+            Inline::SemanticField(_) => Vec::new(),
             Inline::GeneratedBlockMarker(_) => Vec::new(),
         })
         .collect();
@@ -786,6 +789,117 @@ fn test_unsupported_field_does_not_strict_fail_when_result_preserved() {
     assert!(
         !has_dropped_content,
         "DATE field with result text should not emit DroppedContent"
+    );
+}
+
+#[test]
+fn test_ref_field_emits_semantic_field_with_fallback() {
+    let input = r#"{\rtf1\ansi {\field{\*\fldinst REF myBookmark \h}{\fldrslt Section 2}}}"#;
+    let result = parse(input).expect("parse failed");
+    let (doc, _report) = result;
+    let field = doc
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            Block::Paragraph(p) => Some(p),
+            _ => None,
+        })
+        .flat_map(|p| p.inlines.iter())
+        .find_map(|inline| match inline {
+            Inline::SemanticField(field) => Some(field),
+            _ => None,
+        });
+    assert!(
+        matches!(
+            field,
+            Some(SemanticFieldRef::Ref { target, fallback_text })
+                if target == "myBookmark" && fallback_text.as_deref() == Some("Section 2")
+        ),
+        "expected REF semantic field, got {field:?}"
+    );
+}
+
+#[test]
+fn test_seq_field_emits_semantic_field_with_fallback() {
+    let input = r#"{\rtf1\ansi {\field{\*\fldinst SEQ Figure \* ARABIC}{\fldrslt 3}}}"#;
+    let (doc, _report) = parse(input).expect("parse failed");
+    let field = doc
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            Block::Paragraph(p) => Some(p),
+            _ => None,
+        })
+        .flat_map(|p| p.inlines.iter())
+        .find_map(|inline| match inline {
+            Inline::SemanticField(field) => Some(field),
+            _ => None,
+        });
+    assert!(
+        matches!(
+            field,
+            Some(SemanticFieldRef::Sequence { identifier, fallback_text })
+                if identifier == "Figure" && fallback_text.as_deref() == Some("3")
+        ),
+        "expected SEQ semantic field, got {field:?}"
+    );
+}
+
+#[test]
+fn test_docproperty_builtin_emits_semantic_field() {
+    let input = r#"{\rtf1\ansi {\field{\*\fldinst AUTHOR}{\fldrslt Ada Lovelace}}}"#;
+    let (doc, _report) = parse(input).expect("parse failed");
+    let field = doc
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            Block::Paragraph(p) => Some(p),
+            _ => None,
+        })
+        .flat_map(|p| p.inlines.iter())
+        .find_map(|inline| match inline {
+            Inline::SemanticField(field) => Some(field),
+            _ => None,
+        });
+    assert!(
+        matches!(
+            field,
+            Some(SemanticFieldRef::DocProperty { name, fallback_text })
+                if name == "AUTHOR" && fallback_text.as_deref() == Some("Ada Lovelace")
+        ),
+        "expected AUTHOR semantic field, got {field:?}"
+    );
+}
+
+#[test]
+fn test_mergefield_emits_semantic_field_and_warning() {
+    let input = r#"{\rtf1\ansi {\field{\*\fldinst MERGEFIELD CustomerName \* MERGEFORMAT}{\fldrslt Jane Doe}}}"#;
+    let (doc, report) = parse(input).expect("parse failed");
+    let field = doc
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            Block::Paragraph(p) => Some(p),
+            _ => None,
+        })
+        .flat_map(|p| p.inlines.iter())
+        .find_map(|inline| match inline {
+            Inline::SemanticField(field) => Some(field),
+            _ => None,
+        });
+    assert!(
+        matches!(
+            field,
+            Some(SemanticFieldRef::MergeField { name, fallback_text })
+                if name == "CustomerName" && fallback_text.as_deref() == Some("Jane Doe")
+        ),
+        "expected MERGEFIELD semantic field, got {field:?}"
+    );
+    assert!(
+        report.warnings.iter().any(|w| {
+            matches!(w, Warning::UnsupportedField { reason, .. } if reason.contains("MERGEFIELD"))
+        }),
+        "expected MERGEFIELD unsupported warning"
     );
 }
 

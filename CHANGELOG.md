@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+#### Field Support Expansion
+- Added semantic field IR support via `Inline::SemanticField` and `SemanticFieldRef` for `REF`, `NOTEREF`, `SEQ`, `DOCPROPERTY`, built-in doc properties (`AUTHOR`, `TITLE`, `SUBJECT`, `KEYWORDS`), and `MERGEFIELD`.
+- Expanded field instruction parsing for deterministic quoted/unquoted argument handling and switch-tolerant tokenization.
+- Added fallback-text capture from `\fldrslt` for semantic fields so strict mode only fails on actual dropped content.
+- Added deterministic writer mappings:
+  - DOCX: `REF`/`NOTEREF` emit internal anchor hyperlinks; other semantic fields emit fallback text.
+  - HTML: semantic refs emit internal links; sequence/docproperty/mergefield emit stable semantic spans with fallback text.
+  - PDF/Typst: semantic refs map to best-effort internal links with fallback; other semantic fields render fallback text.
+- Added new field fixtures and golden IR/HTML snapshots:
+  - `field_ref_simple`, `field_noteref_simple`, `field_seq_simple`, `field_docproperty_author`, `field_mergefield_preserve_result`, `field_ref_unresolved_target`, `field_nested_formula_fallback`.
+- Added parser, CLI strict-mode/warning-contract, and writer unit tests for semantic field behavior and fallback semantics.
+
 #### Nested Tables and Complex Cells
 - Parser-native nested table support from RTF controls (`\itap`, `\nesttableprops`, `\nestcell`, `\nestrow`) with deterministic parent/child table finalization.
 - Complex table-cell block streams now preserve source order for text, lists, nested tables, and images.

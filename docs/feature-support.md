@@ -131,7 +131,7 @@ rtfkit supports embedded PNG and JPEG images from RTF `\pict` groups.
 | Endnote (`\endnote`) | ✅ Supported | Emitted as `NoteRef` inline + note body; DOCX, HTML, Typst |
 | Picture (`\pict`) | ⚠️ Partial | PNG/JPEG supported; WMF/EMF dropped |
 | Object (`\obj`) | 🔸 Degraded | Dropped with `DroppedContent` |
-| Field (`\field`) | ⚠️ Partial | HYPERLINK (external + internal via `\l` switch), page fields (`PAGE`, `NUMPAGES`, `SECTIONPAGES`, `PAGEREF`), TOC markers, and `\bkmkstart` anchors supported; unsupported fields preserve result text with warnings |
+| Field (`\field`) | ⚠️ Partial | HYPERLINK (external + internal via `\l` switch), page fields (`PAGE`, `NUMPAGES`, `SECTIONPAGES`, `PAGEREF`), TOC markers, semantic refs (`REF`, `NOTEREF`), sequence fields (`SEQ`), document properties (`DOCPROPERTY`, `AUTHOR`, `TITLE`, `SUBJECT`, `KEYWORDS`), and merge fields (`MERGEFIELD`) with deterministic fallback-text rendering; unsupported fields preserve result text with warnings |
 | Unknown destinations (`\*\foo`) | 🔸 Degraded | Dropped with `DroppedContent` |
 
 ## Output Formats

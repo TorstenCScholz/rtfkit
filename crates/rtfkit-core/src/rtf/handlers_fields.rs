@@ -6,7 +6,7 @@
 use super::state::RuntimeState;
 use crate::{
     BookmarkAnchor, GeneratedBlockKind, HyperlinkTarget, Inline, PageFieldRef, PageNumberFormat,
-    TocOptions,
+    SemanticFieldRef, TocOptions,
 };
 
 /// Capture a control word as literal fldinst instruction content.
@@ -171,6 +171,7 @@ pub fn process_field_group_end(state: &mut RuntimeState) {
 enum ParsedFieldInstruction {
     Hyperlink(HyperlinkTarget),
     PageField(PageFieldRef),
+    SemanticField(SemanticFieldRef),
     Toc {
         options: TocOptions,
         unsupported_switches: Vec<String>,
@@ -279,6 +280,26 @@ fn finalize_field(state: &mut RuntimeState) {
                 .current_paragraph
                 .inlines
                 .push(Inline::PageField(page_field));
+            state.fields.field_result_inlines.clear();
+        }
+        Some(ParsedFieldInstruction::SemanticField(mut semantic_field)) => {
+            if had_result_content {
+                let text = extract_visible_text_from_inlines(&state.fields.field_result_inlines);
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    set_semantic_fallback_text(&mut semantic_field, trimmed.to_string());
+                }
+            }
+            state.capture_paragraph_alignment_if_start();
+            state
+                .current_paragraph
+                .inlines
+                .push(Inline::SemanticField(semantic_field.clone()));
+            if matches!(semantic_field, SemanticFieldRef::MergeField { .. }) {
+                state
+                    .report_builder
+                    .unsupported_field("Unsupported field type: MERGEFIELD (result preserved)");
+            }
             state.fields.field_result_inlines.clear();
         }
         Some(ParsedFieldInstruction::Toc {
@@ -430,9 +451,47 @@ fn parse_field_instruction(instruction: &str) -> Option<ParsedFieldInstruction> 
         return Some(ParsedFieldInstruction::Hyperlink(target));
     }
 
+    if let Some(field_ref) = parse_semantic_field(instruction) {
+        return Some(ParsedFieldInstruction::SemanticField(field_ref));
+    }
+
     parse_page_field(instruction)
         .map(ParsedFieldInstruction::PageField)
         .or_else(|| parse_toc_field(instruction))
+}
+
+fn parse_semantic_field(instruction: &str) -> Option<SemanticFieldRef> {
+    let (keyword, rest) = parse_field_keyword_and_rest(instruction)?;
+    let tokens = tokenize_field_words(rest);
+    let args = positional_field_arguments(&tokens);
+    let normalized_keyword = keyword.to_ascii_uppercase();
+    match normalized_keyword.as_str() {
+        "AUTHOR" | "TITLE" | "SUBJECT" | "KEYWORDS" => Some(SemanticFieldRef::DocProperty {
+            name: normalized_keyword,
+            fallback_text: None,
+        }),
+        "REF" => Some(SemanticFieldRef::Ref {
+            target: args.first()?.to_string(),
+            fallback_text: None,
+        }),
+        "NOTEREF" => Some(SemanticFieldRef::NoteRef {
+            target: args.first()?.to_string(),
+            fallback_text: None,
+        }),
+        "SEQ" => Some(SemanticFieldRef::Sequence {
+            identifier: args.first()?.to_string(),
+            fallback_text: None,
+        }),
+        "DOCPROPERTY" => Some(SemanticFieldRef::DocProperty {
+            name: args.first()?.to_string(),
+            fallback_text: None,
+        }),
+        "MERGEFIELD" => Some(SemanticFieldRef::MergeField {
+            name: args.first()?.to_string(),
+            fallback_text: None,
+        }),
+        _ => None,
+    }
 }
 
 fn parse_page_field(instruction: &str) -> Option<PageFieldRef> {
@@ -553,6 +612,64 @@ fn parse_page_number_format(instruction: &str) -> PageNumberFormat {
     PageNumberFormat::Arabic
 }
 
+fn parse_field_keyword_and_rest(instruction: &str) -> Option<(&str, &str)> {
+    let text = instruction.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let mut split = text.splitn(2, char::is_whitespace);
+    let keyword = split.next()?;
+    let rest = split.next().unwrap_or("");
+    Some((keyword, rest))
+}
+
+fn positional_field_arguments(tokens: &[String]) -> Vec<&str> {
+    let mut args = Vec::new();
+    let mut idx = 0usize;
+    while idx < tokens.len() {
+        let token = tokens[idx].as_str();
+        if token.starts_with('\\') {
+            idx += 1;
+            if idx < tokens.len() && !tokens[idx].starts_with('\\') {
+                idx += 1;
+            }
+            continue;
+        }
+        args.push(token);
+        idx += 1;
+    }
+    args
+}
+
+fn set_semantic_fallback_text(field_ref: &mut SemanticFieldRef, fallback_text: String) {
+    match field_ref {
+        SemanticFieldRef::Ref {
+            fallback_text: existing,
+            ..
+        }
+        | SemanticFieldRef::NoteRef {
+            fallback_text: existing,
+            ..
+        }
+        | SemanticFieldRef::Sequence {
+            fallback_text: existing,
+            ..
+        }
+        | SemanticFieldRef::DocProperty {
+            fallback_text: existing,
+            ..
+        }
+        | SemanticFieldRef::MergeField {
+            fallback_text: existing,
+            ..
+        } => {
+            if existing.is_none() {
+                *existing = Some(fallback_text);
+            }
+        }
+    }
+}
+
 fn tokenize_field_words(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut chars = input.chars().peekable();
@@ -615,6 +732,7 @@ fn extract_visible_text_from_inlines(inlines: &[Inline]) -> String {
             Inline::BookmarkAnchor(_)
             | Inline::NoteRef(_)
             | Inline::PageField(_)
+            | Inline::SemanticField(_)
             | Inline::GeneratedBlockMarker(_) => {}
         }
     }
@@ -772,5 +890,45 @@ mod tests {
         assert!(is_supported_hyperlink_url("mailto:test@example.com"));
         assert!(!is_supported_hyperlink_url("ftp://example.com"));
         assert!(!is_supported_hyperlink_url("javascript:alert(1)"));
+    }
+
+    #[test]
+    fn test_parse_semantic_ref_field() {
+        assert_eq!(
+            parse_semantic_field(r#"REF myBookmark \h"#),
+            Some(SemanticFieldRef::Ref {
+                target: "myBookmark".to_string(),
+                fallback_text: None
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_semantic_mergefield() {
+        assert_eq!(
+            parse_semantic_field(r#"MERGEFIELD "CustomerName" \* MERGEFORMAT"#),
+            Some(SemanticFieldRef::MergeField {
+                name: "CustomerName".to_string(),
+                fallback_text: None
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_semantic_docproperty_builtins() {
+        assert_eq!(
+            parse_semantic_field("AUTHOR"),
+            Some(SemanticFieldRef::DocProperty {
+                name: "AUTHOR".to_string(),
+                fallback_text: None
+            })
+        );
+        assert_eq!(
+            parse_semantic_field("DOCPROPERTY Company"),
+            Some(SemanticFieldRef::DocProperty {
+                name: "Company".to_string(),
+                fallback_text: None
+            })
+        );
     }
 }

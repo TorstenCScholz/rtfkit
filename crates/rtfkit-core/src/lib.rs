@@ -800,6 +800,52 @@ pub enum PageFieldRef {
     },
 }
 
+/// Normalized semantic field references parsed from RTF field instructions.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SemanticFieldRef {
+    /// Cross-reference to a bookmark target (`REF <bookmark>`).
+    Ref {
+        /// Bookmark target name.
+        target: String,
+        /// Visible fallback text from `\\fldrslt`, if present.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fallback_text: Option<String>,
+    },
+    /// Note cross-reference (`NOTEREF <bookmark>`).
+    NoteRef {
+        /// Bookmark target name.
+        target: String,
+        /// Visible fallback text from `\\fldrslt`, if present.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fallback_text: Option<String>,
+    },
+    /// Sequence field (`SEQ <identifier>`).
+    Sequence {
+        /// Sequence identifier name.
+        identifier: String,
+        /// Visible fallback text from `\\fldrslt`, if present.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fallback_text: Option<String>,
+    },
+    /// Document property field (`DOCPROPERTY <name>` or direct built-ins).
+    DocProperty {
+        /// Document property name.
+        name: String,
+        /// Visible fallback text from `\\fldrslt`, if present.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fallback_text: Option<String>,
+    },
+    /// Mail merge field (`MERGEFIELD <name>`).
+    MergeField {
+        /// Merge field name.
+        name: String,
+        /// Visible fallback text from `\\fldrslt`, if present.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fallback_text: Option<String>,
+    },
+}
+
 /// Table-of-contents generation options.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TocOptions {
@@ -935,6 +981,8 @@ pub enum Inline {
     NoteRef(NoteRef),
     /// A semantic page-management field reference.
     PageField(PageFieldRef),
+    /// A semantic non-page field reference.
+    SemanticField(SemanticFieldRef),
     /// Inline marker requesting generated block insertion at this location.
     GeneratedBlockMarker(GeneratedBlockKind),
 }

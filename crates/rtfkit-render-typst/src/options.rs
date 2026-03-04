@@ -25,22 +25,17 @@ pub enum PageSize {
 }
 
 /// Policy for page numbering behavior in Typst output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PageNumberingMode {
     /// Enable page numbering only when the document semantics require it
     /// (e.g., page fields or a generated table of contents).
+    #[default]
     Auto,
     /// Always enable page numbering, even if the document does not use page-related fields.
     Always,
     /// Never enable page numbering. Documents that require numbering will be rejected
     /// by the renderer as an invalid option.
     Never,
-}
-
-impl Default for PageNumberingMode {
-    fn default() -> Self {
-        PageNumberingMode::Auto
-    }
 }
 
 impl PageSize {

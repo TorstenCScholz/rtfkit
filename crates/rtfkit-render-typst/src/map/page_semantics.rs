@@ -24,17 +24,16 @@ pub fn requires_page_numbering(doc: &Document) -> bool {
         return true;
     }
 
-    if let Some(structure) = &doc.structure {
-        if any_page_semantics_in_blocks(&structure.headers.default)
+    if let Some(structure) = &doc.structure
+        && (any_page_semantics_in_blocks(&structure.headers.default)
             || any_page_semantics_in_blocks(&structure.headers.first)
             || any_page_semantics_in_blocks(&structure.headers.even)
             || any_page_semantics_in_blocks(&structure.footers.default)
             || any_page_semantics_in_blocks(&structure.footers.first)
             || any_page_semantics_in_blocks(&structure.footers.even)
-            || any_page_semantics_in_notes(&structure.notes)
-        {
-            return true;
-        }
+            || any_page_semantics_in_notes(&structure.notes))
+    {
+        return true;
     }
 
     false
@@ -72,9 +71,11 @@ fn any_page_semantics_in_inline(inline: &Inline) -> bool {
         Inline::GeneratedBlockMarker(kind) => {
             matches!(kind, GeneratedBlockKind::TableOfContents { .. })
         }
-        Inline::Run(_) | Inline::Hyperlink(_) | Inline::BookmarkAnchor(_) | Inline::NoteRef(_) => {
-            false
-        }
+        Inline::Run(_)
+        | Inline::Hyperlink(_)
+        | Inline::BookmarkAnchor(_)
+        | Inline::NoteRef(_)
+        | Inline::SemanticField(_) => false,
     }
 }
 

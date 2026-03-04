@@ -1,0 +1,40 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "bookmark_anchor",
+          "name": "note_target"
+        },
+        {
+          "type": "run",
+          "text": "Reference ",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        },
+        {
+          "type": "semantic_field",
+          "type": "note_ref",
+          "target": "note_target",
+          "fallback_text": "1"
+        },
+        {
+          "type": "run",
+          "text": ".",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        }
+      ]
+    }
+  ]
+}

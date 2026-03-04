@@ -1,0 +1,36 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Dear ",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        },
+        {
+          "type": "semantic_field",
+          "type": "merge_field",
+          "name": "CustomerName",
+          "fallback_text": "Jane Doe"
+        },
+        {
+          "type": "run",
+          "text": ",",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        }
+      ]
+    }
+  ]
+}

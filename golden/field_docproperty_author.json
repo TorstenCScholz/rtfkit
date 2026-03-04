@@ -1,0 +1,26 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Author: ",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        },
+        {
+          "type": "semantic_field",
+          "type": "doc_property",
+          "name": "AUTHOR",
+          "fallback_text": "Ada Lovelace"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "alignment": "left",
+      "inlines": [
+        {
+          "type": "run",
+          "text": "Figure ",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        },
+        {
+          "type": "semantic_field",
+          "type": "sequence",
+          "identifier": "Figure",
+          "fallback_text": "3"
+        },
+        {
+          "type": "run",
+          "text": " shows results.",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "small_caps": false,
+          "all_caps": false
+        }
+      ]
+    }
+  ]
+}
