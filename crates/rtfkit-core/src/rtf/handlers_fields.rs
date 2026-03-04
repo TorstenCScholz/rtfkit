@@ -5,8 +5,8 @@
 
 use super::state::RuntimeState;
 use crate::{
-    BookmarkAnchor, GeneratedBlockKind, HyperlinkTarget, Inline, PageFieldRef, Run,
-    SemanticField, SemanticFieldRef,
+    BookmarkAnchor, GeneratedBlockKind, HyperlinkTarget, Inline, PageFieldRef, Run, SemanticField,
+    SemanticFieldRef,
 };
 
 /// Capture a control word as literal fldinst instruction content.
@@ -26,6 +26,9 @@ pub fn capture_fldinst_control_word(
         return false;
     }
 
+    // Keep explicit token boundaries so downstream instruction parsing sees
+    // `\h target` as two tokens instead of a glued `\htarget`.
+    ensure_instruction_token_boundary(&mut state.fields.field_instruction_text);
     state.fields.field_instruction_text.push('\\');
     state.fields.field_instruction_text.push_str(word);
     if let Some(value) = parameter {
@@ -34,6 +37,8 @@ pub fn capture_fldinst_control_word(
             .field_instruction_text
             .push_str(&value.to_string());
     }
+    // Ensure subsequent literal text starts a new token.
+    ensure_instruction_token_boundary(&mut state.fields.field_instruction_text);
     true
 }
 
@@ -168,8 +173,8 @@ pub fn process_field_group_end(state: &mut RuntimeState) {
 }
 
 fn finalize_field(state: &mut RuntimeState) {
-    use crate::Hyperlink;
     use super::field_instruction::{ParsedFieldInstruction, parse_field_instruction};
+    use crate::Hyperlink;
 
     if state.fields.parsing_fldrslt && !state.current_text.is_empty() {
         super::handlers_text::flush_current_text_as_field_run(state);
@@ -274,9 +279,11 @@ fn finalize_field(state: &mut RuntimeState) {
         }
         Some(ParsedFieldInstruction::SemanticField(mut semantic_ref)) => {
             // Build SemanticField struct projecting runs from fldrslt.
-            let sf = build_semantic_field(&mut semantic_ref, &mut state.fields.field_result_inlines);
+            let sf =
+                build_semantic_field(&mut semantic_ref, &mut state.fields.field_result_inlines);
 
             let is_merge = matches!(sf.reference, SemanticFieldRef::MergeField { .. });
+            let has_non_run_content = sf.has_non_run_content;
 
             state.capture_paragraph_alignment_if_start();
             state
@@ -288,6 +295,11 @@ fn finalize_field(state: &mut RuntimeState) {
                 state
                     .report_builder
                     .unsupported_field("Unsupported field type: MERGEFIELD (result preserved)");
+            }
+            if has_non_run_content {
+                state.report_builder.unsupported_field(
+                    "Semantic field result contained non-run inline content; downgraded to text runs",
+                );
             }
             state.fields.field_result_inlines.clear();
         }
@@ -374,26 +386,10 @@ fn build_semantic_field(
     reference: &mut SemanticFieldRef,
     result_inlines: &mut Vec<Inline>,
 ) -> SemanticField {
-    let mut runs: Vec<Run> = Vec::new();
-    let mut has_non_run_content = false;
-
-    for inline in result_inlines.iter() {
-        match inline {
-            Inline::Run(run) => runs.push(run.clone()),
-            _ => {
-                has_non_run_content = true;
-            }
-        }
-    }
+    let projection = project_semantic_result_inlines(result_inlines);
 
     // Keep fallback_text populated for consumers that have not yet adopted runs.
-    if !runs.is_empty() && get_fallback_text(reference).is_none() {
-        let text: String = runs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>().join("");
-        let trimmed = text.trim();
-        if !trimmed.is_empty() {
-            set_fallback_text(reference, trimmed.to_string());
-        }
-    } else if get_fallback_text(reference).is_none() {
+    if get_fallback_text(reference).is_none() {
         let text = extract_visible_text_from_inlines(result_inlines);
         let trimmed = text.trim();
         if !trimmed.is_empty() {
@@ -403,9 +399,102 @@ fn build_semantic_field(
 
     SemanticField {
         reference: reference.clone(),
-        runs,
-        has_non_run_content,
+        runs: projection.runs,
+        has_non_run_content: projection.has_non_run_content,
         resolved: true, // may be set false by core cross-reference resolver later
+    }
+}
+
+#[derive(Debug, Default)]
+struct SemanticResultProjection {
+    runs: Vec<Run>,
+    has_non_run_content: bool,
+}
+
+/// Project fldrslt inlines into visible runs while flagging non-run degradation.
+///
+/// Non-run inline semantics (bookmark anchors, nested semantic markers, etc.)
+/// are not preserved as semantic structures inside `SemanticField.runs`, but
+/// visible text is retained where possible.
+fn project_semantic_result_inlines(inlines: &[Inline]) -> SemanticResultProjection {
+    let mut out = SemanticResultProjection::default();
+    for inline in inlines {
+        match inline {
+            Inline::Run(run) => out.runs.push(run.clone()),
+            Inline::Hyperlink(link) => {
+                out.has_non_run_content = true;
+                out.runs.extend(link.runs.iter().cloned());
+            }
+            Inline::PageField(page_field) => {
+                out.has_non_run_content = true;
+                out.runs.push(Run::new(page_field_visible_text(page_field)));
+            }
+            Inline::SemanticField(sf) => {
+                out.has_non_run_content = true;
+                if sf.runs.is_empty() {
+                    out.runs
+                        .push(Run::new(semantic_field_visible_text(&sf.reference)));
+                } else {
+                    out.runs.extend(sf.runs.iter().cloned());
+                }
+            }
+            Inline::NoteRef(note_ref) => {
+                out.has_non_run_content = true;
+                out.runs.push(Run::new(note_ref.id.to_string()));
+            }
+            Inline::BookmarkAnchor(_) | Inline::GeneratedBlockMarker(_) => {
+                out.has_non_run_content = true;
+            }
+        }
+    }
+    out
+}
+
+fn page_field_visible_text(page_field: &PageFieldRef) -> String {
+    match page_field {
+        PageFieldRef::CurrentPage { .. }
+        | PageFieldRef::TotalPages { .. }
+        | PageFieldRef::SectionPages { .. } => "1".to_string(),
+        PageFieldRef::PageRef {
+            target,
+            fallback_text,
+            ..
+        } => fallback_text.clone().unwrap_or_else(|| target.clone()),
+    }
+}
+
+fn semantic_field_visible_text(field_ref: &SemanticFieldRef) -> String {
+    match field_ref {
+        SemanticFieldRef::Ref {
+            target,
+            fallback_text,
+        }
+        | SemanticFieldRef::NoteRef {
+            target,
+            fallback_text,
+        } => fallback_text.clone().unwrap_or_else(|| target.clone()),
+        SemanticFieldRef::Sequence {
+            identifier,
+            fallback_text,
+        }
+        | SemanticFieldRef::DocProperty {
+            name: identifier,
+            fallback_text,
+        }
+        | SemanticFieldRef::MergeField {
+            name: identifier,
+            fallback_text,
+        } => fallback_text.clone().unwrap_or_else(|| identifier.clone()),
+    }
+}
+
+fn ensure_instruction_token_boundary(instruction: &mut String) {
+    if instruction
+        .chars()
+        .last()
+        .is_some_and(|ch| !ch.is_whitespace())
+    {
+        instruction.push(' ');
     }
 }
 
@@ -462,9 +551,9 @@ fn extract_visible_text_from_inlines(inlines: &[Inline]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::super::field_instruction::{parse_hyperlink, parse_semantic_field};
     use super::*;
     use crate::HyperlinkTarget;
-    use super::super::field_instruction::{parse_hyperlink, parse_semantic_field};
 
     #[test]
     fn test_parse_hyperlink_target_external_url() {

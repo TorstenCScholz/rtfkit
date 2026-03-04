@@ -7,7 +7,8 @@
 
 use crate::rtf::parse;
 use crate::{
-    Block, GeneratedBlockKind, HyperlinkTarget, Inline, PageFieldRef, SemanticFieldRef, Warning,
+    Block, GeneratedBlockKind, HyperlinkTarget, Inline, PageFieldRef, SemanticField,
+    SemanticFieldRef, Warning,
 };
 
 /// Extract the `SemanticFieldRef` from the first `Inline::SemanticField` in a paragraph.
@@ -21,6 +22,21 @@ fn find_semantic_field_ref<'a>(doc: &'a crate::Document) -> Option<&'a SemanticF
         .flat_map(|p| p.inlines.iter())
         .find_map(|inline| match inline {
             Inline::SemanticField(sf) => Some(&sf.reference),
+            _ => None,
+        })
+}
+
+/// Extract the first `Inline::SemanticField` in a paragraph.
+fn find_semantic_field<'a>(doc: &'a crate::Document) -> Option<&'a SemanticField> {
+    doc.blocks
+        .iter()
+        .filter_map(|b| match b {
+            Block::Paragraph(p) => Some(p),
+            _ => None,
+        })
+        .flat_map(|p| p.inlines.iter())
+        .find_map(|inline| match inline {
+            Inline::SemanticField(sf) => Some(sf),
             _ => None,
         })
 }
@@ -823,6 +839,22 @@ fn test_ref_field_emits_semantic_field_with_fallback() {
 }
 
 #[test]
+fn test_ref_field_switch_before_arg_emits_semantic_field() {
+    // Integration coverage for fldinst capture + parser token boundaries.
+    let input = r#"{\rtf1\ansi {\field{\*\fldinst REF \h myBookmark}{\fldrslt Section 2}}}"#;
+    let (doc, _report) = parse(input).expect("parse failed");
+    let field = find_semantic_field_ref(&doc);
+    assert!(
+        matches!(
+            field,
+            Some(SemanticFieldRef::Ref { target, fallback_text })
+                if target == "myBookmark" && fallback_text.as_deref() == Some("Section 2")
+        ),
+        "expected REF semantic field with switch-before-arg handling, got {field:?}"
+    );
+}
+
+#[test]
 fn test_seq_field_emits_semantic_field_with_fallback() {
     let input = r#"{\rtf1\ansi {\field{\*\fldinst SEQ Figure \* ARABIC}{\fldrslt 3}}}"#;
     let (doc, _report) = parse(input).expect("parse failed");
@@ -870,6 +902,30 @@ fn test_mergefield_emits_semantic_field_and_warning() {
             matches!(w, Warning::UnsupportedField { reason, .. } if reason.contains("MERGEFIELD"))
         }),
         "expected MERGEFIELD unsupported warning"
+    );
+}
+
+#[test]
+fn test_semantic_field_non_run_content_emits_warning() {
+    let input = r#"{\rtf1\ansi {\field{\*\fldinst REF sec_intro \h}{\fldrslt {\*\bkmkstart inner_mark}Section 2}}}"#;
+    let (doc, report) = parse(input).expect("parse failed");
+    let sf = find_semantic_field(&doc).expect("expected semantic field");
+
+    assert!(
+        sf.has_non_run_content,
+        "semantic field should flag non-run content in fldrslt"
+    );
+    assert!(
+        sf.runs.iter().any(|r| r.text.contains("Section 2")),
+        "projected runs should preserve visible text"
+    );
+    assert!(
+        report.warnings.iter().any(|w| matches!(
+            w,
+            Warning::UnsupportedField { reason, .. }
+                if reason.contains("non-run inline content")
+        )),
+        "expected warning for non-run semantic field content degradation"
     );
 }
 

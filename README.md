@@ -13,6 +13,7 @@ rtfkit provides a complete RTF-to-DOCX, RTF-to-HTML, and RTF-to-PDF conversion p
 - **List support** - bullet and decimal lists with nested levels (up to 8)
 - **Table support** - rows, cells, nested tables, horizontal/vertical merges, cell alignment
 - **Hyperlink support** - external URLs and internal bookmark links
+- **Field support (pragmatic subset)** - HYPERLINK, page fields (`PAGE`, `NUMPAGES`, `SECTIONPAGES`, `PAGEREF`), TOC markers, semantic refs (`REF`, `NOTEREF`, `SEQ`, `DOCPROPERTY`, built-ins), and `MERGEFIELD` fallback rendering
 - **Embedded image support** - PNG/JPEG images with size/scaling controls
 - **HTML output** - semantic-first HTML5 output with `--to html`
 - **PDF output** - In-process PDF generation via embedded Typst renderer with `--to pdf`
@@ -288,8 +289,22 @@ For safety, the parser enforces these limits (see [Limits Policy](docs/limits-po
 | `unclosed_table_row` | Missing `\row` terminator | May fail |
 | `merge_conflict` | Merge semantics conflict | **Fails** |
 | `table_geometry_conflict` | Invalid table geometry | **Fails** |
+| `unsupported_field` | Field semantics not fully supported; `\fldrslt` preserved | No failure |
+| `unsupported_page_field` | Page field rendered with best-effort/static behavior | No failure |
+| `unsupported_toc_switch` | TOC switch parsed but not mapped | No failure |
+| `unresolved_page_reference` | `PAGEREF` target not found; fallback text used | No failure |
+| `section_numbering_fallback` | Section numbering semantics approximated | No failure |
+| `unresolved_cross_reference` | `REF`/`NOTEREF` target not found; fallback text used | No failure |
 
 See [Warning Reference](docs/warning-reference.md) for detailed documentation.
+
+### Field Behavior
+
+- Recognized field instructions are mapped to semantic IR where possible (hyperlinks, page fields, TOC markers, semantic refs, and merge-field fallback).
+- Unknown/unsupported field instructions preserve visible `\fldrslt` text and emit `unsupported_field`.
+- If a field has no usable result text, `dropped_content` is emitted (strict mode fails on this).
+- `REF` and `NOTEREF` are resolved against bookmark anchors (`\bkmkstart`); unresolved targets stay visible as fallback text and emit `unresolved_cross_reference`.
+- Non-run content inside semantic field results is downgraded deterministically to text runs with an `unsupported_field` warning.
 
 ### IR JSON (`--emit-ir`)
 
@@ -412,6 +427,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the fixture-first contribution workfl
 ## Current Limitations
 
 - Full RTF parity is not complete yet (advanced/edge-case layout and styling can degrade)
+- Field support is intentionally partial: dynamic evaluation (`DATE`/`TIME`, formulas, mail-merge execution, conditional logic) is not executed; visible fallback/result text is preserved instead
+- Page-related fields are rendered with deterministic static placeholders/fallback text (not live-updating pagination in output)
 - WMF/EMF image formats are not supported (PNG/JPEG are supported)
 - Images are block-level only (no inline/floating placement, no crop controls)
 - HTML output is semantic-first rather than pixel-perfect rendering
