@@ -16,9 +16,23 @@
         },
         {
           "type": "semantic_field",
-          "type": "sequence",
-          "identifier": "Figure",
-          "fallback_text": "3"
+          "reference": {
+            "kind": "sequence",
+            "identifier": "Figure",
+            "fallback_text": "3"
+          },
+          "runs": [
+            {
+              "text": "3",
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "strikethrough": false,
+              "small_caps": false,
+              "all_caps": false
+            }
+          ],
+          "has_non_run_content": false
         },
         {
           "type": "run",

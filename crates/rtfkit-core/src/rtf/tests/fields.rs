@@ -10,6 +10,21 @@ use crate::{
     Block, GeneratedBlockKind, HyperlinkTarget, Inline, PageFieldRef, SemanticFieldRef, Warning,
 };
 
+/// Extract the `SemanticFieldRef` from the first `Inline::SemanticField` in a paragraph.
+fn find_semantic_field_ref<'a>(doc: &'a crate::Document) -> Option<&'a SemanticFieldRef> {
+    doc.blocks
+        .iter()
+        .filter_map(|b| match b {
+            Block::Paragraph(p) => Some(p),
+            _ => None,
+        })
+        .flat_map(|p| p.inlines.iter())
+        .find_map(|inline| match inline {
+            Inline::SemanticField(sf) => Some(&sf.reference),
+            _ => None,
+        })
+}
+
 // =============================================================================
 // Simple Hyperlink Tests
 // =============================================================================
@@ -795,20 +810,8 @@ fn test_unsupported_field_does_not_strict_fail_when_result_preserved() {
 #[test]
 fn test_ref_field_emits_semantic_field_with_fallback() {
     let input = r#"{\rtf1\ansi {\field{\*\fldinst REF myBookmark \h}{\fldrslt Section 2}}}"#;
-    let result = parse(input).expect("parse failed");
-    let (doc, _report) = result;
-    let field = doc
-        .blocks
-        .iter()
-        .filter_map(|b| match b {
-            Block::Paragraph(p) => Some(p),
-            _ => None,
-        })
-        .flat_map(|p| p.inlines.iter())
-        .find_map(|inline| match inline {
-            Inline::SemanticField(field) => Some(field),
-            _ => None,
-        });
+    let (doc, _report) = parse(input).expect("parse failed");
+    let field = find_semantic_field_ref(&doc);
     assert!(
         matches!(
             field,
@@ -823,18 +826,7 @@ fn test_ref_field_emits_semantic_field_with_fallback() {
 fn test_seq_field_emits_semantic_field_with_fallback() {
     let input = r#"{\rtf1\ansi {\field{\*\fldinst SEQ Figure \* ARABIC}{\fldrslt 3}}}"#;
     let (doc, _report) = parse(input).expect("parse failed");
-    let field = doc
-        .blocks
-        .iter()
-        .filter_map(|b| match b {
-            Block::Paragraph(p) => Some(p),
-            _ => None,
-        })
-        .flat_map(|p| p.inlines.iter())
-        .find_map(|inline| match inline {
-            Inline::SemanticField(field) => Some(field),
-            _ => None,
-        });
+    let field = find_semantic_field_ref(&doc);
     assert!(
         matches!(
             field,
@@ -849,18 +841,7 @@ fn test_seq_field_emits_semantic_field_with_fallback() {
 fn test_docproperty_builtin_emits_semantic_field() {
     let input = r#"{\rtf1\ansi {\field{\*\fldinst AUTHOR}{\fldrslt Ada Lovelace}}}"#;
     let (doc, _report) = parse(input).expect("parse failed");
-    let field = doc
-        .blocks
-        .iter()
-        .filter_map(|b| match b {
-            Block::Paragraph(p) => Some(p),
-            _ => None,
-        })
-        .flat_map(|p| p.inlines.iter())
-        .find_map(|inline| match inline {
-            Inline::SemanticField(field) => Some(field),
-            _ => None,
-        });
+    let field = find_semantic_field_ref(&doc);
     assert!(
         matches!(
             field,
@@ -875,18 +856,7 @@ fn test_docproperty_builtin_emits_semantic_field() {
 fn test_mergefield_emits_semantic_field_and_warning() {
     let input = r#"{\rtf1\ansi {\field{\*\fldinst MERGEFIELD CustomerName \* MERGEFORMAT}{\fldrslt Jane Doe}}}"#;
     let (doc, report) = parse(input).expect("parse failed");
-    let field = doc
-        .blocks
-        .iter()
-        .filter_map(|b| match b {
-            Block::Paragraph(p) => Some(p),
-            _ => None,
-        })
-        .flat_map(|p| p.inlines.iter())
-        .find_map(|inline| match inline {
-            Inline::SemanticField(field) => Some(field),
-            _ => None,
-        });
+    let field = find_semantic_field_ref(&doc);
     assert!(
         matches!(
             field,

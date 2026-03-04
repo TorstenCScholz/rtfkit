@@ -16,9 +16,24 @@
         },
         {
           "type": "semantic_field",
-          "type": "ref",
-          "target": "missing_target",
-          "fallback_text": "section"
+          "reference": {
+            "kind": "ref",
+            "target": "missing_target",
+            "fallback_text": "section"
+          },
+          "runs": [
+            {
+              "text": "section",
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "strikethrough": false,
+              "small_caps": false,
+              "all_caps": false
+            }
+          ],
+          "has_non_run_content": false,
+          "resolved": false
         },
         {
           "type": "run",

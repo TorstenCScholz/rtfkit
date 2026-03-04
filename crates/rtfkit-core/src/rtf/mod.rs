@@ -56,6 +56,9 @@ pub use state_images::{
     ImageByteTracker, ImageParsingState, PictDecodeError, decode_pict_hex, resolve_image_dimensions,
 };
 
+// Field instruction parsing subsystem
+pub(crate) mod field_instruction;
+
 // Internal modules - Phase 3 (handlers)
 mod handlers_control_words;
 mod handlers_destinations;

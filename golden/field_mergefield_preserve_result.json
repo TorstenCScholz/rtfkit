@@ -16,9 +16,23 @@
         },
         {
           "type": "semantic_field",
-          "type": "merge_field",
-          "name": "CustomerName",
-          "fallback_text": "Jane Doe"
+          "reference": {
+            "kind": "merge_field",
+            "name": "CustomerName",
+            "fallback_text": "Jane Doe"
+          },
+          "runs": [
+            {
+              "text": "Jane Doe",
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "strikethrough": false,
+              "small_caps": false,
+              "all_caps": false
+            }
+          ],
+          "has_non_run_content": false
         },
         {
           "type": "run",

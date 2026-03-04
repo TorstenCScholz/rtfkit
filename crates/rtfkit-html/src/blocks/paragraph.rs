@@ -5,7 +5,7 @@
 
 use rtfkit_core::{
     BookmarkAnchor, Color, GeneratedBlockKind, Hyperlink, HyperlinkTarget, Inline, NoteRef,
-    PageFieldRef, Paragraph, Run, SemanticFieldRef, Shading, ShadingRenderPolicy,
+    PageFieldRef, Paragraph, Run, SemanticField, SemanticFieldRef, Shading, ShadingRenderPolicy,
     resolve_shading_fill_color,
 };
 
@@ -203,8 +203,8 @@ pub fn paragraph_to_html(para: &Paragraph, buf: &mut HtmlBuffer) {
             Inline::PageField(page_field) => {
                 page_field_to_html(page_field, buf);
             }
-            Inline::SemanticField(field) => {
-                semantic_field_to_html(field, buf);
+            Inline::SemanticField(sf) => {
+                semantic_field_to_html(sf, buf);
             }
             Inline::GeneratedBlockMarker(kind) => {
                 generated_block_marker_to_html(kind, buf);
@@ -255,8 +255,8 @@ fn page_field_to_html(page_field: &PageFieldRef, buf: &mut HtmlBuffer) {
     }
 }
 
-fn semantic_field_to_html(field: &SemanticFieldRef, buf: &mut HtmlBuffer) {
-    match field {
+fn semantic_field_to_html(sf: &SemanticField, buf: &mut HtmlBuffer) {
+    match &sf.reference {
         SemanticFieldRef::Ref {
             target,
             fallback_text,
@@ -265,39 +265,58 @@ fn semantic_field_to_html(field: &SemanticFieldRef, buf: &mut HtmlBuffer) {
             target,
             fallback_text,
         } => {
-            let href = escape_attribute(target);
-            let text = escape_attribute(fallback_text.as_deref().unwrap_or(target));
-            buf.push_raw(&format!(
-                "<a href=\"#{href}\" class=\"rtf-link rtf-semantic-field\" data-field=\"ref\">{text}</a>"
-            ));
+            let fallback = fallback_text.as_deref().unwrap_or(target);
+            if sf.resolved {
+                let href = escape_attribute(target);
+                buf.push_raw(&format!(
+                    "<a href=\"#{href}\" class=\"rtf-link rtf-semantic-field\" data-field=\"ref\">"
+                ));
+                emit_sf_content(sf, fallback, buf);
+                buf.push_raw("</a>");
+            } else {
+                emit_sf_content(sf, fallback, buf);
+            }
         }
         SemanticFieldRef::Sequence {
             identifier,
             fallback_text,
         } => {
-            let text = escape_attribute(fallback_text.as_deref().unwrap_or(identifier));
-            buf.push_raw(&format!(
-                "<span class=\"rtf-semantic-field\" data-field=\"seq\">{text}</span>"
-            ));
+            let fallback = fallback_text.as_deref().unwrap_or(identifier);
+            buf.push_raw("<span class=\"rtf-semantic-field\" data-field=\"seq\">");
+            emit_sf_content(sf, fallback, buf);
+            buf.push_raw("</span>");
         }
         SemanticFieldRef::DocProperty {
             name,
             fallback_text,
         } => {
-            let text = escape_attribute(fallback_text.as_deref().unwrap_or(name));
-            buf.push_raw(&format!(
-                "<span class=\"rtf-semantic-field\" data-field=\"docproperty\">{text}</span>"
-            ));
+            let fallback = fallback_text.as_deref().unwrap_or(name);
+            buf.push_raw("<span class=\"rtf-semantic-field\" data-field=\"docproperty\">");
+            emit_sf_content(sf, fallback, buf);
+            buf.push_raw("</span>");
         }
         SemanticFieldRef::MergeField {
             name,
             fallback_text,
         } => {
-            let text = escape_attribute(fallback_text.as_deref().unwrap_or(name));
-            buf.push_raw(&format!(
-                "<span class=\"rtf-semantic-field\" data-field=\"mergefield\">{text}</span>"
-            ));
+            let fallback = fallback_text.as_deref().unwrap_or(name);
+            buf.push_raw("<span class=\"rtf-semantic-field\" data-field=\"mergefield\">");
+            emit_sf_content(sf, fallback, buf);
+            buf.push_raw("</span>");
         }
+    }
+}
+
+/// Emit the visible content of a semantic field.
+///
+/// Prefers formatted `runs` when available; falls back to plain escaped text.
+fn emit_sf_content(sf: &SemanticField, fallback: &str, buf: &mut HtmlBuffer) {
+    if !sf.runs.is_empty() {
+        for run in &sf.runs {
+            run_to_html(run, buf);
+        }
+    } else {
+        buf.push_text(fallback);
     }
 }
 
@@ -1394,12 +1413,13 @@ mod tests {
 
     #[test]
     fn semantic_ref_renders_as_internal_link() {
+        use rtfkit_core::SemanticField;
         let para = Paragraph {
             alignment: Alignment::Left,
-            inlines: vec![Inline::SemanticField(SemanticFieldRef::Ref {
+            inlines: vec![Inline::SemanticField(SemanticField::new(SemanticFieldRef::Ref {
                 target: "sec_intro".to_string(),
                 fallback_text: Some("Introduction".to_string()),
-            })],
+            }))],
             shading: None,
         };
         let mut buf = HtmlBuffer::new();

@@ -35,9 +35,10 @@ use std::collections::{BTreeMap, HashSet};
 
 use rtfkit_core::{
     Alignment, BookmarkAnchor, Color, GeneratedBlockKind, Hyperlink, HyperlinkTarget, Inline,
-    NoteKind, NoteRef, PageFieldRef, PageNumberFormat, Paragraph, Run, SemanticFieldRef, Shading,
-    ShadingPattern, ShadingRenderPolicy, TocOptions, extract_heading_plain_text,
-    infer_heading_level, percent_pattern_density, resolve_shading_fill_color,
+    NoteKind, NoteRef, PageFieldRef, PageNumberFormat, Paragraph, Run, SemanticField,
+    SemanticFieldRef, Shading, ShadingPattern, ShadingRenderPolicy, TocOptions,
+    extract_heading_plain_text, infer_heading_level, percent_pattern_density,
+    resolve_shading_fill_color,
 };
 
 use super::MappingWarning;
@@ -235,12 +236,12 @@ fn map_inlines(
                 }
                 result.push_str(&map_page_field_ref(page_field, warnings, context));
             }
-            Inline::SemanticField(field) => {
+            Inline::SemanticField(sf) => {
                 if !pending_runs.is_empty() {
                     result.push_str(&map_runs(&pending_runs, warnings));
                     pending_runs.clear();
                 }
-                result.push_str(&map_semantic_field_ref(field, warnings, context));
+                result.push_str(&map_semantic_field(sf, warnings, context));
             }
             Inline::GeneratedBlockMarker(kind) => {
                 if !pending_runs.is_empty() {
@@ -405,12 +406,12 @@ fn map_page_field_ref(
     }
 }
 
-fn map_semantic_field_ref(
-    field: &SemanticFieldRef,
+fn map_semantic_field(
+    sf: &SemanticField,
     warnings: &mut Vec<MappingWarning>,
     context: &ParagraphMapContext<'_>,
 ) -> String {
-    match field {
+    match &sf.reference {
         SemanticFieldRef::Ref {
             target,
             fallback_text,
@@ -420,37 +421,64 @@ fn map_semantic_field_ref(
             fallback_text,
         } => {
             let label = sanitize_typst_label(target);
-            let display = fallback_text.as_deref().unwrap_or(target.as_str());
-            if let Some(known) = context.known_bookmarks
-                && known.contains(&label)
-            {
-                return format!("#link(<{label}>)[{}]", escape_typst_text(display));
+            let display = if !sf.runs.is_empty() {
+                map_runs(&sf.runs, warnings)
+            } else {
+                escape_typst_text(fallback_text.as_deref().unwrap_or(target.as_str()))
+            };
+            // Use core resolution state; fall back to known_bookmarks for label validation.
+            let is_resolved = sf.resolved
+                || context
+                    .known_bookmarks
+                    .is_some_and(|known| known.contains(&label));
+            if is_resolved {
+                format!("#link(<{label}>)[{display}]")
+            } else {
+                warnings.push(MappingWarning::PartialSupport {
+                    feature: "unresolved_cross_reference".into(),
+                    reason: format!(
+                        "Cross-reference target '{target}' not found; using fallback text"
+                    ),
+                });
+                display
             }
-            warnings.push(MappingWarning::PartialSupport {
-                feature: "unresolved_cross_reference".into(),
-                reason: format!("Cross-reference target '{target}' not found; using fallback text"),
-            });
-            escape_typst_text(display)
         }
         SemanticFieldRef::Sequence {
             identifier,
             fallback_text,
-        } => escape_typst_text(fallback_text.as_deref().unwrap_or(identifier.as_str())),
+        } => {
+            if !sf.runs.is_empty() {
+                map_runs(&sf.runs, warnings)
+            } else {
+                escape_typst_text(fallback_text.as_deref().unwrap_or(identifier.as_str()))
+            }
+        }
         SemanticFieldRef::DocProperty {
             name,
             fallback_text,
-        } => escape_typst_text(fallback_text.as_deref().unwrap_or(name.as_str())),
+        } => {
+            if !sf.runs.is_empty() {
+                map_runs(&sf.runs, warnings)
+            } else {
+                escape_typst_text(fallback_text.as_deref().unwrap_or(name.as_str()))
+            }
+        }
         SemanticFieldRef::MergeField {
             name,
             fallback_text,
         } => {
+            let text = if !sf.runs.is_empty() {
+                map_runs(&sf.runs, warnings)
+            } else {
+                escape_typst_text(fallback_text.as_deref().unwrap_or(name.as_str()))
+            };
             warnings.push(MappingWarning::PartialSupport {
                 feature: "mergefield".into(),
                 reason:
                     "Mail-merge dynamic evaluation is not available; rendering deterministic fallback"
                         .into(),
             });
-            escape_typst_text(fallback_text.as_deref().unwrap_or(name.as_str()))
+            text
         }
     }
 }

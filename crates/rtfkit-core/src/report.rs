@@ -337,6 +337,22 @@ pub enum Warning {
         /// Severity of this warning
         severity: WarningSeverity,
     },
+
+    /// A `REF` or `NOTEREF` cross-reference target could not be found in the document.
+    ///
+    /// The visible fallback text (from `\\fldrslt`) is preserved in the output.
+    /// Writers should emit the fallback content without generating a broken link.
+    ///
+    /// # Strict-Mode Behavior
+    ///
+    /// This is a **cosmetic degradation** warning and does NOT cause strict mode to fail.
+    /// The visible result text is preserved; only the navigable link is lost.
+    UnresolvedCrossReference {
+        /// The bookmark target name that could not be resolved.
+        target: String,
+        /// Severity of this warning.
+        severity: WarningSeverity,
+    },
 }
 
 impl Warning {
@@ -477,6 +493,14 @@ impl Warning {
         }
     }
 
+    /// Creates a new `UnresolvedCrossReference` warning.
+    pub fn unresolved_cross_reference(target: impl Into<String>) -> Self {
+        Warning::UnresolvedCrossReference {
+            target: target.into(),
+            severity: WarningSeverity::Warning,
+        }
+    }
+
     /// Returns the severity of this warning.
     pub fn severity(&self) -> WarningSeverity {
         match self {
@@ -497,6 +521,7 @@ impl Warning {
             Warning::UnsupportedTocSwitch { severity, .. } => *severity,
             Warning::UnresolvedPageReference { severity, .. } => *severity,
             Warning::SectionNumberingFallback { severity, .. } => *severity,
+            Warning::UnresolvedCrossReference { severity, .. } => *severity,
         }
     }
 }
@@ -818,6 +843,16 @@ impl ReportBuilder {
         if self.can_add_warning() {
             self.warnings
                 .push(Warning::section_numbering_fallback(reason));
+        }
+    }
+
+    /// Records an unresolved cross-reference warning.
+    ///
+    /// If the warning count limit has been reached, this is a no-op.
+    pub fn unresolved_cross_reference(&mut self, target: &str) {
+        if self.can_add_warning() {
+            self.warnings
+                .push(Warning::unresolved_cross_reference(target));
         }
     }
 

@@ -795,6 +795,9 @@ fn print_report_text(report: &Report) {
                 Warning::SectionNumberingFallback { reason, .. } => {
                     println!("  - Section numbering fallback: {}", reason);
                 }
+                Warning::UnresolvedCrossReference { target, .. } => {
+                    println!("  - Unresolved cross-reference: {}", target);
+                }
             }
         }
     }

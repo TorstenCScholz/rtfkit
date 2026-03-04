@@ -41,6 +41,12 @@ pub fn parse_pipeline(
 
     super::finalize::finalize_document(&mut state);
 
+    // Resolve REF/NOTEREF cross-references after all BookmarkAnchors are placed.
+    super::finalize::resolve_semantic_cross_references(
+        &mut state.document,
+        &mut state.report_builder,
+    );
+
     if let Some(err) = state.hard_failure.take() {
         return Err(ConversionError::Parse(err));
     }

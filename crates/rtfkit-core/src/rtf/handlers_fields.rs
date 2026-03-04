@@ -5,8 +5,8 @@
 
 use super::state::RuntimeState;
 use crate::{
-    BookmarkAnchor, GeneratedBlockKind, HyperlinkTarget, Inline, PageFieldRef, PageNumberFormat,
-    SemanticFieldRef, TocOptions,
+    BookmarkAnchor, GeneratedBlockKind, HyperlinkTarget, Inline, PageFieldRef, Run,
+    SemanticField, SemanticFieldRef,
 };
 
 /// Capture a control word as literal fldinst instruction content.
@@ -167,19 +167,9 @@ pub fn process_field_group_end(state: &mut RuntimeState) {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-enum ParsedFieldInstruction {
-    Hyperlink(HyperlinkTarget),
-    PageField(PageFieldRef),
-    SemanticField(SemanticFieldRef),
-    Toc {
-        options: TocOptions,
-        unsupported_switches: Vec<String>,
-    },
-}
-
 fn finalize_field(state: &mut RuntimeState) {
     use crate::Hyperlink;
+    use super::field_instruction::{ParsedFieldInstruction, parse_field_instruction};
 
     if state.fields.parsing_fldrslt && !state.current_text.is_empty() {
         super::handlers_text::flush_current_text_as_field_run(state);
@@ -198,7 +188,7 @@ fn finalize_field(state: &mut RuntimeState) {
             };
 
             if valid {
-                let mut pending_runs: Vec<crate::Run> = Vec::new();
+                let mut pending_runs: Vec<Run> = Vec::new();
                 let mut emitted_hyperlink_segment = false;
                 let mut saw_non_run_inline = false;
                 let result_inlines: Vec<Inline> =
@@ -282,20 +272,19 @@ fn finalize_field(state: &mut RuntimeState) {
                 .push(Inline::PageField(page_field));
             state.fields.field_result_inlines.clear();
         }
-        Some(ParsedFieldInstruction::SemanticField(mut semantic_field)) => {
-            if had_result_content {
-                let text = extract_visible_text_from_inlines(&state.fields.field_result_inlines);
-                let trimmed = text.trim();
-                if !trimmed.is_empty() {
-                    set_semantic_fallback_text(&mut semantic_field, trimmed.to_string());
-                }
-            }
+        Some(ParsedFieldInstruction::SemanticField(mut semantic_ref)) => {
+            // Build SemanticField struct projecting runs from fldrslt.
+            let sf = build_semantic_field(&mut semantic_ref, &mut state.fields.field_result_inlines);
+
+            let is_merge = matches!(sf.reference, SemanticFieldRef::MergeField { .. });
+
             state.capture_paragraph_alignment_if_start();
             state
                 .current_paragraph
                 .inlines
-                .push(Inline::SemanticField(semantic_field.clone()));
-            if matches!(semantic_field, SemanticFieldRef::MergeField { .. }) {
+                .push(Inline::SemanticField(sf));
+
+            if is_merge {
                 state
                     .report_builder
                     .unsupported_field("Unsupported field type: MERGEFIELD (result preserved)");
@@ -376,347 +365,79 @@ fn finalize_field(state: &mut RuntimeState) {
     }
 }
 
+/// Project `field_result_inlines` into a `SemanticField` struct, preserving run formatting.
+///
+/// Non-run inlines (BookmarkAnchor, nested fields, etc.) are counted and flagged
+/// via `has_non_run_content`; their plain text is recorded as `fallback_text` for
+/// legacy compatibility.
+fn build_semantic_field(
+    reference: &mut SemanticFieldRef,
+    result_inlines: &mut Vec<Inline>,
+) -> SemanticField {
+    let mut runs: Vec<Run> = Vec::new();
+    let mut has_non_run_content = false;
+
+    for inline in result_inlines.iter() {
+        match inline {
+            Inline::Run(run) => runs.push(run.clone()),
+            _ => {
+                has_non_run_content = true;
+            }
+        }
+    }
+
+    // Keep fallback_text populated for consumers that have not yet adopted runs.
+    if !runs.is_empty() && get_fallback_text(reference).is_none() {
+        let text: String = runs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>().join("");
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            set_fallback_text(reference, trimmed.to_string());
+        }
+    } else if get_fallback_text(reference).is_none() {
+        let text = extract_visible_text_from_inlines(result_inlines);
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            set_fallback_text(reference, trimmed.to_string());
+        }
+    }
+
+    SemanticField {
+        reference: reference.clone(),
+        runs,
+        has_non_run_content,
+        resolved: true, // may be set false by core cross-reference resolver later
+    }
+}
+
+fn get_fallback_text(field_ref: &SemanticFieldRef) -> Option<&str> {
+    match field_ref {
+        SemanticFieldRef::Ref { fallback_text, .. }
+        | SemanticFieldRef::NoteRef { fallback_text, .. }
+        | SemanticFieldRef::Sequence { fallback_text, .. }
+        | SemanticFieldRef::DocProperty { fallback_text, .. }
+        | SemanticFieldRef::MergeField { fallback_text, .. } => fallback_text.as_deref(),
+    }
+}
+
+fn set_fallback_text(field_ref: &mut SemanticFieldRef, text: String) {
+    match field_ref {
+        SemanticFieldRef::Ref { fallback_text, .. }
+        | SemanticFieldRef::NoteRef { fallback_text, .. }
+        | SemanticFieldRef::Sequence { fallback_text, .. }
+        | SemanticFieldRef::DocProperty { fallback_text, .. }
+        | SemanticFieldRef::MergeField { fallback_text, .. } => {
+            if fallback_text.is_none() {
+                *fallback_text = Some(text);
+            }
+        }
+    }
+}
+
 pub(crate) fn is_supported_hyperlink_url(url: &str) -> bool {
     let lowered = url.trim().to_ascii_lowercase();
     lowered.starts_with("http://")
         || lowered.starts_with("https://")
         || lowered.starts_with("mailto:")
-}
-
-/// Parse a HYPERLINK field instruction into a typed target.
-///
-/// Handles:
-/// - `HYPERLINK "https://example.com"` → `ExternalUrl`
-/// - `HYPERLINK \l "bookmark_name"` → `InternalBookmark`
-///
-/// Returns `None` if the instruction is not a HYPERLINK or cannot be parsed.
-pub(crate) fn parse_hyperlink_target(instruction: &str) -> Option<HyperlinkTarget> {
-    let text = instruction.trim();
-
-    let upper = text.to_ascii_uppercase();
-    if !upper.starts_with("HYPERLINK") {
-        return None;
-    }
-    if text.len() > "HYPERLINK".len()
-        && !text["HYPERLINK".len()..]
-            .chars()
-            .next()
-            .map(|c| c.is_whitespace())
-            .unwrap_or(false)
-    {
-        return None;
-    }
-
-    let rest = text["HYPERLINK".len()..].trim_start();
-    let tokens = tokenize_hyperlink_instruction(rest);
-
-    let mut idx = 0usize;
-    while idx < tokens.len() {
-        match &tokens[idx] {
-            HyperlinkToken::Switch(name) => {
-                if name.eq_ignore_ascii_case("l") {
-                    if let Some(value) = tokens.get(idx + 1).and_then(HyperlinkToken::as_value) {
-                        return Some(HyperlinkTarget::InternalBookmark(value.to_string()));
-                    }
-                    return None;
-                }
-
-                if switch_takes_value(name) {
-                    idx += 1;
-                    if idx < tokens.len() && tokens[idx].as_value().is_some() {
-                        idx += 1;
-                        continue;
-                    }
-                }
-                idx += 1;
-            }
-            token => {
-                if let Some(url) = token.as_value() {
-                    return Some(HyperlinkTarget::ExternalUrl(url.to_string()));
-                }
-                idx += 1;
-            }
-        }
-    }
-
-    None
-}
-
-fn parse_field_instruction(instruction: &str) -> Option<ParsedFieldInstruction> {
-    if instruction.is_empty() {
-        return None;
-    }
-
-    if let Some(target) = parse_hyperlink_target(instruction) {
-        return Some(ParsedFieldInstruction::Hyperlink(target));
-    }
-
-    if let Some(field_ref) = parse_semantic_field(instruction) {
-        return Some(ParsedFieldInstruction::SemanticField(field_ref));
-    }
-
-    parse_page_field(instruction)
-        .map(ParsedFieldInstruction::PageField)
-        .or_else(|| parse_toc_field(instruction))
-}
-
-fn parse_semantic_field(instruction: &str) -> Option<SemanticFieldRef> {
-    let (keyword, rest) = parse_field_keyword_and_rest(instruction)?;
-    let tokens = tokenize_field_words(rest);
-    let args = positional_field_arguments(&tokens);
-    let normalized_keyword = keyword.to_ascii_uppercase();
-    match normalized_keyword.as_str() {
-        "AUTHOR" | "TITLE" | "SUBJECT" | "KEYWORDS" => Some(SemanticFieldRef::DocProperty {
-            name: normalized_keyword,
-            fallback_text: None,
-        }),
-        "REF" => Some(SemanticFieldRef::Ref {
-            target: args.first()?.to_string(),
-            fallback_text: None,
-        }),
-        "NOTEREF" => Some(SemanticFieldRef::NoteRef {
-            target: args.first()?.to_string(),
-            fallback_text: None,
-        }),
-        "SEQ" => Some(SemanticFieldRef::Sequence {
-            identifier: args.first()?.to_string(),
-            fallback_text: None,
-        }),
-        "DOCPROPERTY" => Some(SemanticFieldRef::DocProperty {
-            name: args.first()?.to_string(),
-            fallback_text: None,
-        }),
-        "MERGEFIELD" => Some(SemanticFieldRef::MergeField {
-            name: args.first()?.to_string(),
-            fallback_text: None,
-        }),
-        _ => None,
-    }
-}
-
-fn parse_page_field(instruction: &str) -> Option<PageFieldRef> {
-    let text = instruction.trim();
-    let upper = text.to_ascii_uppercase();
-
-    let format = parse_page_number_format(text);
-
-    if upper == "PAGE" || upper.starts_with("PAGE ") {
-        return Some(PageFieldRef::CurrentPage { format });
-    }
-
-    if upper == "NUMPAGES" || upper.starts_with("NUMPAGES ") {
-        return Some(PageFieldRef::TotalPages { format });
-    }
-
-    if upper == "SECTIONPAGES" || upper.starts_with("SECTIONPAGES ") {
-        return Some(PageFieldRef::SectionPages { format });
-    }
-
-    if upper == "PAGEREF" || upper.starts_with("PAGEREF ") {
-        let rest = text["PAGEREF".len()..].trim_start();
-        let tokens = tokenize_field_words(rest);
-        let mut idx = 0usize;
-        while idx < tokens.len() {
-            let token = &tokens[idx];
-            if token.starts_with('\\') {
-                // Skip switch values where applicable.
-                if matches!(token.as_str(), "\\p" | "\\h") {
-                    idx += 1;
-                    continue;
-                }
-                idx += 1;
-                continue;
-            }
-            return Some(PageFieldRef::PageRef {
-                target: token.to_string(),
-                format,
-                fallback_text: None,
-            });
-        }
-    }
-
-    None
-}
-
-fn parse_toc_field(instruction: &str) -> Option<ParsedFieldInstruction> {
-    let text = instruction.trim();
-    let upper = text.to_ascii_uppercase();
-    if upper != "TOC" && !upper.starts_with("TOC ") {
-        return None;
-    }
-
-    let rest = text["TOC".len()..].trim_start();
-    let tokens = tokenize_field_words(rest);
-    let mut options = TocOptions::default();
-    let mut unsupported_switches = Vec::new();
-
-    let mut idx = 0usize;
-    while idx < tokens.len() {
-        let token = &tokens[idx];
-        if !token.starts_with('\\') {
-            idx += 1;
-            continue;
-        }
-
-        let switch = token.trim_start_matches('\\');
-        match switch.to_ascii_lowercase().as_str() {
-            "o" => {
-                if let Some(value) = tokens.get(idx + 1) {
-                    if let Some(levels) = parse_toc_levels(value) {
-                        options.levels = Some(levels);
-                    } else {
-                        unsupported_switches.push(format!("o={value}"));
-                    }
-                    idx += 2;
-                    continue;
-                }
-                unsupported_switches.push("o".to_string());
-            }
-            "h" => {
-                options.hyperlinks = true;
-            }
-            "*" | "mergeformat" => {
-                // Common formatting switch, ignored intentionally.
-            }
-            other => {
-                unsupported_switches.push(other.to_string());
-            }
-        }
-        idx += 1;
-    }
-
-    Some(ParsedFieldInstruction::Toc {
-        options,
-        unsupported_switches,
-    })
-}
-
-fn parse_toc_levels(value: &str) -> Option<(u8, u8)> {
-    let mut parts = value.split('-');
-    let start = parts.next()?.parse::<u8>().ok()?;
-    let end = parts.next()?.parse::<u8>().ok()?;
-    if parts.next().is_some() || start == 0 || end == 0 || start > end {
-        return None;
-    }
-    Some((start, end))
-}
-
-fn parse_page_number_format(instruction: &str) -> PageNumberFormat {
-    // Handle the most common field format switch patterns.
-    if instruction.contains(r"\* roman") {
-        return PageNumberFormat::RomanLower;
-    }
-    if instruction.contains(r"\* ROMAN") {
-        return PageNumberFormat::RomanUpper;
-    }
-    PageNumberFormat::Arabic
-}
-
-fn parse_field_keyword_and_rest(instruction: &str) -> Option<(&str, &str)> {
-    let text = instruction.trim();
-    if text.is_empty() {
-        return None;
-    }
-    let mut split = text.splitn(2, char::is_whitespace);
-    let keyword = split.next()?;
-    let rest = split.next().unwrap_or("");
-    Some((keyword, rest))
-}
-
-fn positional_field_arguments(tokens: &[String]) -> Vec<&str> {
-    let mut args = Vec::new();
-    let mut idx = 0usize;
-    while idx < tokens.len() {
-        let token = tokens[idx].as_str();
-        if token.starts_with('\\') {
-            idx += 1;
-            if idx < tokens.len() && !tokens[idx].starts_with('\\') {
-                idx += 1;
-            }
-            continue;
-        }
-        args.push(token);
-        idx += 1;
-    }
-    args
-}
-
-fn set_semantic_fallback_text(field_ref: &mut SemanticFieldRef, fallback_text: String) {
-    match field_ref {
-        SemanticFieldRef::Ref {
-            fallback_text: existing,
-            ..
-        }
-        | SemanticFieldRef::NoteRef {
-            fallback_text: existing,
-            ..
-        }
-        | SemanticFieldRef::Sequence {
-            fallback_text: existing,
-            ..
-        }
-        | SemanticFieldRef::DocProperty {
-            fallback_text: existing,
-            ..
-        }
-        | SemanticFieldRef::MergeField {
-            fallback_text: existing,
-            ..
-        } => {
-            if existing.is_none() {
-                *existing = Some(fallback_text);
-            }
-        }
-    }
-}
-
-fn tokenize_field_words(input: &str) -> Vec<String> {
-    let mut tokens = Vec::new();
-    let mut chars = input.chars().peekable();
-
-    while let Some(ch) = chars.peek().copied() {
-        if ch.is_whitespace() {
-            chars.next();
-            continue;
-        }
-
-        if ch == '"' {
-            chars.next();
-            let mut value = String::new();
-            let mut escaped = false;
-            for next in chars.by_ref() {
-                if escaped {
-                    value.push(next);
-                    escaped = false;
-                    continue;
-                }
-                if next == '\\' {
-                    escaped = true;
-                    continue;
-                }
-                if next == '"' {
-                    break;
-                }
-                value.push(next);
-            }
-            tokens.push(value);
-            continue;
-        }
-
-        let mut token = String::new();
-        while let Some(next) = chars.peek().copied() {
-            if next.is_whitespace() {
-                break;
-            }
-            token.push(next);
-            chars.next();
-        }
-        if !token.is_empty() {
-            tokens.push(token);
-        }
-    }
-
-    tokens
 }
 
 fn extract_visible_text_from_inlines(inlines: &[Inline]) -> String {
@@ -739,146 +460,62 @@ fn extract_visible_text_from_inlines(inlines: &[Inline]) -> String {
     out
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum HyperlinkToken {
-    Switch(String),
-    Value(String),
-}
-
-impl HyperlinkToken {
-    fn as_value(&self) -> Option<&str> {
-        match self {
-            HyperlinkToken::Value(value) => Some(value.as_str()),
-            HyperlinkToken::Switch(_) => None,
-        }
-    }
-}
-
-fn switch_takes_value(name: &str) -> bool {
-    // Common HYPERLINK switches with following value payload.
-    matches!(name.to_ascii_lowercase().as_str(), "o" | "m" | "n" | "t")
-}
-
-fn tokenize_hyperlink_instruction(input: &str) -> Vec<HyperlinkToken> {
-    let mut tokens = Vec::new();
-    let mut chars = input.chars().peekable();
-
-    while let Some(ch) = chars.peek().copied() {
-        if ch.is_whitespace() {
-            chars.next();
-            continue;
-        }
-
-        if ch == '\\' {
-            chars.next();
-            let mut switch_name = String::new();
-            while let Some(next) = chars.peek().copied() {
-                if next.is_ascii_alphabetic() {
-                    switch_name.push(next);
-                    chars.next();
-                } else {
-                    break;
-                }
-            }
-            if !switch_name.is_empty() {
-                tokens.push(HyperlinkToken::Switch(switch_name));
-                continue;
-            }
-        }
-
-        if ch == '"' {
-            chars.next();
-            let mut value = String::new();
-            let mut escaped = false;
-            for next in chars.by_ref() {
-                if escaped {
-                    value.push(next);
-                    escaped = false;
-                    continue;
-                }
-                if next == '\\' {
-                    escaped = true;
-                    continue;
-                }
-                if next == '"' {
-                    break;
-                }
-                value.push(next);
-            }
-            tokens.push(HyperlinkToken::Value(value));
-            continue;
-        }
-
-        let mut value = String::new();
-        while let Some(next) = chars.peek().copied() {
-            if next.is_whitespace() {
-                break;
-            }
-            value.push(next);
-            chars.next();
-        }
-        if !value.is_empty() {
-            tokens.push(HyperlinkToken::Value(value));
-        }
-    }
-
-    tokens
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::HyperlinkTarget;
+    use super::super::field_instruction::{parse_hyperlink, parse_semantic_field};
 
     #[test]
     fn test_parse_hyperlink_target_external_url() {
         assert_eq!(
-            parse_hyperlink_target(r#"HYPERLINK "https://example.com""#),
+            parse_hyperlink(r#"HYPERLINK "https://example.com""#),
             Some(HyperlinkTarget::ExternalUrl(
                 "https://example.com".to_string()
             ))
         );
         assert_eq!(
-            parse_hyperlink_target(r#"HYPERLINK "https://test.com/path""#),
+            parse_hyperlink(r#"HYPERLINK "https://test.com/path""#),
             Some(HyperlinkTarget::ExternalUrl(
                 "https://test.com/path".to_string()
             ))
         );
         assert_eq!(
-            parse_hyperlink_target(r#"HYPERLINK \o "tooltip" "https://example.com""#),
+            parse_hyperlink(r#"HYPERLINK \o "tooltip" "https://example.com""#),
             Some(HyperlinkTarget::ExternalUrl(
                 "https://example.com".to_string()
             ))
         );
         assert_eq!(
-            parse_hyperlink_target(r#"HYPERLINK https://example.com"#),
+            parse_hyperlink(r#"HYPERLINK https://example.com"#),
             Some(HyperlinkTarget::ExternalUrl(
                 "https://example.com".to_string()
             ))
         );
-        assert_eq!(parse_hyperlink_target("HYPERLINK"), None);
+        assert_eq!(parse_hyperlink("HYPERLINK"), None);
         assert_eq!(
-            parse_hyperlink_target("HYPERLINK noquote"),
+            parse_hyperlink("HYPERLINK noquote"),
             Some(HyperlinkTarget::ExternalUrl("noquote".to_string()))
         );
-        assert_eq!(parse_hyperlink_target("DATE"), None);
+        assert_eq!(parse_hyperlink("DATE"), None);
     }
 
     #[test]
     fn test_parse_hyperlink_target_internal_bookmark() {
         assert_eq!(
-            parse_hyperlink_target(r#"HYPERLINK \l "section1""#),
+            parse_hyperlink(r#"HYPERLINK \l "section1""#),
             Some(HyperlinkTarget::InternalBookmark("section1".to_string()))
         );
         assert_eq!(
-            parse_hyperlink_target(r#"HYPERLINK \l "my bookmark""#),
+            parse_hyperlink(r#"HYPERLINK \l "my bookmark""#),
             Some(HyperlinkTarget::InternalBookmark("my bookmark".to_string()))
         );
         assert_eq!(
-            parse_hyperlink_target(r#"HYPERLINK \l noquote"#),
+            parse_hyperlink(r#"HYPERLINK \l noquote"#),
             Some(HyperlinkTarget::InternalBookmark("noquote".to_string()))
         );
         assert_eq!(
-            parse_hyperlink_target(r#"HYPERLINK \o "tip" \l "section1""#),
+            parse_hyperlink(r#"HYPERLINK \o "tip" \l "section1""#),
             Some(HyperlinkTarget::InternalBookmark("section1".to_string()))
         );
     }
@@ -896,6 +533,18 @@ mod tests {
     fn test_parse_semantic_ref_field() {
         assert_eq!(
             parse_semantic_field(r#"REF myBookmark \h"#),
+            Some(SemanticFieldRef::Ref {
+                target: "myBookmark".to_string(),
+                fallback_text: None
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_semantic_ref_switch_before_arg() {
+        // New test: flag switch before positional arg must not skip the arg.
+        assert_eq!(
+            parse_semantic_field(r#"REF \h myBookmark"#),
             Some(SemanticFieldRef::Ref {
                 target: "myBookmark".to_string(),
                 fallback_text: None

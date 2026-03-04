@@ -767,7 +767,7 @@ pub enum PageNumberFormat {
 
 /// Normalized page field references parsed from RTF field instructions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PageFieldRef {
     /// Current page number (`PAGE`).
     CurrentPage {
@@ -802,7 +802,7 @@ pub enum PageFieldRef {
 
 /// Normalized semantic field references parsed from RTF field instructions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SemanticFieldRef {
     /// Cross-reference to a bookmark target (`REF <bookmark>`).
     Ref {
@@ -844,6 +844,49 @@ pub enum SemanticFieldRef {
         #[serde(skip_serializing_if = "Option::is_none")]
         fallback_text: Option<String>,
     },
+}
+
+/// A semantic field inline element, preserving both field identity and visible formatting.
+///
+/// Wraps the parsed field instruction (`reference`) together with the formatted
+/// runs from `\\fldrslt` so that downstream writers can render with full fidelity.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SemanticField {
+    /// The parsed field instruction identifying field type and parameters.
+    pub reference: SemanticFieldRef,
+    /// Visible runs from `\\fldrslt` with all formatting preserved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runs: Vec<Run>,
+    /// True when `\\fldrslt` contained non-run content (e.g. nested hyperlinks)
+    /// that could not be projected into `runs` without loss.
+    #[serde(default)]
+    pub has_non_run_content: bool,
+    /// Resolution state for cross-reference fields (`REF`, `NOTEREF`).
+    ///
+    /// `true` when the bookmark target is present in the document (or field type
+    /// is not a cross-reference). `false` when the target is missing.
+    #[serde(default = "bool_true", skip_serializing_if = "is_true")]
+    pub resolved: bool,
+}
+
+fn bool_true() -> bool {
+    true
+}
+
+fn is_true(v: &bool) -> bool {
+    *v
+}
+
+impl SemanticField {
+    /// Create a new `SemanticField` from a reference with no result runs.
+    pub fn new(reference: SemanticFieldRef) -> Self {
+        Self {
+            reference,
+            runs: Vec::new(),
+            has_non_run_content: false,
+            resolved: true,
+        }
+    }
 }
 
 /// Table-of-contents generation options.
@@ -981,8 +1024,8 @@ pub enum Inline {
     NoteRef(NoteRef),
     /// A semantic page-management field reference.
     PageField(PageFieldRef),
-    /// A semantic non-page field reference.
-    SemanticField(SemanticFieldRef),
+    /// A semantic non-page field reference with preserved visible formatting.
+    SemanticField(SemanticField),
     /// Inline marker requesting generated block insertion at this location.
     GeneratedBlockMarker(GeneratedBlockKind),
 }

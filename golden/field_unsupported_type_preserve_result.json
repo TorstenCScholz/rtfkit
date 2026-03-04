@@ -60,7 +60,7 @@
         },
         {
           "type": "page_field",
-          "type": "total_pages",
+          "kind": "total_pages",
           "format": "arabic"
         },
         {
