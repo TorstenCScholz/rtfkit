@@ -4,6 +4,7 @@ Open-source RTF toolkit and RTF-to-PDF converter with a CLI-first workflow.
 Convert `.rtf` files to PDF, DOCX, or HTML with a single command.
 
 [![CI](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml/badge.svg)](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml)
+[![Python Bindings](https://github.com/TorstenCScholz/rtfkit/actions/workflows/bindings-python.yml/badge.svg)](https://github.com/TorstenCScholz/rtfkit/actions/workflows/bindings-python.yml)
 
 ## Current Status (Phase 6)
 

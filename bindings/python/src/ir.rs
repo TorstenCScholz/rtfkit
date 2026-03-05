@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 use rtfkit_core::{
-    Block, CellMerge, Document, Hyperlink, ImageBlock, Inline, ListBlock, ListItem, Paragraph,
-    Run, Shading, TableBlock, TableCell, TableRow,
+    Block, CellMerge, Document, Hyperlink, HyperlinkTarget, ImageBlock, Inline, ListBlock,
+    ListItem, Paragraph, Run, Shading, TableBlock, TableCell, TableRow,
 };
 
 use crate::convert;
@@ -180,8 +180,19 @@ pub struct PyHyperlink {
 #[pymethods]
 impl PyHyperlink {
     #[getter]
-    fn url(&self) -> &str {
-        &self.inner.url
+    fn target(&self) -> &str {
+        match &self.inner.target {
+            HyperlinkTarget::ExternalUrl(url) => url.as_str(),
+            HyperlinkTarget::InternalBookmark(name) => name.as_str(),
+        }
+    }
+
+    #[getter]
+    fn target_type(&self) -> &str {
+        match &self.inner.target {
+            HyperlinkTarget::ExternalUrl(_) => "external_url",
+            HyperlinkTarget::InternalBookmark(_) => "internal_bookmark",
+        }
     }
 
     #[getter]
@@ -201,7 +212,7 @@ impl PyHyperlink {
     }
 
     fn __repr__(&self) -> String {
-        format!("Hyperlink(url={:?}, runs={})", self.inner.url, self.inner.runs.len())
+        format!("Hyperlink(target={:?}, runs={})", self.target(), self.inner.runs.len())
     }
 
     fn to_dict(&self, py: Python<'_>) -> PyResult<PyObject> {
@@ -629,6 +640,16 @@ pub fn inline_to_py(py: Python<'_>, inline: &Inline) -> PyResult<PyObject> {
     match inline {
         Inline::Run(r) => Ok(Py::new(py, PyRun { inner: r.clone() })?.into_any().into()),
         Inline::Hyperlink(h) => Ok(Py::new(py, PyHyperlink { inner: h.clone() })?.into_any().into()),
+        Inline::SemanticField(sf) if !sf.runs.is_empty() => {
+            // Expose the first visible run as a plain Run; remaining runs are intentionally dropped
+            // at the Python boundary until dedicated SemanticField bindings are added.
+            Ok(Py::new(py, PyRun { inner: sf.runs[0].clone() })?.into_any().into())
+        }
+        _ => {
+            // BookmarkAnchor, NoteRef, PageField, SemanticField (no runs), GeneratedBlockMarker
+            // have no direct Python representation yet; surface as an empty run.
+            Ok(Py::new(py, PyRun { inner: Run::new("") })?.into_any().into())
+        }
     }
 }
 
