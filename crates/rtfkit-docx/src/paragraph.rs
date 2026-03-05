@@ -86,13 +86,16 @@ pub(crate) fn convert_paragraph_with_numbering(
 }
 
 /// Add a semantic field to a paragraph, using formatted runs when available.
-fn add_semantic_field_to_para(
-    mut p: DocxParagraph,
-    sf: &SemanticField,
-) -> DocxParagraph {
+fn add_semantic_field_to_para(mut p: DocxParagraph, sf: &SemanticField) -> DocxParagraph {
     match &sf.reference {
-        SemanticFieldRef::Ref { target, fallback_text }
-        | SemanticFieldRef::NoteRef { target, fallback_text } => {
+        SemanticFieldRef::Ref {
+            target,
+            fallback_text,
+        }
+        | SemanticFieldRef::NoteRef {
+            target,
+            fallback_text,
+        } => {
             if sf.resolved {
                 let mut link = DocxHyperlink::new(target, HyperlinkType::Anchor);
                 if sf.runs.is_empty() {
@@ -116,12 +119,22 @@ fn add_semantic_field_to_para(
                 }
             }
         }
-        SemanticFieldRef::Sequence { identifier, fallback_text }
-        | SemanticFieldRef::DocProperty { name: identifier, fallback_text }
-        | SemanticFieldRef::MergeField { name: identifier, fallback_text } => {
+        SemanticFieldRef::Sequence {
+            identifier,
+            fallback_text,
+        }
+        | SemanticFieldRef::DocProperty {
+            name: identifier,
+            fallback_text,
+        }
+        | SemanticFieldRef::MergeField {
+            name: identifier,
+            fallback_text,
+        } => {
             if sf.runs.is_empty() {
                 p = p.add_run(
-                    DocxRun::new().add_text(fallback_text.as_deref().unwrap_or(identifier.as_str())),
+                    DocxRun::new()
+                        .add_text(fallback_text.as_deref().unwrap_or(identifier.as_str())),
                 );
             } else {
                 for run in &sf.runs {

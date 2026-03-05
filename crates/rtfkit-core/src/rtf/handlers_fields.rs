@@ -384,7 +384,7 @@ fn finalize_field(state: &mut RuntimeState) {
 /// legacy compatibility.
 fn build_semantic_field(
     reference: &mut SemanticFieldRef,
-    result_inlines: &mut Vec<Inline>,
+    result_inlines: &mut [Inline],
 ) -> SemanticField {
     let projection = project_semantic_result_inlines(result_inlines);
 

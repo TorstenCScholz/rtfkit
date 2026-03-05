@@ -35,7 +35,10 @@ fn collect_bookmark_names(doc: &Document) -> HashSet<String> {
         collect_from_block(block, &mut names);
     }
     if let Some(structure) = &doc.structure {
-        for block in structure.headers.default.iter()
+        for block in structure
+            .headers
+            .default
+            .iter()
             .chain(structure.headers.first.iter())
             .chain(structure.headers.even.iter())
             .chain(structure.footers.default.iter())
@@ -91,7 +94,7 @@ fn collect_from_inline(inline: &Inline, names: &mut HashSet<String>) {
 // =============================================================================
 
 fn resolve_blocks(
-    blocks: &mut Vec<Block>,
+    blocks: &mut [Block],
     bookmarks: &HashSet<String>,
     warned: &mut HashSet<String>,
     report: &mut ReportBuilder,
@@ -160,7 +163,7 @@ fn resolve_structure(
     warned: &mut HashSet<String>,
     report: &mut ReportBuilder,
 ) {
-    let channel_blocks: Vec<&mut Vec<Block>> = vec![
+    let channel_blocks: Vec<&mut [Block]> = vec![
         &mut structure.headers.default,
         &mut structure.headers.first,
         &mut structure.headers.even,

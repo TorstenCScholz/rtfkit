@@ -1416,10 +1416,12 @@ mod tests {
         use rtfkit_core::SemanticField;
         let para = Paragraph {
             alignment: Alignment::Left,
-            inlines: vec![Inline::SemanticField(SemanticField::new(SemanticFieldRef::Ref {
-                target: "sec_intro".to_string(),
-                fallback_text: Some("Introduction".to_string()),
-            }))],
+            inlines: vec![Inline::SemanticField(SemanticField::new(
+                SemanticFieldRef::Ref {
+                    target: "sec_intro".to_string(),
+                    fallback_text: Some("Introduction".to_string()),
+                },
+            ))],
             shading: None,
         };
         let mut buf = HtmlBuffer::new();

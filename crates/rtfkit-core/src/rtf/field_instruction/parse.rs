@@ -275,8 +275,7 @@ pub fn positional_args_with_spec(
     let mut idx = 0usize;
     while idx < tokens.len() {
         let token = tokens[idx].as_str();
-        if token.starts_with('\\') {
-            let switch_name = &token[1..];
+        if let Some(switch_name) = token.strip_prefix('\\') {
             idx += 1;
             if matches!(switch_kind(switch_name), SwitchKind::Value) {
                 // Value switch: skip the following value token if it is not itself a switch.
@@ -412,7 +411,9 @@ mod tests {
     fn test_hyperlink_external() {
         assert_eq!(
             parse_hyperlink(r#"HYPERLINK "https://example.com""#),
-            Some(HyperlinkTarget::ExternalUrl("https://example.com".to_string()))
+            Some(HyperlinkTarget::ExternalUrl(
+                "https://example.com".to_string()
+            ))
         );
     }
 

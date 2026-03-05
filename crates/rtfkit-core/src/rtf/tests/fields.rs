@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Extract the `SemanticFieldRef` from the first `Inline::SemanticField` in a paragraph.
-fn find_semantic_field_ref<'a>(doc: &'a crate::Document) -> Option<&'a SemanticFieldRef> {
+fn find_semantic_field_ref(doc: &crate::Document) -> Option<&SemanticFieldRef> {
     doc.blocks
         .iter()
         .filter_map(|b| match b {
@@ -27,7 +27,7 @@ fn find_semantic_field_ref<'a>(doc: &'a crate::Document) -> Option<&'a SemanticF
 }
 
 /// Extract the first `Inline::SemanticField` in a paragraph.
-fn find_semantic_field<'a>(doc: &'a crate::Document) -> Option<&'a SemanticField> {
+fn find_semantic_field(doc: &crate::Document) -> Option<&SemanticField> {
     doc.blocks
         .iter()
         .filter_map(|b| match b {
