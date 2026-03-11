@@ -533,6 +533,22 @@ mod tests {
     }
 
     #[test]
+    fn border_style_dotted_maps_to_dotted() {
+        assert!(matches!(
+            border_style_to_docx(IrBorderStyle::Dotted),
+            BorderType::Dotted
+        ));
+    }
+
+    #[test]
+    fn border_style_dashed_maps_to_dashed() {
+        assert!(matches!(
+            border_style_to_docx(IrBorderStyle::Dashed),
+            BorderType::Dashed
+        ));
+    }
+
+    #[test]
     fn convert_border_color_is_uppercase_hex() {
         let border = IrBorder {
             style: IrBorderStyle::Single,

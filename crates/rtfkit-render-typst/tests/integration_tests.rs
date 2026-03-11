@@ -190,6 +190,27 @@ fn test_render_table_to_pdf() {
     assert!(output.pdf_bytes.starts_with(b"%PDF-"));
 }
 
+#[test]
+fn test_table_border_style_variants_fixture_renders_without_double_partial_warning() {
+    let input = include_str!("../../../fixtures/table_borders_style_variants.rtf");
+    let (doc, _report) = parse(input).expect("fixture should parse");
+
+    let options = RenderOptions::default();
+    let result = document_to_pdf_with_warnings(&doc, &options);
+
+    assert!(result.is_ok(), "Failed to render: {:?}", result.err());
+    let output = result.unwrap();
+
+    assert!(output.pdf_bytes.starts_with(b"%PDF-"));
+    assert!(
+        !output
+            .warnings
+            .iter()
+            .any(|w| w.message == "partial_support_double_border_style"),
+        "double border should no longer emit partial support warning"
+    );
+}
+
 /// Test that a mixed document can be rendered.
 #[test]
 fn test_render_mixed_document_to_pdf() {

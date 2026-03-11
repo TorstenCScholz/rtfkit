@@ -5,7 +5,7 @@
 
 use rtfkit_core::{
     Alignment, Block, CellMerge, Document, ListBlock, ListItem, ListKind, Paragraph, Run,
-    TableBlock, TableCell, TableRow,
+    TableBlock, TableCell, TableRow, rtf::parse,
 };
 use rtfkit_render_typst::{RenderOptions, map_document};
 
@@ -263,6 +263,17 @@ fn test_snapshot_mixed_document() {
     let output = map_document(&doc, &options);
 
     assert_snapshot("mixed_document", &output.typst_source);
+}
+
+#[test]
+fn test_snapshot_table_border_style_variants_fixture() {
+    let input = include_str!("../../../fixtures/table_borders_style_variants.rtf");
+    let (doc, _report) = parse(input).expect("fixture should parse");
+
+    let options = RenderOptions::default();
+    let output = map_document(&doc, &options);
+
+    assert_snapshot("table_border_style_variants", &output.typst_source);
 }
 
 #[test]

@@ -51,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `\plain` does NOT reset paragraph shading (character-only reset)
 - Unresolved shading color indexes degrade gracefully without warnings (content preserved)
 - Pattern shading degraded to solid fill in HTML/Typst output with `PatternDegraded` info warning
+- PDF/Typst table border rendering now preserves style fidelity for `double`, `dotted`, and `dashed` borders:
+  - `double` uses dual-line rendering with visible separation (gutter overlays when available, inset layered strokes otherwise)
+  - `dotted` uses butt-capped short dash segments for square-dot appearance
+  - `dashed` uses explicit long-dash segments distinct from dotted patterns
 
 ### Migration Notes
 

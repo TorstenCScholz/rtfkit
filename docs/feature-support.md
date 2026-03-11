@@ -73,7 +73,7 @@ This document provides a comprehensive overview of current RTF feature support i
 | Row shading (`\trcbpatN`) | ✅ Supported | Default shading for cells without explicit shading |
 | Table shading | ✅ Supported | Fallback shading from first row's `\trcbpatN` |
 | Nested tables | ✅ Supported | Parsed with `\itap`/nested table controls; emitted recursively in DOCX/HTML/PDF |
-| Table borders | ✅ Supported | Cell, row, and table-level borders; styles (solid, double, dotted, dashed, none); DOCX, HTML (CSS), Typst (`stroke:`) |
+| Table borders | ✅ Supported | Cell, row, and table-level borders; styles (solid, double, dotted, dashed, none); DOCX, HTML (CSS), Typst (`stroke:` with dual-line double borders and distinct dotted/dashed patterns) |
 
 ### Embedded Images
 
