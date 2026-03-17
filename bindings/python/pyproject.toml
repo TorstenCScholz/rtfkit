@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "rtfkit"
-version = "0.1.0"
+version = "1.0.0"
 description = "Convert RTF documents to HTML, DOCX, and PDF"
 requires-python = ">=3.9"
 license = {text = "MIT OR Apache-2.0"}
