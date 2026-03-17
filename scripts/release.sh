@@ -70,7 +70,7 @@ confirm() {
 
     local answer
     read -r -p "$label $suffix " answer
-    answer="${answer,,}"
+    answer="$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')"
 
     if [[ -z "$answer" ]]; then
         answer="$default_value"
