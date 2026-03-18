@@ -1,63 +1,59 @@
 # rtfkit Python Bindings
 
-Python bindings for rtfkit - a high-performance RTF conversion library powered by Rust.
+Python bindings for `rtfkit`, the Rust-powered RTF conversion toolkit.
 
-## Overview
-
-This package provides Python bindings to the rtfkit Rust library, enabling you to convert RTF documents to HTML, DOCX, and PDF formats directly from Python.
+Use the bindings when you want to parse RTF or convert RTF to HTML, DOCX, or PDF directly from Python without shelling out to the CLI.
 
 ## Installation
 
-### From PyPI (Planned, not published yet)
+### From source
 
 ```bash
-# Will work after first PyPI release
-pip install rtfkit
-```
-
-### From Source
-
-```bash
-# Clone the repository
 git clone https://github.com/TorstenCScholz/rtfkit.git
 cd rtfkit/bindings/python
-
-# Install with pip
 pip install .
 ```
 
-### Development Installation
+### Development install
 
 ```bash
-# Clone the repository
 git clone https://github.com/TorstenCScholz/rtfkit.git
 cd rtfkit/bindings/python
-
-# Install in editable mode
 pip install -e .
 ```
 
-## Quick Start
+## Quick start
 
 ```python
+from pathlib import Path
 import rtfkit
 
-# Parse RTF content
-rtf_content = r"{\rtf1\ansi Hello \b World!}"
+rtf_content = Path("input.rtf").read_bytes().decode("latin-1")
 result = rtfkit.parse(rtf_content)
 
-# Convert to different formats
 html = rtfkit.to_html(result.document)
 docx_bytes = rtfkit.to_docx_bytes(result.document)
 pdf_bytes = rtfkit.to_pdf(result.document)
+
+Path("output.html").write_text(html)
+Path("output.docx").write_bytes(docx_bytes)
+Path("output.pdf").write_bytes(pdf_bytes)
 ```
 
-## API Reference
+## What the bindings support
 
-### Core Functions
+- parse RTF content into a structured document model
+- convert to HTML
+- convert to DOCX
+- convert to PDF
+- inspect warnings and conversion statistics
+- configure parser limits for untrusted input
 
-#### `parse(rtf: str) -> ParseResult`
-Parse RTF content and return a `ParseResult` containing the document and report.
+## Core functions
+
+### `parse(rtf: str) -> ParseResult`
+
+Parses RTF content and returns a parsed document plus a conversion report.
 
 ```python
 result = rtfkit.parse(rtf_content)
@@ -65,20 +61,22 @@ document = result.document
 report = result.report
 ```
 
-#### `parse_with_limits(rtf: str, limits: ParserLimits) -> ParseResult`
-Parse RTF content with custom resource limits.
+### `parse_with_limits(rtf: str, limits: ParserLimits) -> ParseResult`
+
+Parses RTF using custom safety limits.
 
 ```python
 limits = rtfkit.ParserLimits(
-    max_input_bytes=1024 * 1024,  # 1MB
+    max_input_bytes=1024 * 1024,
     max_group_depth=32,
     max_warning_count=10,
 )
 result = rtfkit.parse_with_limits(rtf_content, limits)
 ```
 
-#### `to_html(document: Document, **kwargs) -> str`
-Convert document to HTML.
+### `to_html(document: Document, **kwargs) -> str`
+
+Converts a parsed document to HTML.
 
 ```python
 html = rtfkit.to_html(
@@ -86,12 +84,12 @@ html = rtfkit.to_html(
     emit_wrapper=True,
     css_mode="default",
     style_profile="report",
-    custom_css=".custom-class { color: red; }"
 )
 ```
 
-#### `to_html_with_warnings(document: Document, **kwargs) -> HtmlOutput`
-Convert document to HTML with warnings.
+### `to_html_with_warnings(document: Document, **kwargs) -> HtmlOutput`
+
+Returns HTML plus output warnings.
 
 ```python
 output = rtfkit.to_html_with_warnings(document)
@@ -99,165 +97,110 @@ html = output.html
 dropped_reasons = output.dropped_content_reasons
 ```
 
-#### `to_docx_bytes(document: Document) -> bytes`
-Convert document to DOCX bytes.
+### `to_docx_bytes(document: Document) -> bytes`
+
+Converts a parsed document to DOCX bytes.
 
 ```python
-docx_data = rtfkit.to_docx_bytes(document)
-with open("output.docx", "wb") as f:
-    f.write(docx_data)
+docx_bytes = rtfkit.to_docx_bytes(document)
 ```
 
-#### `to_docx_file(document: Document, path: str) -> None`
-Convert document to DOCX and save to file.
+### `to_docx_file(document: Document, path: str) -> None`
+
+Writes DOCX output directly to a file.
 
 ```python
 rtfkit.to_docx_file(document, "output.docx")
 ```
 
-#### `to_pdf(document: Document, **kwargs) -> bytes`
-Convert document to PDF bytes.
+### `to_pdf(document: Document, **kwargs) -> bytes`
+
+Converts a parsed document to PDF bytes.
 
 ```python
-pdf_data = rtfkit.to_pdf(
+pdf_bytes = rtfkit.to_pdf(
     document,
     page_size="a4",
-    margin_top=10.0,
-    margin_bottom=10.0,
-    style_profile="classic"
+    style_profile="classic",
 )
-with open("output.pdf", "wb") as f:
-    f.write(pdf_data)
 ```
 
-#### `to_pdf_with_warnings(document: Document, **kwargs) -> PdfOutput`
-Convert document to PDF with warnings.
+### `to_pdf_with_warnings(document: Document, **kwargs) -> PdfOutput`
+
+Returns PDF bytes plus output warnings.
 
 ```python
 output = rtfkit.to_pdf_with_warnings(document)
-pdf_data = output.pdf_bytes
+pdf_bytes = output.pdf_bytes
 warnings = output.warnings
 ```
 
-### Data Types
+## Data types
 
-#### `Document`
+### `Document`
+
 Represents the parsed RTF document.
 
 ```python
-# Access blocks
 document = result.document
 for block in document.blocks:
-    if isinstance(block, rtfkit.Paragraph):
-        # Process paragraph
-        pass
-    elif isinstance(block, rtfkit.ListBlock):
-        # Process list
-        pass
-    elif isinstance(block, rtfkit.TableBlock):
-        # Process table
-        pass
-    elif isinstance(block, rtfkit.ImageBlock):
-        # Process image
-        pass
+    print(type(block).__name__)
 ```
 
-#### `ParseResult`
+### `ParseResult`
+
 Contains the parsed document and report.
 
 ```python
 result = rtfkit.parse(rtf_content)
-print(f"Blocks: {len(result.document)}")
-print(f"Warnings: {len(result.report)}")
+print(len(result.document))
+print(len(result.report.warnings))
 ```
 
-#### `Report`
-Contains warnings and statistics about the conversion.
+### `Report`
+
+Contains warnings and conversion statistics.
 
 ```python
 report = result.report
-print(f"Paragraphs: {report.stats.paragraph_count}")
-print(f"Warnings: {len(report.warnings)}")
+print(report.stats.paragraph_count)
+print(len(report.warnings))
 ```
 
-#### `ParserLimits`
-Controls resource limits for parsing.
+### `ParserLimits`
+
+Controls parser resource limits.
 
 ```python
-# Create custom limits
 limits = rtfkit.ParserLimits(
     max_input_bytes=1024 * 1024,
     max_group_depth=32,
     max_warning_count=10,
 )
-
-# Unlimited limits
-unlimited = rtfkit.ParserLimits.unlimited()
 ```
 
-### Error Types
+## Errors
 
-All errors inherit from `RtfkitError`:
+All exposed errors inherit from `RtfkitError`.
 
-- `ParseError` - RTF parsing failed
-- `ReportError` - Report generation failed
-- `HtmlWriterError` - HTML generation failed
-- `DocxWriterError` - DOCX generation failed
-- `PdfRenderError` - PDF rendering failed
+- `ParseError`
+- `ReportError`
+- `HtmlWriterError`
+- `DocxWriterError`
+- `PdfRenderError`
 
 ```python
 try:
     result = rtfkit.parse(rtf_content)
-except rtfkit.ParseError as e:
-    print(f"Parsing failed: {e}")
+except rtfkit.ParseError as exc:
+    print(f"Parsing failed: {exc}")
 ```
 
-## Examples
+## Notes
 
-### Basic Conversion
-
-```python
-import rtfkit
-
-# Read RTF file
-with open("document.rtf", "r") as f:
-    rtf_content = f.read()
-
-# Parse and convert
-result = rtfkit.parse(rtf_content)
-
-# HTML output
-html = rtfkit.to_html(result.document, style_profile="report")
-with open("output.html", "w") as f:
-    f.write(html)
-
-# DOCX output
-rtfkit.to_docx_file(result.document, "output.docx")
-
-# PDF output
-pdf_data = rtfkit.to_pdf(result.document, page_size="a4")
-with open("output.pdf", "wb") as f:
-    f.write(pdf_data)
-```
-
-### Custom Limits
-
-```python
-import rtfkit
-
-# Restrictive limits for untrusted input
-limits = rtfkit.ParserLimits(
-    max_input_bytes=1024 * 1024,  # 1MB
-    max_group_depth=32,
-    max_warning_count=5,
-)
-
-try:
-    result = rtfkit.parse_with_limits(rtf_content, limits)
-    print(f"Successfully parsed: {len(result.document)} blocks")
-except rtfkit.ParseError as e:
-    print(f"Input rejected: {e}")
-```
+- Read RTF files as bytes and decode with a one-byte codec such as `latin-1` when you need to preserve raw source bytes.
+- The bindings follow the same support profile and limitations as the core Rust library.
+- For the current supported feature set, see `../../docs/feature-support.md`.
 
 ### Document Inspection
 

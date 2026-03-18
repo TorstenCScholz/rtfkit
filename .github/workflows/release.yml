@@ -403,8 +403,8 @@ jobs:
 
             ## Python Package Artifacts
 
-            This release also includes prebuilt Python artifacts (`.whl` and source `.tar.gz`) generated from `bindings/python`.
-            These artifacts are for manual installation/testing until PyPI publishing is enabled.
+            This release also includes Python wheel and source distribution artifacts generated from `bindings/python`.
+            Install them directly if you want to use the Python bindings from release assets.
             
             ### Verify Checksums
             

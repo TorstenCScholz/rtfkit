@@ -1,463 +1,270 @@
 # rtfkit
 
-Open-source RTF toolkit and RTF-to-PDF converter with a CLI-first workflow.
-Convert `.rtf` files to PDF, DOCX, or HTML with a single command.
+Open-source RTF converter for turning Rich Text Format documents into DOCX, HTML, PDF, or structured JSON.
+
+`rtfkit` is built for developers and teams that need a reliable way to parse `.rtf` files and convert them into modern formats from the command line or from Python. It is designed for offline use, deterministic output, and practical handling of real-world RTF documents that include tables, lists, fields, images, and mixed formatting.
 
 [![CI](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml/badge.svg)](https://github.com/TorstenCScholz/rtfkit/actions/workflows/ci.yml)
 [![Python Bindings](https://github.com/TorstenCScholz/rtfkit/actions/workflows/bindings-python.yml/badge.svg)](https://github.com/TorstenCScholz/rtfkit/actions/workflows/bindings-python.yml)
 
-## Current Status (Phase 6)
+## What rtfkit does
 
-rtfkit provides a complete RTF-to-DOCX, RTF-to-HTML, and RTF-to-PDF conversion pipeline with:
+`rtfkit` helps you:
 
-- **Text extraction** with formatting preservation (bold, italic, underline, alignment)
-- **List support** - bullet and decimal lists with nested levels (up to 8)
-- **Table support** - rows, cells, nested tables, horizontal/vertical merges, cell alignment
-- **Hyperlink support** - external URLs and internal bookmark links
-- **Field support (pragmatic subset)** - HYPERLINK, page fields (`PAGE`, `NUMPAGES`, `SECTIONPAGES`, `PAGEREF`), TOC markers, semantic refs (`REF`, `NOTEREF`, `SEQ`, `DOCPROPERTY`, built-ins), and `MERGEFIELD` fallback rendering
-- **Embedded image support** - PNG/JPEG images with size/scaling controls
-- **HTML output** - semantic-first HTML5 output with `--to html`
-- **PDF output** - In-process PDF generation via embedded Typst renderer with `--to pdf`
-- **Style profiles** - Consistent cross-format styling with `--style-profile` (classic, report, compact)
-- **Conversion reports** - JSON or text format with warnings and statistics
-- **IR emission** - `--emit-ir` for snapshot/debug workflows
-- **Parser limits** - safety limits for input size, depth, and warnings
-- **Strict mode** - fail on dropped content for quality assurance
+- convert RTF to DOCX
+- convert RTF to HTML
+- convert RTF to PDF
+- parse RTF into a structured intermediate representation for debugging, validation, or custom pipelines
+- inspect warnings and conversion statistics for unsupported or degraded content
 
-See [RTF Feature Overview](docs/rtf-feature-overview.md) for supported vs. not-yet-supported features.
+Typical use cases include:
 
-## RTF to PDF Converter (Quick Start)
+- document migration from legacy RTF archives
+- backend services that need an RTF to PDF converter
+- RTF to HTML rendering for web applications
+- RTF to DOCX export in desktop, enterprise, and batch-processing workflows
+- validation pipelines for untrusted or malformed RTF input
 
-If you are looking for an RTF to PDF converter, this repository provides one via the `rtfkit` CLI:
+## Why use it
 
-```sh
-rtfkit convert input.rtf --to pdf -o output.pdf
-```
+- **One CLI for multiple outputs**: DOCX, HTML, PDF, and JSON-based reports
+- **Offline PDF generation**: no external PDF CLI required
+- **Deterministic behavior**: stable output and warning contracts for automation
+- **Safety limits**: parser limits for input size, depth, warnings, and table complexity
+- **Developer-friendly**: CLI workflow plus Python bindings
+- **Real-world feature coverage**: formatting, lists, tables, fields, headers/footers, notes, and images
 
-PDF conversion is in-process and offline-capable (no external PDF CLI required).
+## Supported output formats
+
+- **DOCX**: default output format for editable Word-compatible documents
+- **HTML**: semantic HTML5 output for websites, previews, and pipelines
+- **PDF**: in-process PDF generation for offline document conversion
+- **IR JSON**: structured intermediate representation via `--emit-ir`
+- **Reports**: text or JSON conversion reports with warnings and statistics
+
+For the full support matrix, see [docs/feature-support.md](docs/feature-support.md).
+
+## Supported feature set
+
+`rtfkit` currently supports a broad practical subset of RTF, including:
+
+- text extraction and paragraph structure
+- bold, italic, underline, strikethrough, caps, and small-caps fallback behavior
+- font families, font sizes, foreground colors, highlights, and shading
+- bullet lists, ordered lists, and nested lists
+- tables, merged cells, nested tables, borders, alignment, and cell shading
+- hyperlinks, bookmark anchors, page fields, TOC markers, semantic references, and merge-field fallback rendering
+- headers, footers, footnotes, and endnotes
+- embedded PNG and JPEG images
+
+Known limitations are documented in [docs/rtf-feature-overview.md](docs/rtf-feature-overview.md) and [docs/feature-support.md](docs/feature-support.md).
 
 ## Install
 
-### Rust CLI (Original)
+### Prebuilt binaries
 
-From source:
+Download a release artifact for your platform from [GitHub Releases](https://github.com/TorstenCScholz/rtfkit/releases).
+
+### Build from source
 
 ```sh
 cargo install --path crates/rtfkit-cli
 ```
 
-Or download a pre-built binary from [Releases](https://github.com/TorstenCScholz/rtfkit/releases).
+### Python bindings
 
-### Python Bindings
+Install from source:
 
-#### From PyPI (Planned, not published yet)
-
-```bash
-# Will work after first PyPI release
-pip install rtfkit
-```
-
-#### From Source
-
-```bash
-# Clone the repository
+```sh
 git clone https://github.com/TorstenCScholz/rtfkit.git
 cd rtfkit/bindings/python
-
-# Install with pip
 pip install .
 ```
 
-#### Development Installation
+See [bindings/python/README.md](bindings/python/README.md) for the Python API.
 
-```bash
-# Clone the repository
-git clone https://github.com/TorstenCScholz/rtfkit.git
-cd rtfkit/bindings/python
+## Quick start
 
-# Install in editable mode
-pip install -e .
-```
-
-## Usage
-
-### Rust CLI (Original)
+### Convert RTF to DOCX
 
 ```sh
-# Convert RTF to DOCX (default output format)
 rtfkit convert input.rtf -o output.docx
+```
 
-# Convert RTF to PDF
+### Convert RTF to PDF
+
+```sh
 rtfkit convert input.rtf --to pdf -o output.pdf
+```
 
-# Convert RTF to HTML
+### Convert RTF to HTML
+
+```sh
 rtfkit convert input.rtf --to html -o output.html
-
-# Convert and overwrite existing output file
-rtfkit convert input.rtf -o output.docx --force
-
-# Human-readable report (stdout)
-rtfkit convert fixtures/text_simple_paragraph.rtf
-
-# JSON report (stdout)
-rtfkit convert fixtures/text_simple_paragraph.rtf --format json
-
-# Emit IR JSON to file
-rtfkit convert fixtures/text_simple_paragraph.rtf --emit-ir out.json
-
-# Strict mode: fail when dropped content is reported
-rtfkit convert fixtures/mixed_complex.rtf --strict --format json
 ```
 
-### Python Bindings
+### Emit structured IR JSON
 
-```python
-import rtfkit
-
-# Parse RTF content
-rtf_content = r"{\rtf1\ansi Hello \b World!}"
-result = rtfkit.parse(rtf_content)
-
-# Convert to different formats
-html = rtfkit.to_html(result.document)
-docx_bytes = rtfkit.to_docx_bytes(result.document)
-pdf_bytes = rtfkit.to_pdf(result.document)
-
-# Save to files
-with open("output.html", "w") as f:
-    f.write(html)
-
-with open("output.docx", "wb") as f:
-    f.write(docx_bytes)
-
-with open("output.pdf", "wb") as f:
-    f.write(pdf_bytes)
+```sh
+rtfkit convert input.rtf --emit-ir output.json
 ```
 
-See the [Python binding README](bindings/python/README.md) for comprehensive documentation.
+### Print a JSON conversion report
 
-### HTML Output Options
+```sh
+rtfkit convert input.rtf --format json
+```
 
-Control CSS output with `--html-css`:
+## CLI usage
 
-```bash
-# Default: embed built-in CSS
-rtfkit convert document.rtf --to html --output document.html
+### Common examples
 
-# No built-in CSS (for custom styling)
-rtfkit convert document.rtf --to html --html-css none --output document.html
+```sh
+# DOCX output
+rtfkit convert document.rtf -o document.docx
+
+# PDF output
+rtfkit convert document.rtf --to pdf -o document.pdf
+
+# HTML output
+rtfkit convert document.rtf --to html -o document.html
+
+# Overwrite an existing file
+rtfkit convert document.rtf -o document.docx --force
+
+# Strict mode: fail when content is dropped
+rtfkit convert document.rtf --strict --format json
+
+# Write IR JSON for debugging or snapshot workflows
+rtfkit convert document.rtf --emit-ir document.ir.json
+```
+
+### HTML output options
+
+```sh
+# Default built-in CSS
+rtfkit convert document.rtf --to html -o document.html
+
+# No built-in CSS
+rtfkit convert document.rtf --to html --html-css none -o document.html
 
 # Append custom CSS
-rtfkit convert document.rtf --to html --html-css-file custom.css --output document.html
+rtfkit convert document.rtf --to html --html-css-file custom.css -o document.html
 ```
 
-### Style Profiles
+### Style profiles
 
-Use `--style-profile` for consistent styling across HTML and PDF outputs:
+```sh
+# Default long-form profile
+rtfkit convert document.rtf --to pdf --style-profile report -o document.pdf
 
-```bash
-# Use the report profile (default) - optimized for long-form documents
-rtfkit convert document.rtf --to html --style-profile report --output document.html
+# Neutral styling
+rtfkit convert document.rtf --to html --style-profile classic -o document.html
 
-# Use the classic profile - conservative, neutral styling
-rtfkit convert document.rtf --to pdf --style-profile classic --output document.pdf
-
-# Use the compact profile - dense styling for enterprise output
-rtfkit convert document.rtf --to pdf --style-profile compact --output document.pdf
+# Dense output
+rtfkit convert document.rtf --to pdf --style-profile compact -o document.pdf
 ```
 
-Built-in profiles: `classic`, `report` (default), `compact`
+Built-in profiles: `classic`, `report`, `compact`
 
-See [HTML Styling Reference](docs/reference/html-styling.md) for CSS classes and customization options.
+### PDF options
 
-### PDF Output Options
-
-Convert RTF to PDF with `--to pdf`:
-
-```bash
-# Basic PDF conversion
+```sh
+# A4 PDF
 rtfkit convert document.rtf --to pdf --output document.pdf
 
-# US Letter page size
+# US Letter PDF
 rtfkit convert document.rtf --to pdf --pdf-page-size letter --output document.pdf
 
-# Deterministic metadata timestamp (for reproducible builds)
+# Deterministic timestamp for reproducible builds
 rtfkit convert document.rtf --to pdf --fixed-timestamp "2024-01-01T00:00:00Z" --output document.pdf
 ```
 
-PDF output uses an embedded Typst renderer - no external dependencies required. The output is deterministic and works completely offline.
-
-See [PDF Output Reference](docs/reference/pdf-output.md) for PDF-specific options and [PDF Determinism](docs/reference/pdf-determinism.md) for determinism guarantees.
-
-### App Integration Examples (RTF to PDF)
-
-Small examples for using `rtfkit` inside application code.
-
-#### Java (web/enterprise app via CLI)
-
-Install `rtfkit` on the host/container and call it from your service layer:
-
-```java
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-
-public final class RtfToPdfService {
-    public static void convert(Path inputRtf, Path outputPdf) throws IOException, InterruptedException {
-        Process process = new ProcessBuilder(
-                "rtfkit", "convert",
-                inputRtf.toString(),
-                "--to", "pdf",
-                "-o", outputPdf.toString(),
-                "--force"
-        ).redirectErrorStream(true).start();
-
-        String logs = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        int exitCode = process.waitFor();
-        if (exitCode != 0) {
-            throw new IOException("rtfkit failed (exit " + exitCode + "): " + logs);
-        }
-    }
-}
-```
-
-#### Python (using bindings directly)
+## Python example
 
 ```python
 from pathlib import Path
 import rtfkit
 
-def convert_rtf_to_pdf(input_rtf: str, output_pdf: str) -> None:
-    # latin-1 keeps a 1:1 byte mapping for raw RTF content
-    rtf_content = Path(input_rtf).read_bytes().decode("latin-1")
-    result = rtfkit.parse(rtf_content)
-    pdf_bytes = rtfkit.to_pdf(result.document, page_size="a4", style_profile="report")
-    Path(output_pdf).write_bytes(pdf_bytes)
+rtf_content = Path("input.rtf").read_bytes().decode("latin-1")
+result = rtfkit.parse(rtf_content)
+
+html = rtfkit.to_html(result.document)
+docx_bytes = rtfkit.to_docx_bytes(result.document)
+pdf_bytes = rtfkit.to_pdf(result.document)
+
+Path("output.html").write_text(html)
+Path("output.docx").write_bytes(docx_bytes)
+Path("output.pdf").write_bytes(pdf_bytes)
 ```
 
-### Exit Codes
+## Exit codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 2 | Parse/validation error (invalid RTF or limit violation) |
-| 3 | Writer/IO failure (e.g., cannot write output file) |
-| 4 | Strict-mode violation (dropped content detected) |
+| 2 | Parse or validation failure |
+| 3 | Writer or file output failure |
+| 4 | Strict-mode failure caused by dropped content |
 
-### Parser Limits
+## Parser limits
 
-For safety, the parser enforces these limits (see [Limits Policy](docs/limits-policy.md)):
+Default parser limits:
 
-| Limit | Default | Purpose |
-|-------|---------|---------|
-| Maximum input size | 10 MB | Prevents memory exhaustion |
-| Maximum group depth | 256 levels | Prevents stack overflow |
-| Maximum warnings | 1000 | Prevents unbounded memory growth |
-| Maximum rows per table | 10,000 | Prevents resource exhaustion |
-| Maximum cells per row | 1,000 | Prevents resource exhaustion |
-| Maximum merge span | 1,000 cells | Limits merged regions |
-| Maximum table nesting depth | 16 levels | Prevents nested-table recursion abuse |
+| Limit | Default |
+|------|---------|
+| Maximum input size | 10 MB |
+| Maximum group depth | 256 |
+| Maximum warnings | 1000 |
+| Maximum rows per table | 10,000 |
+| Maximum cells per row | 1,000 |
+| Maximum merge span | 1,000 |
+| Maximum nested table depth | 16 |
 
-## Output Contract
+See [docs/limits-policy.md](docs/limits-policy.md) for details.
 
-### Report JSON
+## Current limitations
 
-```json
-{
-  "warnings": [],
-  "stats": {
-    "paragraph_count": 1,
-    "run_count": 1,
-    "bytes_processed": 29,
-    "duration_ms": 0
-  }
-}
-```
+`rtfkit` is intended to cover practical RTF conversion needs, not full byte-for-byte visual parity with every historical RTF producer.
 
-### Warning Types
+Current limitations include:
 
-| Type | Meaning | Strict Mode |
-|------|---------|-------------|
-| `unsupported_control_word` | RTF control not yet implemented | No failure |
-| `unknown_destination` | RTF destination skipped | No failure |
-| `dropped_content` | Content could not be represented | **Fails** |
-| `unsupported_list_control` | List control not fully supported | No failure |
-| `unresolved_list_override` | List reference not found | **Fails** |
-| `unsupported_nesting_level` | List level > 8 clamped | No failure |
-| `unsupported_table_control` | Table control not mapped | No failure |
-| `malformed_table_structure` | Table structure issue | May fail |
-| `unclosed_table_cell` | Missing `\cell` terminator | May fail |
-| `unclosed_table_row` | Missing `\row` terminator | May fail |
-| `merge_conflict` | Merge semantics conflict | **Fails** |
-| `table_geometry_conflict` | Invalid table geometry | **Fails** |
-| `unsupported_field` | Field semantics not fully supported; `\fldrslt` preserved | No failure |
-| `unsupported_page_field` | Page field rendered with best-effort/static behavior | No failure |
-| `unsupported_toc_switch` | TOC switch parsed but not mapped | No failure |
-| `unresolved_page_reference` | `PAGEREF` target not found; fallback text used | No failure |
-| `section_numbering_fallback` | Section numbering semantics approximated | No failure |
-| `unresolved_cross_reference` | `REF`/`NOTEREF` target not found; fallback text used | No failure |
+- advanced edge-case layout may degrade
+- dynamic field evaluation is not executed; visible result text is preserved where possible
+- page-related fields use deterministic fallback/static behavior rather than live pagination
+- WMF and EMF images are not supported
+- images are block-level only; floating placement and crop controls are not supported
+- HTML output is semantic-first rather than pixel-perfect
+- PDF output uses embedded fonts rather than custom font loading
+- list nesting is capped at 8 levels for DOCX compatibility
 
-See [Warning Reference](docs/warning-reference.md) for detailed documentation.
+## Documentation
 
-### Field Behavior
-
-- Recognized field instructions are mapped to semantic IR where possible (hyperlinks, page fields, TOC markers, semantic refs, and merge-field fallback).
-- Unknown/unsupported field instructions preserve visible `\fldrslt` text and emit `unsupported_field`.
-- If a field has no usable result text, `dropped_content` is emitted (strict mode fails on this).
-- `REF` and `NOTEREF` are resolved against bookmark anchors (`\bkmkstart`); unresolved targets stay visible as fallback text and emit `unresolved_cross_reference`.
-- Non-run content inside semantic field results is downgraded deterministically to text runs with an `unsupported_field` warning.
-
-### IR JSON (`--emit-ir`)
-
-Paragraph example:
-```json
-{
-  "blocks": [
-    {
-      "type": "paragraph",
-      "alignment": "left",
-      "runs": [
-        {
-          "text": "Hello World",
-          "bold": false,
-          "italic": false,
-          "underline": false
-        }
-      ]
-    }
-  ]
-}
-```
-
-List example:
-```json
-{
-  "blocks": [
-    {
-      "type": "listblock",
-      "list_id": 1,
-      "kind": "bullet",
-      "items": [
-        {
-          "level": 0,
-          "blocks": [
-            {
-              "type": "paragraph",
-              "alignment": "left",
-              "runs": [{"text": "First item", "bold": false, "italic": false, "underline": false}]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-Table example:
-```json
-{
-  "blocks": [
-    {
-      "type": "tableblock",
-      "rows": [
-        {
-          "cells": [
-            {
-              "blocks": [{"type": "paragraph", "alignment": "left", "runs": [{"text": "Cell 1"}]}],
-              "width_twips": 1440
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
+- [Feature support matrix](docs/feature-support.md)
+- [RTF feature overview](docs/rtf-feature-overview.md)
+- [HTML styling reference](docs/reference/html-styling.md)
+- [PDF output reference](docs/reference/pdf-output.md)
+- [PDF determinism](docs/reference/pdf-determinism.md)
+- [Warning reference](docs/warning-reference.md)
+- [Limits policy](docs/limits-policy.md)
+- [Architecture overview](docs/arch/README.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+- [Python bindings](bindings/python/README.md)
 
 ## Development
 
 ```sh
-# Test workspace
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
 cargo test --all
+```
 
-# Update golden snapshots
+Update golden snapshots when intended:
+
+```sh
 UPDATE_GOLDEN=1 cargo test -p rtfkit --test golden_tests
-
-# Lint
-cargo clippy --all-targets --all-features -- -D warnings
-
-# Format
-cargo fmt --all
 ```
-
-### Python Bindings Development
-
-```bash
-# Install maturin
-pip install maturin
-
-# Build the package
-cd bindings/python
-maturin build
-
-# Install the built package
-pip install target/wheels/*.whl
-
-# Run tests
-cd bindings/python
-pytest
-
-# Type checking
-cd bindings/python
-mypy python/rtfkit/
-```
-
-## Testing
-
-rtfkit has comprehensive test coverage:
-
-- **Contract tests** - Exit codes, strict mode, warning semantics
-- **Determinism tests** - IR/report/DOCX stability verification
-- **Limits tests** - Safety and resource protection
-- **Golden tests** - IR snapshot validation
-- **DOCX integration tests** - End-to-end conversion verification
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the fixture-first contribution workflow.
-
-## Current Limitations
-
-- Full RTF parity is not complete yet (advanced/edge-case layout and styling can degrade)
-- Field support is intentionally partial: dynamic evaluation (`DATE`/`TIME`, formulas, mail-merge execution, conditional logic) is not executed; visible fallback/result text is preserved instead
-- Page-related fields are rendered with deterministic static placeholders/fallback text (not live-updating pagination in output)
-- WMF/EMF image formats are not supported (PNG/JPEG are supported)
-- Images are block-level only (no inline/floating placement, no crop controls)
-- HTML output is semantic-first rather than pixel-perfect rendering
-- PDF output uses embedded fonts (no custom font support)
-- List nesting is limited to 8 levels (DOCX compatibility)
-- Row alignment/indent controls are parsed, but docx-rs emission remains partially limited
-
-For up-to-date support details, see [RTF Feature Overview](docs/rtf-feature-overview.md) and [Feature Support Matrix](docs/feature-support.md).
-
-## Documentation
-
-- [Architecture Overview](docs/arch/README.md)
-- [RTF Feature Overview](docs/rtf-feature-overview.md)
-- [Feature Support Matrix](docs/feature-support.md)
-- [HTML Styling Reference](docs/reference/html-styling.md)
-- [PDF Output Reference](docs/reference/pdf-output.md)
-- [PDF Determinism Guarantees](docs/reference/pdf-determinism.md)
-- [Warning Reference](docs/warning-reference.md)
-- [Limits Policy](docs/limits-policy.md)
-- [Contributing Guide](CONTRIBUTING.md)
-- [Changelog](CHANGELOG.md)
-- [Python Binding Documentation](bindings/python/README.md)
-
-### Migration Notes
-
-- **PDF rendering** is now in-process via `rtfkit-render-typst` crate (no external CLI required)
-- **`--pdf-backend` flag** has been removed (single backend now)
-- **`--keep-intermediate` flag** has been removed (in-process rendering)
 
 ## License
 

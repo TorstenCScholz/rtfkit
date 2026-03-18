@@ -1,95 +1,75 @@
 # RTF Feature Overview
 
-This document summarizes the current RTF feature support in `rtfkit`.
+This document summarizes the currently supported RTF feature set in `rtfkit`.
 
-For a detailed feature support matrix, see [Feature Support Matrix](feature-support.md).
+For the exhaustive matrix, see [Feature Support Matrix](feature-support.md).
 
 ## Supported
 
-- **Core text extraction** into IR and DOCX output
-- **Paragraph alignment**: `\ql`, `\qc`, `\qr`, `\qj`
-- **Inline text styles**:
-  - bold (`\b`)
-  - italic (`\i`)
-  - underline (`\ul`)
-  - strikethrough (`\strike`)
-  - all caps (`\caps`)
-  - small caps (`\scaps`) with DOCX fallback to caps
-- **Font and color styling**:
-  - font family (`\fN`, `\fonttbl`, `\deffN`)
-  - font size (`\fsN`)
-  - foreground color (`\cfN`, `\colortbl`)
-  - background color (`\cbN`, `\highlightN`); `\highlight` takes precedence
-  - formatting reset (`\plain`)
-- **Block shading**:
-  - paragraph shading (`\cbpatN`, `\shadingN`, `\cfpatN`)
-  - table cell shading (`\clcbpatN`, `\clshdngN`, `\clcfpatN`)
-  - table row shading (`\trcbpatN`, `\trshdngN`, `\trcfpatN`)
-  - theme color resolution (`\themecolorN`, `\ctintN`, `\cshadeN`)
-  - shading precedence: cell > row > table
-  - `\pard` resets paragraph shading; `\plain` does not
-- **Unicode escape handling** (`\uN` with `\ucN`)
-- **Hyperlinks**:
-  - external URLs (`http://`, `https://`, `mailto:`)
-  - internal links (`\l` switch)
-  - formatted link text
-- **Field/page semantics**:
-  - page fields (`PAGE`, `NUMPAGES`, `SECTIONPAGES`, `PAGEREF`)
-  - generated TOC markers from TOC fields
-  - bookmark anchors (`\bkmkstart`)
-- **Lists**:
-  - list references (`\lsN`)
-  - nesting levels (`\ilvlN`, clamped to 0..8)
-  - bullet and decimal ordered output
-- **Tables**:
-  - row/cell structure (`\trowd`, `\cellxN`, `\intbl`, `\cell`, `\row`)
-  - nested table controls (`\itap`, `\nesttableprops`, `\nestcell`, `\nestrow`)
-  - horizontal merges (`\clmgf`, `\clmrg`)
-  - vertical merges (`\clvmgf`, `\clvmrg`)
-  - cell vertical alignment (`\clvertalt`, `\clvertalc`, `\clvertalb`)
-  - complex cell content ordering (text, lists, nested tables, images)
-  - deterministic recovery for malformed merge/table structures
-- **Embedded images**:
-  - PNG images (`\pngblip`)
-  - JPEG images (`\jpegblip`)
-  - image dimensions (`\picwgoal`, `\pichgoal`, `\picw`, `\pich`)
-  - image scaling (`\picscalex`, `\picscaley`)
-  - shape picture handling (`\shppict`, `\nonshppict`)
+- **Text and paragraph structure**
+  - plain text extraction
+  - paragraph breaks and line breaks
+  - Unicode text handling
+  - escaped RTF symbols
+- **Inline and paragraph formatting**
+  - bold, italic, underline, strikethrough
+  - all caps
+  - small caps with DOCX fallback behavior
+  - font family, font size, foreground color
+  - background/highlight color
+  - paragraph shading and common shading cases
+  - paragraph alignment
+- **Lists**
+  - bullet lists
+  - ordered lists
+  - nested lists up to 8 levels
+- **Tables**
+  - rows, cells, widths
+  - horizontal and vertical merges
+  - cell vertical alignment
+  - nested tables
+  - borders and shading
+  - mixed content inside cells, including text, lists, nested tables, and images
+- **Fields and navigation**
+  - hyperlinks
+  - bookmark anchors
+  - page-related fields with deterministic/static behavior
+  - TOC markers
+  - semantic references and fallback handling
+- **Document structure**
+  - headers and footers
+  - footnotes and endnotes
+- **Embedded images**
+  - PNG
+  - JPEG
+  - image sizing and scaling controls
 
-## Partially supported / degraded
+## Partially supported or degraded
 
-- **Row-level table properties** are parsed but only partially emitted:
-  - parsed: `\trql`, `\trqc`, `\trqr`, `\trleft`
-  - represented as table-level defaults; conflicting row-level values may be normalized
-- **Shading patterns** are fully supported in DOCX and partially degraded in HTML/Typst:
-  - percentage patterns (e.g., 25%, 50%, 75%) are approximated via deterministic blended fills in HTML/Typst
-  - non-percent hatch/stripe/cross patterns remain degraded to flat fill
-  - `PatternDegraded` warning is emitted for degraded non-percent patterns in Typst output
-- **Some malformed table/list inputs** are repaired with warnings (and `DroppedContent` when semantics are lost)
-- **WMF/EMF images** are dropped with `unsupported_image_format` warning
-- **Malformed image hex data** is dropped with `malformed_image_hex_payload` warning
-- **Warning-cap behavior** preserves strict-mode signal (`DroppedContent`)
-- **DOCX style profiles** are opt-in (`--style-profile`) and currently apply defaults rather than changing explicit run-level RTF formatting
-- **DOCX small caps** degrade to all caps due to `docx-rs` API limits
+- **Some field types** use deterministic fallback/result text rather than full dynamic evaluation.
+- **Some shading patterns** degrade outside DOCX output.
+- **Header/footer variants** are stronger in DOCX/HTML than in PDF output.
+- **Row-level table layout differences** may be normalized to preserve stable output.
+- **Malformed table/list/image input** may be repaired or degraded with warnings rather than rejected immediately.
+- **DOCX small caps** degrade to caps because of writer limitations.
 
-## Not yet supported
+## Not supported
 
-- **WMF/EMF image formats** - Vector image formats are dropped with warning; convert to PNG/JPEG before embedding
-- **Inline images** - Images are block-level only
-- **Image cropping** - `\cropl`, `\cropr`, `\cropt`, `\cropb` controls not supported
-- **Floating/anchored images** - Images are inline with text flow
+- **WMF and EMF images**
+- **Inline/floating images**
+- **Image crop controls**
+- **Custom PDF font loading**
+- **Full pixel-perfect parity with every historical RTF producer**
 
 ## Notes
 
-- In `--strict` mode, any `DroppedContent` warning fails conversion with exit code `4`.
-- Parser safety limits are enforced (input size, group depth, warnings, and table-specific hard limits).
-- Unresolved font or color indexes degrade gracefully without warnings (text content is preserved).
-- See [Limits Policy](limits-policy.md) for details on safety limits.
-- See [Warning Reference](warning-reference.md) for warning documentation.
+- In `--strict` mode, dropped content causes conversion to fail with exit code `4`.
+- Parser safety limits apply to input size, nesting depth, warnings, tables, and images.
+- Unsupported or degraded content is surfaced through warnings and conversion reports.
 
-## Related Documentation
+## Related documentation
 
-- [Feature Support Matrix](feature-support.md) - Detailed feature support
-- [Warning Reference](warning-reference.md) - Warning documentation
-- [Limits Policy](limits-policy.md) - Parser limits
-- [Architecture Overview](arch/README.md) - System design
+- [Feature Support Matrix](feature-support.md)
+- [Warning Reference](warning-reference.md)
+- [Limits Policy](limits-policy.md)
+- [Architecture Overview](arch/README.md)
