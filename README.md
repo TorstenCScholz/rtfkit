@@ -29,6 +29,7 @@ Typical use cases include:
 
 - **One CLI for multiple outputs**: DOCX, HTML, PDF, and JSON-based reports
 - **Offline PDF generation**: no external PDF CLI required
+- **No office runtime dependency**: no OpenOffice or LibreOffice installation required on the target system
 - **Deterministic behavior**: stable output and warning contracts for automation
 - **Safety limits**: parser limits for input size, depth, warnings, and table complexity
 - **Developer-friendly**: CLI workflow plus Python bindings
@@ -63,9 +64,27 @@ Known limitations are documented in [docs/rtf-feature-overview.md](docs/rtf-feat
 
 ### Prebuilt binaries
 
-Download a release artifact for your platform from [GitHub Releases](https://github.com/TorstenCScholz/rtfkit/releases).
+The recommended way to install `rtfkit` is to download a prebuilt binary from [GitHub Releases](https://github.com/TorstenCScholz/rtfkit/releases).
+
+Available release artifacts include:
+
+- macOS (Apple Silicon)
+- macOS (Intel)
+- Linux (x86_64)
+- Linux (ARM64)
+- Windows (x86_64)
+
+Download the archive for your platform, extract the `rtfkit` binary, place it on your `PATH`, and verify the installation:
+
+```sh
+rtfkit --help
+```
+
+For platform-specific steps and checksum verification, see [docs/install.md](docs/install.md).
 
 ### Build from source
+
+Build from source if you want to develop on `rtfkit`, test unreleased changes, or produce a custom build:
 
 ```sh
 cargo install --path crates/rtfkit-cli
@@ -73,7 +92,7 @@ cargo install --path crates/rtfkit-cli
 
 ### Python bindings
 
-Install from source:
+Python bindings are available for integration workflows. Install from source:
 
 ```sh
 git clone https://github.com/TorstenCScholz/rtfkit.git
@@ -240,6 +259,7 @@ Current limitations include:
 
 ## Documentation
 
+- [Install guide](docs/install.md)
 - [Feature support matrix](docs/feature-support.md)
 - [RTF feature overview](docs/rtf-feature-overview.md)
 - [HTML styling reference](docs/reference/html-styling.md)

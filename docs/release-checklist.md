@@ -9,6 +9,7 @@ This checklist is for publishing stable `rtfkit` releases and keeping the public
 Before tagging a release, verify:
 
 - `README.md` describes the current public product story and usage examples
+- `docs/install.md` matches the actual shipped binary artifact names and install flow
 - `CHANGELOG.md` contains a release entry for the version being published
 - `docs/feature-support.md` reflects the current supported feature set
 - `docs/rtf-feature-overview.md` reflects the current support summary and limitations
@@ -81,6 +82,7 @@ If a change affects feature support, warning semantics, strict mode, or public C
 - Update workspace and binding version numbers
 - Ensure `CHANGELOG.md` contains the new release section
 - Ensure `README.md` and support docs match the shipped feature set
+- Ensure `docs/install.md` matches the expected release assets and verification steps
 - Make sure release notes describe the release in user-facing terms rather than internal implementation sequencing
 
 ## Release process
